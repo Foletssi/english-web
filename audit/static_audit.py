@@ -80,7 +80,7 @@ run=subprocess.run(['node',str(root/'audit/runtime_contract_test.mjs')],capture_
 add('runtime shared-contract regression',run.returncode==0,(run.stdout+run.stderr).strip())
 report={'ok':all(c['ok'] for c in checks),'passed':sum(c['ok'] for c in checks),'total':len(checks),'checks':checks}
 (root/'audit/AUDIT_REPORT.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
-md=['# Eastudy Composite V1 Beta 6.19 — Audit Report','',f"Result: **{'PASS' if report['ok'] else 'FAIL'}**  ({report['passed']}/{report['total']})",'']
+md=['# Eastudy Composite V1 Beta 6.20 — Audit Report','',f"Result: **{'PASS' if report['ok'] else 'FAIL'}**  ({report['passed']}/{report['total']})",'']
 for c in checks:md.append(f"- {'PASS' if c['ok'] else 'FAIL'} — {c['name']}"+(f" — {c['detail']}" if c['detail'] else ''))
 (root/'audit/AUDIT_REPORT.md').write_text('\n'.join(md)+'\n',encoding='utf-8')
 print(json.dumps(report,ensure_ascii=False,indent=2))
