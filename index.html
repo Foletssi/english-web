@@ -23,7 +23,7 @@
   }catch(e){document.documentElement.dataset.theme='dark'}
 })();
 </script>
-<link rel="stylesheet" href="assets/css/app.css?v=beta6.19">
+<link rel="stylesheet" href="assets/css/app.css?v=beta6.20">
 </head>
 <body class="production-build">
 <div class="shell">
@@ -61,7 +61,6 @@
   <div class="mobile-global-actions">
     <button class="mobile-icon" id="mobileThemeBtn" title="切换主题"><i data-icon="sun"></i></button>
     <button class="lang-toggle mobile-lang-toggle" id="mobileLangBtn" data-no-ui-translate data-lang="zh" title="切换界面语言"><span class="lang-option zh">中文</span><span class="lang-separator" aria-hidden="true">/</span><span class="lang-option en">EN</span></button>
-    <button class="mobile-avatar" data-route="/learning" aria-label="我的学习">A</button>
   </div>
 </header>
 
@@ -86,7 +85,7 @@
 
       <section class="home-priority" aria-label="今日学习概览">
         <div class="home-priority-heading">
-          <div><span class="section-kicker">TODAY</span><h2>今天先完成最重要的学习</h2><p>你的进度和继续学习入口放在第一屏，不再沉到页面底部。</p></div>
+          <div><span class="section-kicker">TODAY</span><h2>今天先完成最重要的学习</h2></div>
           <button class="priority-learning-link" data-route="/learning">查看完整学习数据 <i data-icon="chevron-right"></i></button>
         </div>
         <div class="home-priority-grid">
@@ -105,6 +104,7 @@
 
       <section class="home-hero"><div class="home-hero-overlay"></div><div class="home-hero-content"><div class="home-kicker">REAL VIDEOS · REAL PEOPLE · REAL PROGRESS</div><h1>Better English.<br>A Brighter You.</h1><p>在真实的世界里，遇见更好的自己</p><button class="home-start" data-route="/video/2805"><span>▶</span>开始学习</button></div><div class="hero-dots"><i></i><i class="active"></i><i></i></div></section>
 
+      <div class="mobile-category-heading"><b>内容分类</b><button data-route="/videos">查看全部 <i data-icon="chevron-right"></i></button></div>
       <div class="home-category-row" id="homeCategoryRow"><button class="active" data-cat="热门"><span class="cat-icon"><i data-icon="flame"></i></span><b class="cat-name">热门</b></button><button data-cat="旅行"><span class="cat-icon"><i data-icon="plane"></i></span><b class="cat-name">旅行</b></button><button data-cat="日常生活"><span class="cat-icon"><i data-icon="coffee"></i></span><b class="cat-name">日常生活</b></button><button data-cat="职场"><span class="cat-icon"><i data-icon="briefcase"></i></span><b class="cat-name">职场</b></button><button data-cat="教育"><span class="cat-icon"><i data-icon="graduation"></i></span><b class="cat-name">教育</b></button><button data-cat="心理"><span class="cat-icon"><i data-icon="brain"></i></span><b class="cat-name">心理</b></button><button data-cat="美食"><span class="cat-icon"><i data-icon="utensils"></i></span><b class="cat-name">美食</b></button><button data-cat="自然"><span class="cat-icon"><i data-icon="leaf"></i></span><b class="cat-name">自然</b></button><button data-cat="科技"><span class="cat-icon"><i data-icon="cpu"></i></span><b class="cat-name">科技</b></button></div>
 
       <section class="home-section"><div class="home-section-head"><div><h2 id="continueTitle">继续学习</h2><p id="continueDesc">从上次的位置接着学</p></div><button data-route="/history" id="continueViewAll">查看全部 ›</button></div><div class="home-video-grid" id="videoCards"></div></section>
@@ -163,6 +163,18 @@
   <section class="creator-profile-hero"><div class="creator-profile-avatar">J</div><div class="creator-profile-copy"><span class="creator-badge">生活英语 · 英国</span><h1>Jojo English</h1><p>用英国乡村的真实日常，帮助学习者在自然语境里听懂英语。慢而不刻意，适合 A2–B1。</p><div class="creator-profile-meta"><span><b>128</b> 视频</span><span><b>42K</b> 学习者</span><span><b>286</b> 高频词</span></div></div><button class="follow-main" id="creatorFollowMain"><i data-icon="plus"></i><span>关注</span></button></section>
   <div class="profile-tabs"><button class="active">视频</button><button>合集</button><button>简介</button></div>
   <section class="profile-video-grid" id="creatorVideoGrid"></section>
+</div></main>
+
+<main id="profilePage" class="page product-page"><div class="product-shell me-shell">
+  <section class="me-identity-card">
+    <div class="me-avatar" style="background-image:url('assets/images/home_video_2.png')"></div>
+    <div class="me-identity-copy"><span>我的账户</span><h1 data-student-name>学习者</h1><p id="profileAccountPhone">学生账户 · A2–B1</p></div>
+    <span class="vip-badge me-vip-badge">VIP</span>
+  </section>
+  <section class="me-stat-grid"><article><b>28</b><span>连续学习天数</span></article><article><b>12.5h</b><span>累计学习时长</span></article><article><b id="meWordCount">0</b><span>掌握词汇</span></article></section>
+  <section class="me-section"><h2>学习与内容</h2><div class="me-action-list"><button data-route="/learning"><i data-icon="chart"></i><span><b>我的学习</b><small>学习目标、统计与复习计划</small></span><i data-icon="chevron-right"></i></button><button data-route="/history"><i data-icon="clock"></i><span><b>观看记录</b><small>继续上次的学习进度</small></span><i data-icon="chevron-right"></i></button><button data-route="/favorites"><i data-icon="star"></i><span><b>我的收藏</b><small>视频、合集与收藏句子</small></span><i data-icon="chevron-right"></i></button><button data-route="/vocabulary"><i data-icon="book"></i><span><b>生词本</b><small>复习重点单词和短语</small></span><i data-icon="chevron-right"></i></button></div></section>
+  <section class="me-section"><h2>账户与设置</h2><div class="me-action-list"><button data-account-action="profile"><i data-icon="user"></i><span><b>账户资料</b><small>昵称、等级和公开信息</small></span><i data-icon="chevron-right"></i></button><button data-account-action="preferences"><i data-icon="settings"></i><span><b>学习偏好</b><small>字号、间距、主题与高亮</small></span><i data-icon="chevron-right"></i></button><button data-account-action="vip"><i data-icon="spark"></i><span><b>Eastudy Pro</b><small class="vip-expiry">有效期至 加载中</small></span><i data-icon="chevron-right"></i></button></div></section>
+  <button class="me-logout" data-account-action="logout"><i data-icon="logout"></i>退出登录</button>
 </div></main>
 
 <main id="vocabularyPage" class="page product-page"><div class="product-shell">
@@ -226,7 +238,7 @@
 
 
 <div class="search-backdrop" id="searchBackdrop"><section class="search-modal"><div class="search-modal-bar"><i data-icon="search"></i><input id="globalSearchInput" placeholder="搜索视频、合集、博主或学习主题…" autocomplete="off"><kbd>ESC</kbd></div><div class="search-suggestions" id="searchSuggestions"><div class="search-section-title">热门搜索</div><div class="search-chips"><button>日常生活</button><button>旅行英语</button><button>Jojo English</button><button>职场表达</button><button>心理学</button></div><div class="search-section-title">最近学习</div></div><div class="search-results" id="globalSearchResults"></div></section></div>
-<nav class="mobile-nav" id="mobileNav"><button data-route="/home"><i data-icon="home"></i><span>首页</span></button><button data-route="/compilation/36"><i data-icon="grid"></i><span>合集</span></button><button data-route="/vocabulary"><i data-icon="book"></i><span>生词</span></button><button data-route="/learning"><i data-icon="chart"></i><span>学习</span></button><button data-route="/favorites"><i data-icon="star"></i><span>收藏</span></button></nav>
+<nav class="mobile-nav" id="mobileNav"><button data-route="/home"><i data-icon="home"></i><span>首页</span></button><button data-route="/compilation/36"><i data-icon="grid"></i><span>合集</span></button><button data-route="/vocabulary"><i data-icon="book"></i><span>生词</span></button><button data-route="/learning"><i data-icon="chart"></i><span>学习</span></button><button data-route="/favorites"><i data-icon="star"></i><span>收藏</span></button><button data-route="/me"><i data-icon="user"></i><span>我的</span></button></nav>
 
 <div class="dict" id="dict"><div class="dict-top"><div class="dict-row"><div><div class="dict-word" id="dictWord"></div><div class="dict-phon" id="dictPhon"></div><div class="level-badges" id="dictBadges"></div></div><button class="speakbtn" id="speakWord">🔊</button><button class="dict-close" id="dictClose">×</button></div></div><div class="dict-body"><div class="sense"><b>核心释义</b><p id="dictMeaning"></p></div><div class="sense"><b>语境理解</b><p id="dictExplain"></p></div><div class="context-box" id="dictContext"></div><div class="dict-actions"><button id="copyWord">复制词语</button><button class="saveword" id="saveWord">＋ 加入生词本</button></div></div></div>
 
@@ -244,11 +256,37 @@
 <div class="account-backdrop" id="accountBackdrop">
   <section class="account-dialog" role="dialog" aria-modal="true" aria-labelledby="accountDialogTitle">
     <header><div><span class="dialog-kicker">ACCOUNT</span><h2 id="accountDialogTitle">账户资料</h2><p>管理你的公开资料与学习账号。</p></div><button class="dialog-close" id="closeAccountDialog" aria-label="关闭">×</button></header>
-    <div class="account-profile-card"><span class="account-big-avatar" id="accountAvatar">A</span><div><b id="accountDisplayName">学习者</b><small id="accountPhone">未登录</small><em>Eastudy 学员</em></div></div>
+    <div class="account-profile-card"><span class="account-big-avatar" id="accountAvatar">学</span><div><b id="accountDisplayName" data-student-name>学习者</b><small id="accountPhone">未登录</small><em>Eastudy Pro</em></div></div>
     <div class="account-detail-grid"><label><span>昵称</span><input id="accountDetailName" value="学习者" readonly></label><label><span>手机号</span><input id="accountDetailPhone" value="未登录" readonly></label><label><span>界面语言</span><input value="中文 / English" readonly></label><label><span>学习等级</span><input value="A2–B1" readonly></label></div>
     <footer><button class="secondary" id="accountPreferencesBtn">打开学习偏好</button><button class="danger" id="accountLogoutBtn">退出登录</button></footer>
   </section>
 </div>
+<div class="signin-backdrop" id="signinBackdrop">
+  <section class="auth-gateway" role="dialog" aria-modal="true" aria-labelledby="signinTitle">
+    <div class="auth-scene" aria-hidden="true"><div class="auth-scene-copy"><img src="assets/images/eastudy-logo.png" alt=""><h1>让英语学习<br>变得<span>更简单</span></h1><p>用更轻松的方式，打开更大的世界。</p><i></i><small>A BRIGHTER YOU<br>A WIDER WORLD</small></div></div>
+    <div class="auth-panel">
+      <div class="auth-panel-inner">
+        <div class="auth-mobile-logo"><img class="eastudy-logo eastudy-logo--signin" src="assets/images/eastudy-logo.png" alt="Eastudy · Learn English, the Easy Way."></div>
+        <p class="auth-slogan">更好的你，从一口流利的英语开始</p>
+        <div class="auth-card" id="authCard">
+          <div class="auth-main-tabs"><button class="active" data-auth-tab="login">登录</button><button data-auth-tab="register">注册</button></div>
+          <div class="auth-method-tabs"><button data-auth-mode="code">验证码登录</button><button class="active" data-auth-mode="password">密码登录</button></div>
+          <div class="auth-form" id="authForm">
+            <label data-register-field hidden><i data-icon="user"></i><input id="signinName" autocomplete="nickname" placeholder="请输入昵称"></label>
+            <label><i data-icon="phone"></i><input id="signinPhone" inputmode="tel" autocomplete="tel" placeholder="+8613812345678" required></label>
+            <div class="auth-code-row" data-auth-fields="code" hidden><label><i data-icon="shield"></i><input id="signinCode" inputmode="numeric" maxlength="6" placeholder="请输入验证码"></label><button id="authGetCode" type="button" disabled>获取验证码</button></div>
+            <label data-auth-fields="password"><i data-icon="lock"></i><input id="signinPassword" type="password" autocomplete="current-password" placeholder="请输入密码" minlength="6"><button type="button" class="auth-eye" id="authPasswordEye" aria-label="显示密码">◉</button></label>
+            <button class="auth-forgot" id="authForgot" data-auth-fields="password" hidden>忘记密码？</button>
+            <button class="primary signin-submit" id="signinSubmit">登录</button>
+          </div>
+          <div class="auth-success" id="authSuccess" hidden><span><i data-icon="check"></i></span><h2>注册成功</h2><p>欢迎加入 Eastudy，开启你的英语学习之旅。</p><button class="primary" id="authGoLogin">去登录</button></div>
+        </div>
+        <small class="auth-foot">EASTUDY · LEARN ENGLISH, THE EASY WAY.</small>
+      </div>
+    </div>
+  </section>
+</div>
+
 <div class="follow" id="follow"><div class="follow-head"><b>跟读训练</b><button id="closeFollow">×</button></div><div class="follow-sentence" id="followSentence"></div><div class="wave" id="wave"></div><button class="record" id="recordBtn"></button><div class="score" id="score">发音流畅度 86 · 重音节奏 82 · 完整度 94</div></div>
 
 <div class="toast" id="toast"></div>
@@ -259,6 +297,7 @@
 <script src="assets/js/app.js?v=beta6.20"></script>
 </body>
 </html>
+
 
 
 

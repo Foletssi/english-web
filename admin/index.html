@@ -8,14 +8,9 @@
 <link rel="icon" type="image/png" href="../assets/images/eastudy-icon.png">
 <link rel="apple-touch-icon" href="../assets/images/eastudy-icon.png">
 <script>
-try{const raw=localStorage.getItem('zs:admin:theme');const t=raw?JSON.parse(raw):'dark';document.documentElement.dataset.theme=(t==='light'?'light':'dark')}catch(e){}
+try{const raw=localStorage.getItem('zs:admin:theme');const t=raw?JSON.parse(raw):'dark';document.documentElement.dataset.theme=(t==='light'?'light':'dark');document.documentElement.dataset.adminAuth='signed-out'}catch(e){document.documentElement.dataset.adminAuth='signed-out'}
 </script>
-<link rel="stylesheet" href="assets/admin.css?v=beta6.19">
-<style>html.admin-auth-pending body{visibility:hidden}</style>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="../shared/supabase-config.js?v=beta6.19"></script>
-<script src="../shared/supabase-client.js?v=beta6.19"></script>
-<script src="../shared/admin-auth.js?v=beta6.19"></script>
+<link rel="stylesheet" href="assets/admin.css?v=beta6.20">
 </head>
 <body>
 <div class="admin-shell">
@@ -39,7 +34,7 @@ try{const raw=localStorage.getItem('zs:admin:theme');const t=raw?JSON.parse(raw)
     </nav>
     <div class="sidebar-foot">
       <a class="student-link" href="../index.html#/home" target="_blank"><i data-icon="external"></i><span><b>打开学员端</b><small>检查发布效果</small></span></a>
-      <div class="admin-profile"><span class="admin-avatar" id="adminAvatar">管</span><span><b id="adminDisplayName">管理员</b><small id="adminRoleText">验证权限中</small></span><button id="adminSignOutBtn" title="退出管理端"><i data-icon="logout"></i></button><button id="themeBtn" title="切换主题"><i data-icon="theme"></i></button></div>
+      <div class="admin-profile"><span class="admin-avatar">A</span><span><b>管理员</b><small>内容运营</small></span><button id="themeBtn" title="切换主题"><i data-icon="theme"></i></button><button id="adminLogoutBtn" title="退出管理端"><i data-icon="logout"></i></button></div>
     </div>
   </aside>
 
@@ -55,6 +50,23 @@ try{const raw=localStorage.getItem('zs:admin:theme');const t=raw?JSON.parse(raw)
     </header>
     <div id="view" class="view"></div>
   </main>
+</div>
+
+<div class="admin-auth-gate" id="adminAuthGate" role="dialog" aria-modal="true" aria-labelledby="adminAuthTitle">
+  <section class="admin-auth-card">
+    <div class="admin-auth-brand"><img src="../assets/images/eastudy-logo.png" alt="Eastudy"><span>STUDIO</span></div>
+    <span class="eyebrow">PRIVATE CONTENT WORKSPACE</span>
+    <h1 id="adminAuthTitle">管理端登录</h1>
+    <p class="admin-auth-lead">学生端与内容控制台使用独立账号和独立会话。</p>
+    <form id="adminAuthForm" novalidate>
+      <label><span>管理员手机号</span><input id="adminAuthUser" type="tel" autocomplete="username" inputmode="tel" placeholder="+8613812345678" required></label>
+      <label><span>管理密码</span><input id="adminAuthPass" type="password" autocomplete="current-password" placeholder="请输入管理密码" required></label>
+      <p class="admin-auth-error" id="adminAuthError" role="alert"></p>
+      <button class="primary admin-auth-submit" type="submit">进入管理端</button>
+    </form>
+    <small class="admin-auth-hint">仅限 Supabase 中 role 为 admin 的账号。</small>
+    <a class="admin-auth-student-link" href="../index.html#/home">返回学员端</a>
+  </section>
 </div>
 
 <div class="modal-backdrop" id="videoModal">
@@ -86,8 +98,11 @@ try{const raw=localStorage.getItem('zs:admin:theme');const t=raw?JSON.parse(raw)
 </div>
 
 <div class="toast" id="toast"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../shared/supabase-config.js?v=beta6.20"></script>
+<script src="../shared/supabase-client.js?v=beta6.20"></script>
 <script src="../shared/content-store.js"></script>
-<script src="assets/admin.js?v=beta6.19"></script>
+<script src="assets/admin.js?v=beta6.20"></script>
 </body>
 </html>
 

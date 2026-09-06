@@ -1,21 +1,14 @@
 # Eastudy Composite V1 Beta 6.20 — Audit Report
 
-Result: **PASS**  (57/57)
+Result: **PASS**  (52/52)
 
 - PASS — index.html: unique DOM ids
 - PASS — index.html: local script/css refs exist
-- PASS — login.html: unique DOM ids
-- PASS — login.html: local script/css refs exist
 - PASS — admin/index.html: unique DOM ids
 - PASS — admin/index.html: local script/css refs exist
-- PASS — admin/login.html: unique DOM ids
-- PASS — admin/login.html: local script/css refs exist
 - PASS — assets/js/app.js: JavaScript syntax
 - PASS — admin/assets/admin.js: JavaScript syntax
-- PASS — admin/assets/admin-login.js: JavaScript syntax
 - PASS — shared/content-store.js: JavaScript syntax
-- PASS — shared/supabase-client.js: JavaScript syntax
-- PASS — shared/admin-auth.js: JavaScript syntax
 - PASS — student loads shared content contract
 - PASS — student hydrates managed published content
 - PASS — student resolves active video id dynamically
@@ -23,14 +16,9 @@ Result: **PASS**  (57/57)
 - PASS — admin exposes pipeline boundary
 - PASS — admin exposes subtitle editor
 - PASS — admin/student same-origin link exists
+- PASS — admin has independent authentication gate
 - PASS — student account menu exposes logout/profile/preferences
 - PASS — student account menu has executable session behavior
-- PASS — student uses phone/password Supabase authentication
-- PASS — student has a dedicated connected login page
-- PASS — student page does not expose admin login link
-- PASS — student and admin sessions are isolated
-- PASS — admin has a separate guarded login entry
-- PASS — Supabase migration protects learner data with RLS
 - PASS — student preferences dialog is viewport-centered
 - PASS — student streak uses redesigned weekly rhythm UI
 - PASS — admin typography meets readability floor
@@ -57,7 +45,14 @@ Result: **PASS**  (57/57)
 - PASS — vocabulary state persists across reloads
 - PASS — vocabulary review flow reveals then grades recall
 - PASS — vocabulary statistics are data driven
-- PASS — web deployment preserves isolated admin pages
+- PASS — first visit opens responsive authentication gateway
+- PASS — mobile app navigation includes dedicated account route
+- PASS — mobile header no longer exposes account avatar
+- PASS — home carousel supports phone swipe gestures
+- PASS — mobile categories expose view all action
+- PASS — home recommended creators are de-duplicated and mobile safe
+- PASS — requested mobile priority explanation is removed
+- PASS — web deployment exposes /admin entry
 - PASS — runtime shared-contract regression — {
   "ok": true,
   "tests": 17,

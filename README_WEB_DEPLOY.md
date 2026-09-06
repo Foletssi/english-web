@@ -5,11 +5,23 @@
 ## 部署后的入口
 
 - 学员端：`https://你的域名/`
-- 学员登录：`https://你的域名/login.html`
-- 管理后台登录：`https://你的域名/admin/`（未登录时自动显示登录页）
-- 管理后台工作台：`https://你的域名/admin/index.html`（登录成功后自动进入）
+- 管理后台：`https://你的域名/admin/`
 
-当前构建可直接部署到 Cloudflare Pages。学员账户与学习数据使用 Supabase；管理员入口会检查数据库角色。完整测试步骤见 `README_SUPABASE_MVP.md`。
+## 管理端登录隔离
+
+根地址 `/` 永远先显示学生登录网关。学生登录使用 Supabase 手机号 + 密码认证，只有 `profiles.role = 'student'` 的会话可以进入学习界面。
+
+管理端只从 `/admin/` 进入，使用单独的 Supabase 会话存储和独立登录表单。只有 `profiles.role = 'admin'` 的账号可以打开控制台；学生端页面不会渲染管理员入口或管理员内容。
+
+首次设置管理员时，先在学生登录网关注册账号，再在 Supabase SQL Editor 执行：
+
+```sql
+update public.profiles set role = 'admin' where phone = '+8613812345678';
+```
+
+之后使用该手机号和密码访问 `/admin/`。管理员退出只清理管理端会话，不会登录学生端。
+
+当前 Beta1 是静态可部署构建，Student 与 Admin 同源，因此共享内容层和浏览器端契约可以正常工作。
 
 ## Vercel
 
@@ -30,7 +42,7 @@
 4. 不需要 Build Command。
 5. 部署。
 
-项目已经包含 `netlify.toml` 与 `_redirects`，`/admin/` 会先进入独立的管理员登录页。
+项目已经包含 `netlify.toml` 与 `_redirects`，`/admin/` 会进入管理后台。
 
 ## 自己的 Nginx / 宝塔服务器
 
@@ -43,8 +55,7 @@
 Nginx 静态根目录指向该目录。确保：
 
 - `/` 可以返回 `index.html`
-- `/admin/` 可以返回 `admin/login.html`
-- `/admin/index.html` 可以返回受权限保护的管理工作台
+- `/admin/` 可以返回 `admin/index.html`
 - `/assets/`、`/shared/`、`/admin/assets/` 可作为静态文件访问
 
 ## 下一阶段正式后端

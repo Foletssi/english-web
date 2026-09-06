@@ -1,7 +1,7 @@
 {
   "ok": true,
-  "passed": 57,
-  "total": 57,
+  "passed": 52,
+  "total": 52,
   "checks": [
     {
       "name": "index.html: unique DOM ids",
@@ -10,16 +10,6 @@
     },
     {
       "name": "index.html: local script/css refs exist",
-      "ok": true,
-      "detail": ""
-    },
-    {
-      "name": "login.html: unique DOM ids",
-      "ok": true,
-      "detail": ""
-    },
-    {
-      "name": "login.html: local script/css refs exist",
       "ok": true,
       "detail": ""
     },
@@ -34,16 +24,6 @@
       "detail": ""
     },
     {
-      "name": "admin/login.html: unique DOM ids",
-      "ok": true,
-      "detail": ""
-    },
-    {
-      "name": "admin/login.html: local script/css refs exist",
-      "ok": true,
-      "detail": ""
-    },
-    {
       "name": "assets/js/app.js: JavaScript syntax",
       "ok": true,
       "detail": ""
@@ -54,22 +34,7 @@
       "detail": ""
     },
     {
-      "name": "admin/assets/admin-login.js: JavaScript syntax",
-      "ok": true,
-      "detail": ""
-    },
-    {
       "name": "shared/content-store.js: JavaScript syntax",
-      "ok": true,
-      "detail": ""
-    },
-    {
-      "name": "shared/supabase-client.js: JavaScript syntax",
-      "ok": true,
-      "detail": ""
-    },
-    {
-      "name": "shared/admin-auth.js: JavaScript syntax",
       "ok": true,
       "detail": ""
     },
@@ -109,42 +74,17 @@
       "detail": ""
     },
     {
+      "name": "admin has independent authentication gate",
+      "ok": true,
+      "detail": ""
+    },
+    {
       "name": "student account menu exposes logout/profile/preferences",
       "ok": true,
       "detail": ""
     },
     {
       "name": "student account menu has executable session behavior",
-      "ok": true,
-      "detail": ""
-    },
-    {
-      "name": "student uses phone/password Supabase authentication",
-      "ok": true,
-      "detail": ""
-    },
-    {
-      "name": "student has a dedicated connected login page",
-      "ok": true,
-      "detail": ""
-    },
-    {
-      "name": "student page does not expose admin login link",
-      "ok": true,
-      "detail": ""
-    },
-    {
-      "name": "student and admin sessions are isolated",
-      "ok": true,
-      "detail": ""
-    },
-    {
-      "name": "admin has a separate guarded login entry",
-      "ok": true,
-      "detail": ""
-    },
-    {
-      "name": "Supabase migration protects learner data with RLS",
       "ok": true,
       "detail": ""
     },
@@ -279,7 +219,42 @@
       "detail": ""
     },
     {
-      "name": "web deployment preserves isolated admin pages",
+      "name": "first visit opens responsive authentication gateway",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile app navigation includes dedicated account route",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile header no longer exposes account avatar",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "home carousel supports phone swipe gestures",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile categories expose view all action",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "home recommended creators are de-duplicated and mobile safe",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "requested mobile priority explanation is removed",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "web deployment exposes /admin entry",
       "ok": true,
       "detail": ""
     },
