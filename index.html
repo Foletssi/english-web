@@ -43,10 +43,10 @@
   <button class="iconbtn" id="notificationBtn" title="学习提醒"><i data-icon="bell"></i><b class="notice-dot"></b></button>
   <div class="global-account-shell account-shell" id="globalAccountShell">
     <button class="global-account-btn account-button" id="globalAccountBtn" aria-haspopup="menu" aria-expanded="false">
-      <span class="avatar">A</span><span class="avatar-copy"><b>Alex</b><small class="vip-expiry">VIP · 加载中</small></span><span class="vip-badge">VIP</span><i data-icon="chevron-down"></i>
+      <span class="avatar">学</span><span class="avatar-copy"><b data-student-name>学习者</b><small class="vip-expiry">VIP · 加载中</small></span><span class="vip-badge">VIP</span><i data-icon="chevron-down"></i>
     </button>
     <div class="account-menu global-account-menu" id="globalAccountMenu" role="menu">
-      <div class="account-menu-head"><span class="avatar">A</span><div><b>Alex</b><small>alex@zospeak.demo · Pro</small><em class="vip-expiry">VIP · 加载中</em></div><span class="vip-badge">VIP</span></div><div class="vip-status-card" aria-label="VIP会员状态"><div class="vip-card-top"><span class="vip-emblem">♛<b>VIP</b></span><div><strong>Eastudy Pro</strong><small class="vip-expiry">有效期至 加载中</small></div></div><div class="vip-card-meta"><span class="vip-days">剩余计算中</span><button type="button" class="vip-manage" data-account-action="vip">管理会员</button></div></div>
+      <div class="account-menu-head"><span class="avatar">学</span><div><b data-student-name>学习者</b><small id="globalAccountPhone">学生账户</small><em class="vip-expiry">VIP · 加载中</em></div><span class="vip-badge">VIP</span></div><div class="vip-status-card" aria-label="VIP会员状态"><div class="vip-card-top"><span class="vip-emblem">♛<b>VIP</b></span><div><strong>Eastudy Pro</strong><small class="vip-expiry">有效期至 加载中</small></div></div><div class="vip-card-meta"><span class="vip-days">剩余计算中</span><button type="button" class="vip-manage" data-account-action="vip">管理会员</button></div></div>
       <button data-account-action="learning"><i data-icon="chart"></i><span>我的学习</span></button>
       <button data-account-action="profile"><i data-icon="user"></i><span>账户资料</span></button>
       <button data-account-action="preferences"><i data-icon="settings"></i><span>学习偏好</span></button>
@@ -198,7 +198,7 @@
 </div></main>
 
 <main id="learningPage" class="page product-page"><div class="product-shell learning-dashboard-v3">
-  <section class="learning-welcome"><div><span class="section-kicker">YOUR PROGRESS</span><h1>早上好，Alex 👋</h1><p>今天再学 18 分钟，就能完成你的每日目标。</p></div><button class="primary" data-route="/video/2805"><i data-icon="play"></i>继续学习</button></section>
+  <section class="learning-welcome"><div><span class="section-kicker">YOUR PROGRESS</span><h1>早上好，<span data-student-name>学习者</span> 👋</h1><p>今天再学 18 分钟，就能完成你的每日目标。</p></div><button class="primary" data-route="/video/2805"><i data-icon="play"></i>继续学习</button></section>
   <section class="learning-overview-v3">
     <article class="learning-time-card">
       <div class="time-card-head"><span class="time-icon"><i data-icon="clock"></i></span><div><small>总学习时长</small><b>12<em>h</em> 30<em>m</em></b></div><span class="time-growth">↑ 2.4h 本周</span></div>
@@ -245,31 +245,18 @@
   <section class="account-dialog" role="dialog" aria-modal="true" aria-labelledby="accountDialogTitle">
     <header><div><span class="dialog-kicker">ACCOUNT</span><h2 id="accountDialogTitle">账户资料</h2><p>管理你的公开资料与学习账号。</p></div><button class="dialog-close" id="closeAccountDialog" aria-label="关闭">×</button></header>
     <div class="account-profile-card"><span class="account-big-avatar" id="accountAvatar">A</span><div><b id="accountDisplayName">学习者</b><small id="accountPhone">未登录</small><em>Eastudy 学员</em></div></div>
-    <div class="account-detail-grid"><label><span>昵称</span><input value="Alex" readonly></label><label><span>界面语言</span><input value="中文 / English" readonly></label><label><span>学习等级</span><input value="A2–B1" readonly></label><label><span>连续学习</span><input value="28 天" readonly></label></div>
+    <div class="account-detail-grid"><label><span>昵称</span><input id="accountDetailName" value="学习者" readonly></label><label><span>手机号</span><input id="accountDetailPhone" value="未登录" readonly></label><label><span>界面语言</span><input value="中文 / English" readonly></label><label><span>学习等级</span><input value="A2–B1" readonly></label></div>
     <footer><button class="secondary" id="accountPreferencesBtn">打开学习偏好</button><button class="danger" id="accountLogoutBtn">退出登录</button></footer>
   </section>
 </div>
-<div class="signin-backdrop" id="signinBackdrop">
-  <section class="signin-dialog" role="dialog" aria-modal="true" aria-labelledby="signinTitle">
-    <div class="signin-logo"><img class="eastudy-logo eastudy-logo--signin" src="assets/images/eastudy-logo.png" alt="Eastudy · Learn English, the Easy Way."></div>
-    <div class="signin-mode" role="tablist"><button type="button" class="active" data-student-auth-mode="signin">学生登录</button><button type="button" data-student-auth-mode="signup">学生注册</button></div>
-    <h2 id="signinTitle">欢迎回来</h2><p id="signinDescription">使用手机号和密码登录你的学生账户。</p>
-    <label id="signinNameWrap" hidden><span>昵称</span><input id="signinName" type="text" autocomplete="nickname" placeholder="例如：小明"></label>
-    <label><span>手机号</span><input id="signinPhone" type="tel" autocomplete="username" inputmode="tel" placeholder="+8613812345678"></label><label><span>密码</span><input id="signinPassword" type="password" autocomplete="current-password" minlength="6" placeholder="至少 6 位"></label>
-    <p class="signin-message" id="signinMessage" role="status"></p>
-    <button class="primary signin-submit" id="signinSubmit">登录 Eastudy</button>
-    <a class="signin-page-entry" href="login.html">打开独立学生登录页</a>
-  </section>
-</div>
-
 <div class="follow" id="follow"><div class="follow-head"><b>跟读训练</b><button id="closeFollow">×</button></div><div class="follow-sentence" id="followSentence"></div><div class="wave" id="wave"></div><button class="record" id="recordBtn"></button><div class="score" id="score">发音流畅度 86 · 重音节奏 82 · 完整度 94</div></div>
 
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="shared/supabase-config.js?v=beta6.19"></script>
-<script src="shared/supabase-client.js?v=beta6.19"></script>
+<script src="shared/supabase-config.js?v=beta6.20"></script>
+<script src="shared/supabase-client.js?v=beta6.20"></script>
 <script src="shared/content-store.js"></script>
-<script src="assets/js/app.js?v=beta6.19"></script>
+<script src="assets/js/app.js?v=beta6.20"></script>
 </body>
 </html>
 
