@@ -1,9 +1,11 @@
-# Eastudy Composite V1 Beta 6.18 — Audit Report
+# Eastudy Composite V1 Beta 6.19 — Audit Report
 
-Result: **PASS**  (53/53)
+Result: **PASS**  (57/57)
 
 - PASS — index.html: unique DOM ids
 - PASS — index.html: local script/css refs exist
+- PASS — login.html: unique DOM ids
+- PASS — login.html: local script/css refs exist
 - PASS — admin/index.html: unique DOM ids
 - PASS — admin/index.html: local script/css refs exist
 - PASS — admin/login.html: unique DOM ids
@@ -24,6 +26,8 @@ Result: **PASS**  (53/53)
 - PASS — student account menu exposes logout/profile/preferences
 - PASS — student account menu has executable session behavior
 - PASS — student uses phone/password Supabase authentication
+- PASS — student has a dedicated connected login page
+- PASS — student page does not expose admin login link
 - PASS — student and admin sessions are isolated
 - PASS — admin has a separate guarded login entry
 - PASS — Supabase migration protects learner data with RLS

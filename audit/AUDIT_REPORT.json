@@ -1,7 +1,7 @@
 {
   "ok": true,
-  "passed": 53,
-  "total": 53,
+  "passed": 57,
+  "total": 57,
   "checks": [
     {
       "name": "index.html: unique DOM ids",
@@ -10,6 +10,16 @@
     },
     {
       "name": "index.html: local script/css refs exist",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "login.html: unique DOM ids",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "login.html: local script/css refs exist",
       "ok": true,
       "detail": ""
     },
@@ -110,6 +120,16 @@
     },
     {
       "name": "student uses phone/password Supabase authentication",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "student has a dedicated connected login page",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "student page does not expose admin login link",
       "ok": true,
       "detail": ""
     },

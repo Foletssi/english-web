@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#0b0e13">
+  <title>Eastudy · 学生登录</title>
+  <link rel="icon" type="image/png" href="assets/images/eastudy-icon.png">
+  <link rel="stylesheet" href="assets/css/student-login.css?v=beta6.19">
+</head>
+<body class="student-login-page">
+  <main class="student-login-layout">
+    <section class="student-login-card" aria-labelledby="studentLoginTitle">
+      <a class="student-login-brand" href="index.html"><img src="assets/images/eastudy-logo.png" alt="Eastudy · Learn English, the Easy Way."></a>
+      <p class="student-login-eyebrow">EASTUDY LEARNER</p>
+      <h1 id="studentLoginTitle">欢迎回来</h1>
+      <p class="student-login-copy" id="studentLoginDescription">使用手机号和密码登录你的学生账户。</p>
+      <div class="student-auth-mode" role="tablist" aria-label="学生账户操作">
+        <button type="button" class="active" data-student-auth-mode="signin" role="tab" aria-selected="true">学生登录</button>
+        <button type="button" data-student-auth-mode="signup" role="tab" aria-selected="false">学生注册</button>
+      </div>
+      <form id="student-login-form">
+        <label id="studentNameWrap" hidden><span>昵称</span><input id="studentName" type="text" autocomplete="nickname" placeholder="例如：小明"></label>
+        <label><span>手机号</span><input id="studentPhone" type="tel" autocomplete="username" inputmode="tel" placeholder="+8613812345678" required></label>
+        <label><span>密码</span><input id="studentPassword" type="password" autocomplete="current-password" minlength="6" placeholder="至少 6 位" required></label>
+        <p class="student-login-message" id="studentLoginMessage" role="status" aria-live="polite"></p>
+        <button class="student-login-submit" type="submit" id="studentLoginSubmit">登录 Eastudy</button>
+      </form>
+      <a class="student-login-back" href="index.html">返回学习首页</a>
+    </section>
+    <aside class="student-login-visual" aria-hidden="true">
+      <img src="assets/images/flower_frame.png" alt="">
+      <div class="student-login-visual-copy"><span>REAL VIDEOS · REAL PROGRESS</span><strong>从一句真实表达开始，<br>把听懂变成习惯。</strong><small>你的学习进度、收藏和生词会自动保存。</small></div>
+    </aside>
+  </main>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="shared/supabase-config.js?v=beta6.19"></script>
+  <script src="shared/supabase-client.js?v=beta6.19"></script>
+  <script src="assets/js/student-login.js?v=beta6.19"></script>
+</body>
+</html>
