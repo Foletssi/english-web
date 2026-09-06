@@ -1,4 +1,4 @@
-# Eastudy Composite V1 Beta 6.19 — Audit Report
+# Eastudy Composite V1 Beta 6.20 — Audit Report
 
 Result: **PASS**  (57/57)
 
