@@ -53,7 +53,7 @@ Result: **PASS**  (53/53)
 - PASS — vocabulary state persists across reloads
 - PASS — vocabulary review flow reveals then grades recall
 - PASS — vocabulary statistics are data driven
-- PASS — web deployment exposes isolated admin login
+- PASS — web deployment preserves isolated admin pages
 - PASS — runtime shared-contract regression — {
   "ok": true,
   "tests": 17,

@@ -5,7 +5,7 @@
 ## 部署后的入口
 
 - 学员端：`https://你的域名/`
-- 管理后台登录：`https://你的域名/admin/`
+- 管理后台登录：`https://你的域名/admin/`（未登录时自动显示登录页）
 - 管理后台工作台：`https://你的域名/admin/index.html`（登录成功后自动进入）
 
 当前构建可直接部署到 Cloudflare Pages。学员账户与学习数据使用 Supabase；管理员入口会检查数据库角色。完整测试步骤见 `README_SUPABASE_MVP.md`。

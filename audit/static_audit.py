@@ -71,7 +71,7 @@ add('adjacent key expressions receive distinct colour tones',all(x in app for x 
 add('vocabulary state persists across reloads',all(x in app for x in ["Storage.get('vocabMeta'","Storage.set('vocabMeta'",'nextReviewAt','correctStreak']))
 add('vocabulary review flow reveals then grades recall',all(x in student for x in ['vocabReviewPanel','vocabReviewReveal','vocabReviewAgain','vocabReviewKnown']) and all(x in app for x in ['openVocabReview','revealVocabReview','gradeVocabReview']))
 add('vocabulary statistics are data driven',all(x in student for x in ['vocabWeeklyCount','vocabDueCount','vocabMasteryRate']) and 'function updateVocabStats' in app)
-add('web deployment exposes isolated admin login',(root/'README_WEB_DEPLOY.md').exists() and '/admin /admin/login.html 200' in (root/'_redirects').read_text(encoding='utf-8'))
+add('web deployment preserves isolated admin pages',(root/'README_WEB_DEPLOY.md').exists() and (root/'admin/login.html').exists() and (root/'admin/index.html').exists() and '/admin /admin/login.html 200' not in (root/'_redirects').read_text(encoding='utf-8'))
 run=subprocess.run(['node',str(root/'audit/runtime_contract_test.mjs')],capture_output=True,text=True)
 add('runtime shared-contract regression',run.returncode==0,(run.stdout+run.stderr).strip())
 report={'ok':all(c['ok'] for c in checks),'passed':sum(c['ok'] for c in checks),'total':len(checks),'checks':checks}

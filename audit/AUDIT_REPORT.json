@@ -259,7 +259,7 @@
       "detail": ""
     },
     {
-      "name": "web deployment exposes isolated admin login",
+      "name": "web deployment preserves isolated admin pages",
       "ok": true,
       "detail": ""
     },
