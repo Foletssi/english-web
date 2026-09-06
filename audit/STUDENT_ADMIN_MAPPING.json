@@ -1,0 +1,24 @@
+{
+  "version": "1.0.0-alpha",
+  "authority": "shared/content-store.js",
+  "rules": {
+    "published_visibility": "Only Video.status=PUBLISHED is projected into the student content list.",
+    "identity": "Admin and student use the same numeric Video.id.",
+    "sentences": "Admin Sentence.startTime/endTime/english/chinese maps directly to student s/e/en/zh at hydration.",
+    "creator": "Video.creatorId resolves a shared Creator entity; student cards consume the projected creator name.",
+    "pipeline": "Processing jobs never mutate student learning state; only content metadata/status is shared.",
+    "theme": "Admin and student share zs:theme localStorage preference on the same origin."
+  },
+  "field_map": [
+    {"admin":"Video.id","student":"route /video/:id + progress key","required":true},
+    {"admin":"Video.title","student":"home/video cards + study page title","required":true},
+    {"admin":"Video.cover","student":"video cards / thumbnails","required":true},
+    {"admin":"Video.mediaUrl","student":"HTML5 video src","required":true},
+    {"admin":"Video.level","student":"difficulty badges","required":true},
+    {"admin":"Video.status","student":"content visibility gate","required":true},
+    {"admin":"Sentence.startTime","student":"subtitle seek start (s)","required":true},
+    {"admin":"Sentence.endTime","student":"subtitle activation end (e)","required":true},
+    {"admin":"Sentence.english","student":"English subtitle (en)","required":true},
+    {"admin":"Sentence.chinese","student":"Chinese subtitle (zh)","required":true}
+  ]
+}

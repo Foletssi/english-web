@@ -1,0 +1,15 @@
+# Local runtime / secrets
+.env
+.env.local
+.env.*.local
+
+# Dependencies and generated files
+node_modules/
+coverage/
+*.log
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

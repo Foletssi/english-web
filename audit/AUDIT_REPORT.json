@@ -1,0 +1,227 @@
+{
+  "ok": true,
+  "passed": 44,
+  "total": 44,
+  "checks": [
+    {
+      "name": "index.html: unique DOM ids",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "index.html: local script/css refs exist",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "admin/index.html: unique DOM ids",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "admin/index.html: local script/css refs exist",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "assets/js/app.js: JavaScript syntax",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "admin/assets/admin.js: JavaScript syntax",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "shared/content-store.js: JavaScript syntax",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "student loads shared content contract",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "student hydrates managed published content",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "student resolves active video id dynamically",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "admin can CRUD video records",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "admin exposes pipeline boundary",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "admin exposes subtitle editor",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "admin/student same-origin link exists",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "student account menu exposes logout/profile/preferences",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "student account menu has executable session behavior",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "student preferences dialog is viewport-centered",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "student streak uses redesigned weekly rhythm UI",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "admin typography meets readability floor",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "student exposes key-word cloze mode",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "mobile study page uses continuous sentence flow",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "admin authors per-sentence keyWords",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "shared Sentence Contract exposes word-level timings",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "student synchronizes spoken word highlight",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "admin authors word-level timings",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "admin theme is independent from learner theme",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "subtitle review offers automatic alignment before advanced timing edits",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "admin offers AI connection configuration guidance",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "admin pipeline performs sentence-aware learning analysis",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "admin upload captures bilingual title and learning-analysis option",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "student switches active video title by interface language",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "learner insight renders every authored key expression",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "learner typography uses readable 16px support copy",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "official Eastudy logo asset is used on every brand surface",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "supplied VIP artwork is used on all membership surfaces",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "homepage upgrade promotion card is removed",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "supplied motivation card switches with learner theme",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "desktop study workspace has no page or left-pane scrolling",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "adjacent key expressions receive distinct colour tones",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "vocabulary state persists across reloads",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "vocabulary review flow reveals then grades recall",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "vocabulary statistics are data driven",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "web deployment exposes /admin entry",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "runtime shared-contract regression",
+      "ok": true,
+      "detail": "{\n  \"ok\": true,\n  \"tests\": 17,\n  \"videoCount\": 10,\n  \"publishedCount\": 9,\n  \"jobCount\": 3\n}"
+    }
+  ]
+}

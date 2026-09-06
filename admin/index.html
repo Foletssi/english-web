@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<title>Eastudy Studio · Content Operations</title>
+<link rel="icon" type="image/png" href="../assets/images/eastudy-icon.png">
+<link rel="apple-touch-icon" href="../assets/images/eastudy-icon.png">
+<script>
+try{const raw=localStorage.getItem('zs:admin:theme');const t=raw?JSON.parse(raw):'dark';document.documentElement.dataset.theme=(t==='light'?'light':'dark')}catch(e){}
+</script>
+<link rel="stylesheet" href="assets/admin.css?v=beta6.17">
+</head>
+<body>
+<div class="admin-shell">
+  <aside class="sidebar" id="sidebar">
+    <a class="studio-brand" href="#/dashboard"><img class="eastudy-logo eastudy-logo--studio" src="../assets/images/eastudy-logo.png" alt="Eastudy · Learn English, the Easy Way."><span class="studio-brand-badge">STUDIO</span></a>
+    <div class="workspace-chip"><span class="workspace-avatar">ZS</span><span><b>Production</b><small>Content Workspace</small></span><span class="chev">⌄</span></div>
+    <nav class="side-nav">
+      <span class="nav-label">概览</span>
+      <a href="#/dashboard" data-nav="/dashboard"><i data-icon="dashboard"></i><span>控制台</span></a>
+      <span class="nav-label">内容管理</span>
+      <a href="#/videos" data-nav="/videos"><i data-icon="video"></i><span>视频库</span><em id="navVideoCount">0</em></a>
+      <a href="#/collections" data-nav="/collections"><i data-icon="grid"></i><span>合集</span></a>
+      <a href="#/creators" data-nav="/creators"><i data-icon="users"></i><span>创作者</span></a>
+      <span class="nav-label">智能处理</span>
+      <a href="#/pipeline" data-nav="/pipeline"><i data-icon="spark"></i><span>解析队列</span><em id="navJobCount">0</em></a>
+      <a href="#/subtitles" data-nav="/subtitles"><i data-icon="subtitles"></i><span>字幕审核</span></a>
+      <span class="nav-label">学习数据</span>
+      <a href="#/analytics" data-nav="/analytics"><i data-icon="chart"></i><span>学习数据</span></a>
+      <span class="nav-label">系统</span>
+      <a href="#/settings" data-nav="/settings"><i data-icon="settings"></i><span>系统设置</span></a>
+    </nav>
+    <div class="sidebar-foot">
+      <a class="student-link" href="../index.html#/home" target="_blank"><i data-icon="external"></i><span><b>打开学员端</b><small>检查发布效果</small></span></a>
+      <div class="admin-profile"><span class="admin-avatar">A</span><span><b>管理员</b><small>内容运营</small></span><button id="themeBtn" title="切换主题"><i data-icon="theme"></i></button></div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <button class="mobile-menu" id="mobileMenu"><i data-icon="menu"></i></button>
+      <div class="breadcrumbs" id="breadcrumbs"><span>控制台</span><b>/</b><strong>概览</strong></div>
+      <div class="top-actions">
+        <button class="search-btn" id="globalSearch"><i data-icon="search"></i><span>搜索视频、任务或创作者</span><kbd>Ctrl K</kbd></button>
+        <button class="icon-button" title="系统通知"><i data-icon="bell"></i><span class="notice"></span></button>
+        <button class="primary compact" id="newVideoTop"><i data-icon="plus"></i>导入视频</button>
+      </div>
+    </header>
+    <div id="view" class="view"></div>
+  </main>
+</div>
+
+<div class="modal-backdrop" id="videoModal">
+  <section class="modal large">
+    <header><div><span class="eyebrow">CONTENT INTAKE</span><h2 id="videoModalTitle">导入新视频</h2><p>创建内容记录后，可进入 AI 解析流水线。</p></div><button class="modal-close" data-close="videoModal">×</button></header>
+    <form id="videoForm" class="form-grid">
+      <input type="hidden" name="id">
+      <label><span>英文标题 *</span><input name="title" required placeholder="例如：A Slow Morning Routine With Natural English"></label>
+      <label><span>中文标题</span><input name="titleZh" placeholder="可手动填写；留空时由智能分析生成"></label>
+      <label><span>创作者 *</span><select name="creatorId" id="creatorSelect" required></select></label>
+      <label><span>难度</span><select name="level"><option>A1</option><option>A2</option><option selected>A2–B1</option><option>B1</option><option>B1–B2</option><option>B2</option><option>C1</option></select></label>
+      <label><span>分类</span><select name="category"><option>日常生活</option><option>旅行</option><option>职场</option><option>教育</option><option>心理</option><option>美食</option><option>自然</option><option>科技</option></select></label>
+      <label><span>内容状态</span><select name="status"><option>DRAFT</option><option>PROCESSING</option><option>REVIEW</option><option>PUBLISHED</option><option>ARCHIVED</option></select></label>
+      <label class="span-2"><span>视频来源 / 媒体地址</span><input name="mediaUrl" placeholder="YouTube URL、MP4、HLS 地址；V1 本地演示可留空"></label>
+      <label class="span-2"><span>封面地址</span><input name="cover" value="assets/images/home_video_1.png" placeholder="assets/images/... 或对象存储 URL"></label>
+      <label class="span-2"><span>简介</span><textarea name="description" rows="4" placeholder="描述这条内容适合什么水平、什么学习场景"></textarea></label>
+      <div class="processing-options span-2"><b>上传后自动执行</b><label><input type="checkbox" name="doTranscript" checked> WhisperX 英文字幕</label><label><input type="checkbox" name="doTranslate" checked> 中文字幕</label><label><input type="checkbox" name="doDictionary" checked> 词汇释义</label><label><input type="checkbox" name="doLearningAnalysis" checked> 逐句重点表达与语法</label></div>
+      <footer class="form-actions span-2"><button type="button" class="secondary" data-close="videoModal">取消</button><button type="submit" class="primary">保存视频</button></footer>
+    </form>
+  </section>
+</div>
+
+<div class="modal-backdrop" id="searchModal">
+  <section class="modal search-modal">
+    <header><div><span class="eyebrow">QUICK FIND</span><h2>全局搜索</h2></div><button class="modal-close" data-close="searchModal">×</button></header>
+    <div class="search-input-wrap"><i data-icon="search"></i><input id="searchInput" placeholder="输入标题、创作者、任务状态…"></div>
+    <div id="searchResults" class="search-results"></div>
+  </section>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="../shared/content-store.js"></script>
+<script src="assets/admin.js?v=beta6.17"></script>
+</body>
+</html>
+
+
+
+
