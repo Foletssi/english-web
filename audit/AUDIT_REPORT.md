@@ -1,14 +1,19 @@
-# Eastudy Composite V1 Beta 6.17 — Audit Report
+# Eastudy Composite V1 Beta 6.18 — Audit Report
 
-Result: **PASS**  (44/44)
+Result: **PASS**  (53/53)
 
 - PASS — index.html: unique DOM ids
 - PASS — index.html: local script/css refs exist
 - PASS — admin/index.html: unique DOM ids
 - PASS — admin/index.html: local script/css refs exist
+- PASS — admin/login.html: unique DOM ids
+- PASS — admin/login.html: local script/css refs exist
 - PASS — assets/js/app.js: JavaScript syntax
 - PASS — admin/assets/admin.js: JavaScript syntax
+- PASS — admin/assets/admin-login.js: JavaScript syntax
 - PASS — shared/content-store.js: JavaScript syntax
+- PASS — shared/supabase-client.js: JavaScript syntax
+- PASS — shared/admin-auth.js: JavaScript syntax
 - PASS — student loads shared content contract
 - PASS — student hydrates managed published content
 - PASS — student resolves active video id dynamically
@@ -18,6 +23,10 @@ Result: **PASS**  (44/44)
 - PASS — admin/student same-origin link exists
 - PASS — student account menu exposes logout/profile/preferences
 - PASS — student account menu has executable session behavior
+- PASS — student uses phone/password Supabase authentication
+- PASS — student and admin sessions are isolated
+- PASS — admin has a separate guarded login entry
+- PASS — Supabase migration protects learner data with RLS
 - PASS — student preferences dialog is viewport-centered
 - PASS — student streak uses redesigned weekly rhythm UI
 - PASS — admin typography meets readability floor
@@ -44,7 +53,7 @@ Result: **PASS**  (44/44)
 - PASS — vocabulary state persists across reloads
 - PASS — vocabulary review flow reveals then grades recall
 - PASS — vocabulary statistics are data driven
-- PASS — web deployment exposes /admin entry
+- PASS — web deployment exposes isolated admin login
 - PASS — runtime shared-contract regression — {
   "ok": true,
   "tests": 17,

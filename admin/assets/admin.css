@@ -91,3 +91,5 @@ body{font-size:14px;line-height:1.45}
 .eastudy-logo--studio{width:100%;height:auto;aspect-ratio:3.26/1}
 .studio-brand-badge{font-size:10px;font-weight:900;letter-spacing:.17em;color:var(--accent);padding-left:7px;line-height:1.2}
 @media(max-width:840px){.eastudy-logo--studio{width:190px}}
+
+html.admin-auth-pending body{visibility:hidden}

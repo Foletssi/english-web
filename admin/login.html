@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#0b0e13">
+  <title>Eastudy Studio · 管理员登录</title>
+  <link rel="icon" type="image/png" href="../assets/images/eastudy-icon.png">
+  <link rel="stylesheet" href="assets/admin-auth.css?v=beta6.18">
+</head>
+<body>
+  <main class="admin-login-shell">
+    <section class="admin-login-card" aria-labelledby="adminLoginTitle">
+      <a class="admin-login-brand" href="../index.html"><img src="../assets/images/eastudy-logo.png" alt="Eastudy"></a>
+      <p class="admin-login-eyebrow">EASTUDY STUDIO</p>
+      <h1 id="adminLoginTitle">管理端登录</h1>
+      <p class="admin-login-copy">仅限已授予管理权限的账号。学生账号请使用学生端入口。</p>
+      <form id="adminLoginForm">
+        <label><span>手机号</span><input id="adminPhone" type="tel" autocomplete="username" inputmode="tel" placeholder="+8613812345678" required></label>
+        <label><span>密码</span><input id="adminPassword" type="password" autocomplete="current-password" minlength="6" required></label>
+        <p class="admin-login-message" id="adminLoginMessage" role="status"></p>
+        <button type="submit" id="adminLoginSubmit">登录管理端</button>
+      </form>
+      <a class="admin-login-back" href="../index.html">返回学生端</a>
+    </section>
+  </main>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../shared/supabase-config.js?v=beta6.18"></script>
+  <script src="../shared/supabase-client.js?v=beta6.18"></script>
+  <script src="assets/admin-login.js?v=beta6.18"></script>
+</body>
+</html>

@@ -10,7 +10,12 @@
 <script>
 try{const raw=localStorage.getItem('zs:admin:theme');const t=raw?JSON.parse(raw):'dark';document.documentElement.dataset.theme=(t==='light'?'light':'dark')}catch(e){}
 </script>
-<link rel="stylesheet" href="assets/admin.css?v=beta6.17">
+<link rel="stylesheet" href="assets/admin.css?v=beta6.18">
+<style>html.admin-auth-pending body{visibility:hidden}</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../shared/supabase-config.js?v=beta6.18"></script>
+<script src="../shared/supabase-client.js?v=beta6.18"></script>
+<script src="../shared/admin-auth.js?v=beta6.18"></script>
 </head>
 <body>
 <div class="admin-shell">
@@ -34,7 +39,7 @@ try{const raw=localStorage.getItem('zs:admin:theme');const t=raw?JSON.parse(raw)
     </nav>
     <div class="sidebar-foot">
       <a class="student-link" href="../index.html#/home" target="_blank"><i data-icon="external"></i><span><b>打开学员端</b><small>检查发布效果</small></span></a>
-      <div class="admin-profile"><span class="admin-avatar">A</span><span><b>管理员</b><small>内容运营</small></span><button id="themeBtn" title="切换主题"><i data-icon="theme"></i></button></div>
+      <div class="admin-profile"><span class="admin-avatar" id="adminAvatar">管</span><span><b id="adminDisplayName">管理员</b><small id="adminRoleText">验证权限中</small></span><button id="adminSignOutBtn" title="退出管理端"><i data-icon="logout"></i></button><button id="themeBtn" title="切换主题"><i data-icon="theme"></i></button></div>
     </div>
   </aside>
 
@@ -82,7 +87,7 @@ try{const raw=localStorage.getItem('zs:admin:theme');const t=raw?JSON.parse(raw)
 
 <div class="toast" id="toast"></div>
 <script src="../shared/content-store.js"></script>
-<script src="assets/admin.js?v=beta6.17"></script>
+<script src="assets/admin.js?v=beta6.18"></script>
 </body>
 </html>
 

@@ -350,6 +350,9 @@ html[data-theme="light"] .transcript-wrap{box-shadow:0 10px 28px rgba(42,54,78,.
 .signin-dialog{width:min(430px,100%)}.signin-logo{display:flex;align-items:center;gap:10px;margin-bottom:18px}.signin-logo b{font-size:20px}.signin-dialog label{display:block;margin-top:13px}.signin-submit{width:100%;margin-top:18px;height:44px}
 body.session-signed-out .account-shell{opacity:.65}
 
+/* Real learner authentication: the admin gateway deliberately lives on its own page. */
+.signin-mode{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:18px 0 3px;padding:4px;border:1px solid var(--line);border-radius:8px;background:var(--panel2)}.signin-mode button{height:34px;border:0;border-radius:6px;background:transparent;color:var(--muted);font-size:13px;font-weight:800;cursor:pointer}.signin-mode button.active{background:var(--panel);color:var(--text);box-shadow:0 1px 5px rgba(0,0,0,.12)}.signin-message{min-height:18px!important;margin:10px 0 0!important;color:var(--danger)!important;font-size:12px!important}.signin-message.ok{color:var(--accent)!important}.signin-admin-entry{display:block;margin-top:15px;color:var(--muted);font-size:12px;text-align:center;text-decoration:none}.signin-admin-entry:hover{color:var(--accent)}
+
 /* Redesigned streak card: one clear streak number + compact weekly rhythm. */
 .streak-v3{padding:18px 16px 16px!important;overflow:hidden;position:relative}
 .streak-v3:after{content:"";position:absolute;width:120px;height:120px;right:-52px;top:-58px;border-radius:50%;background:radial-gradient(circle,rgba(249,115,22,.15),transparent 70%);pointer-events:none}

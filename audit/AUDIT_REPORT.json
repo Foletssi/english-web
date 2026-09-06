@@ -1,7 +1,7 @@
 {
   "ok": true,
-  "passed": 44,
-  "total": 44,
+  "passed": 53,
+  "total": 53,
   "checks": [
     {
       "name": "index.html: unique DOM ids",
@@ -24,6 +24,16 @@
       "detail": ""
     },
     {
+      "name": "admin/login.html: unique DOM ids",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "admin/login.html: local script/css refs exist",
+      "ok": true,
+      "detail": ""
+    },
+    {
       "name": "assets/js/app.js: JavaScript syntax",
       "ok": true,
       "detail": ""
@@ -34,7 +44,22 @@
       "detail": ""
     },
     {
+      "name": "admin/assets/admin-login.js: JavaScript syntax",
+      "ok": true,
+      "detail": ""
+    },
+    {
       "name": "shared/content-store.js: JavaScript syntax",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "shared/supabase-client.js: JavaScript syntax",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "shared/admin-auth.js: JavaScript syntax",
       "ok": true,
       "detail": ""
     },
@@ -80,6 +105,26 @@
     },
     {
       "name": "student account menu has executable session behavior",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "student uses phone/password Supabase authentication",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "student and admin sessions are isolated",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "admin has a separate guarded login entry",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Supabase migration protects learner data with RLS",
       "ok": true,
       "detail": ""
     },
@@ -214,7 +259,7 @@
       "detail": ""
     },
     {
-      "name": "web deployment exposes /admin entry",
+      "name": "web deployment exposes isolated admin login",
       "ok": true,
       "detail": ""
     },

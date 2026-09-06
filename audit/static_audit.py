@@ -12,7 +12,7 @@ class P(HTMLParser):
         if 'id' in d:self.ids.append(d['id'])
         if tag=='script' and d.get('src'):self.refs.append(d['src'])
         if tag=='link' and d.get('href'):self.refs.append(d['href'])
-for rel in ['index.html','admin/index.html']:
+for rel in ['index.html','admin/index.html','admin/login.html']:
     p=P();p.feed((root/rel).read_text(encoding='utf-8'))
     dup=sorted({x for x in p.ids if p.ids.count(x)>1})
     add(f'{rel}: unique DOM ids',not dup,','.join(dup))
@@ -23,7 +23,7 @@ for rel in ['index.html','admin/index.html']:
         target=(base/ref.split('?')[0]).resolve()
         if not target.exists():missing.append(ref)
     add(f'{rel}: local script/css refs exist',not missing,','.join(missing))
-for rel in ['assets/js/app.js','admin/assets/admin.js','shared/content-store.js']:
+for rel in ['assets/js/app.js','admin/assets/admin.js','admin/assets/admin-login.js','shared/content-store.js','shared/supabase-client.js','shared/admin-auth.js']:
     r=subprocess.run(['node','--check',str(root/rel)],capture_output=True,text=True)
     add(f'{rel}: JavaScript syntax',r.returncode==0,(r.stderr or '').strip())
 student=(root/'index.html').read_text(encoding='utf-8')
@@ -40,6 +40,10 @@ add('admin exposes subtitle editor',all(x in admin for x in ['renderSubtitleEdit
 add('admin/student same-origin link exists','../index.html#/home' in (root/'admin/index.html').read_text(encoding='utf-8'))
 add('student account menu exposes logout/profile/preferences',all(x in student for x in ['data-account-action="logout"','data-account-action="profile"','data-account-action="preferences"']))
 add('student account menu has executable session behavior',all(x in app for x in ['function bindAccountUI()','function performLogout()','signinBackdrop']))
+add('student uses phone/password Supabase authentication',all(x in student for x in ['signinPhone','data-student-auth-mode','supabase-client.js']) and all(x in app for x in ['function initStudentAuth()','function submitStudentAuth()','signInPhone']))
+add('student and admin sessions are isolated',all(x in (root/'shared/supabase-client.js').read_text(encoding='utf-8') for x in ["scope === 'admin'","'eastudy-' + key + '-auth'","storageKey"]))
+add('admin has a separate guarded login entry',(root/'admin/login.html').exists() and all(x in (root/'admin/index.html').read_text(encoding='utf-8') for x in ['admin-auth.js','admin-auth-pending']) and 'EastudyAdminGate' in admin)
+add('Supabase migration protects learner data with RLS',(root/'supabase/migrations/20260907_mvp_auth_and_learning.sql').exists() and all(x in (root/'supabase/migrations/20260907_mvp_auth_and_learning.sql').read_text(encoding='utf-8') for x in ['enable row level security','user_vocabulary','study_events','auth.uid()']))
 add('student preferences dialog is viewport-centered',all(x in student_css for x in ['.backdrop.show{display:grid!important}','right:auto!important','place-items:center']))
 add('student streak uses redesigned weekly rhythm UI','streak-v3' in student and '.streak-v3-days' in student_css)
 add('admin typography meets readability floor',all(x in admin_css for x in ['.side-nav a{height:44px;font-size:14px','.data-table td{padding:12px 14px;font-size:12px','.page-head p{font-size:14px']))
@@ -67,12 +71,12 @@ add('adjacent key expressions receive distinct colour tones',all(x in app for x 
 add('vocabulary state persists across reloads',all(x in app for x in ["Storage.get('vocabMeta'","Storage.set('vocabMeta'",'nextReviewAt','correctStreak']))
 add('vocabulary review flow reveals then grades recall',all(x in student for x in ['vocabReviewPanel','vocabReviewReveal','vocabReviewAgain','vocabReviewKnown']) and all(x in app for x in ['openVocabReview','revealVocabReview','gradeVocabReview']))
 add('vocabulary statistics are data driven',all(x in student for x in ['vocabWeeklyCount','vocabDueCount','vocabMasteryRate']) and 'function updateVocabStats' in app)
-add('web deployment exposes /admin entry',(root/'README_WEB_DEPLOY.md').exists() and '/admin /admin/index.html 200' in (root/'_redirects').read_text(encoding='utf-8'))
+add('web deployment exposes isolated admin login',(root/'README_WEB_DEPLOY.md').exists() and '/admin /admin/login.html 200' in (root/'_redirects').read_text(encoding='utf-8'))
 run=subprocess.run(['node',str(root/'audit/runtime_contract_test.mjs')],capture_output=True,text=True)
 add('runtime shared-contract regression',run.returncode==0,(run.stdout+run.stderr).strip())
 report={'ok':all(c['ok'] for c in checks),'passed':sum(c['ok'] for c in checks),'total':len(checks),'checks':checks}
 (root/'audit/AUDIT_REPORT.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
-md=['# Eastudy Composite V1 Beta 6.17 — Audit Report','',f"Result: **{'PASS' if report['ok'] else 'FAIL'}**  ({report['passed']}/{report['total']})",'']
+md=['# Eastudy Composite V1 Beta 6.18 — Audit Report','',f"Result: **{'PASS' if report['ok'] else 'FAIL'}**  ({report['passed']}/{report['total']})",'']
 for c in checks:md.append(f"- {'PASS' if c['ok'] else 'FAIL'} — {c['name']}"+(f" — {c['detail']}" if c['detail'] else ''))
 (root/'audit/AUDIT_REPORT.md').write_text('\n'.join(md)+'\n',encoding='utf-8')
 print(json.dumps(report,ensure_ascii=False,indent=2))
