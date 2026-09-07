@@ -94,7 +94,7 @@
     if (!api) return { data: null, error: new Error('SUPABASE_NOT_CONFIGURED') };
     if (invalid) return { data: null, error: new Error(invalid) };
     const result = await api.auth.signInWithPassword({ phone, password: String(input.password || '') });
-    if (!result.error && scope !== 'admin') await api.rpc('mark_my_password_set');
+    if (!result.error && scope !== 'admin') void api.rpc('mark_my_password_set');
     return result;
   }
 
@@ -122,7 +122,7 @@
     if (invalid) return { data: null, error: new Error(invalid) };
     if (!/^\d{6}$/.test(token)) return { data: null, error: new Error('INVALID_OTP') };
     const result = await api.auth.verifyOtp({ phone, token, type: 'sms' });
-    if (!result.error && scope !== 'admin') await api.rpc('mark_my_phone_verified');
+    if (!result.error && scope !== 'admin') void api.rpc('mark_my_phone_verified');
     return result;
   }
 
