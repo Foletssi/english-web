@@ -60,6 +60,10 @@
     return /^\+[1-9]\d{7,14}$/.test(phone) ? '' : '请使用国际手机号格式，例如 +8613812345678。';
   }
 
+  function isLearnerProfile(profile) {
+    return ['learner', 'student'].includes(String(profile?.role || '').toLowerCase());
+  }
+
   async function getContext(scope) {
     const api = client(scope);
     if (!api) return { ...empty, error: new Error('SUPABASE_NOT_CONFIGURED') };
@@ -130,7 +134,7 @@
       id: context.user.id,
       phone: context.user.phone || '',
       nickname: String(displayName || context.user.user_metadata?.nickname || '').trim() || '新学员',
-      role: 'student'
+      role: 'learner'
     });
     return getContext('student');
   }
@@ -154,7 +158,7 @@
   async function upsertProgress(input) {
     const api = client('student');
     const context = await getContext('student');
-    if (!api || !context.user || context.profile?.role !== 'student') return { error: null };
+    if (!api || !context.user || !isLearnerProfile(context.profile)) return { error: null };
     const now = new Date().toISOString();
     const row = {
       user_id: context.user.id,
@@ -171,7 +175,7 @@
   async function setFavorite(input) {
     const api = client('student');
     const context = await getContext('student');
-    if (!api || !context.user || context.profile?.role !== 'student') return { error: null };
+    if (!api || !context.user || !isLearnerProfile(context.profile)) return { error: null };
     return input.active
       ? api.from('saved_sentences').upsert({ user_id: context.user.id, video_id: Number(input.videoId), sentence_index: Number(input.sentenceIndex), english: input.english || '', chinese: input.chinese || '' }, { onConflict: 'user_id,video_id,sentence_index' })
       : api.from('saved_sentences').delete().eq('user_id', context.user.id).eq('video_id', Number(input.videoId)).eq('sentence_index', Number(input.sentenceIndex));
@@ -180,7 +184,7 @@
   async function setVocabulary(input) {
     const api = client('student');
     const context = await getContext('student');
-    if (!api || !context.user || context.profile?.role !== 'student') return { error: null };
+    if (!api || !context.user || !isLearnerProfile(context.profile)) return { error: null };
     const wordKey = String(input.wordKey || input.word || '').toLowerCase().trim();
     if (!wordKey) return { error: null };
     if (!input.active) return api.from('user_vocabulary').delete().eq('user_id', context.user.id).eq('word_key', wordKey);
@@ -202,7 +206,7 @@
   async function logStudyEvent(eventType, input) {
     const api = client('student');
     const context = await getContext('student');
-    if (!api || !context.user || context.profile?.role !== 'student') return { error: null };
+    if (!api || !context.user || !isLearnerProfile(context.profile)) return { error: null };
     return api.from('study_events').insert({
       user_id: context.user.id,
       event_type: eventType,
@@ -225,7 +229,7 @@
   async function hydrateStudentLearning() {
     const api = client('student');
     const context = await getContext('student');
-    if (!api || !context.user || context.profile?.role !== 'student') return context;
+    if (!api || !context.user || !isLearnerProfile(context.profile)) return context;
     const [progress, favorites, vocabulary] = await Promise.all([
       api.from('user_progress').select('*').order('last_watched_at', { ascending: false }),
       api.from('saved_sentences').select('*'),
@@ -268,7 +272,7 @@
     const context = await getContext('admin');
     if (!api || !context.user || context.profile?.role !== 'admin') return { error: new Error('ADMIN_REQUIRED') };
     const [users, active, events] = await Promise.all([
-      api.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'student').eq('is_active', true),
+      api.from('profiles').select('*', { count: 'exact', head: true }).in('role', ['learner', 'student']).eq('is_active', true),
       api.from('user_progress').select('*', { count: 'exact', head: true }),
       api.from('study_events').select('*', { count: 'exact', head: true })
     ]);
@@ -280,6 +284,6 @@
     };
   }
 
-  window.EastudyAuth = Object.freeze({ available, client, cleanPhone, getRememberLogin, setRememberLogin, getContext, signUpPhone, signInPhone, sendPhoneOtp, verifyPhoneOtp, ensureStudentProfile, updatePassword, signOut });
+  window.EastudyAuth = Object.freeze({ available, client, cleanPhone, isLearnerProfile, getRememberLogin, setRememberLogin, getContext, signUpPhone, signInPhone, sendPhoneOtp, verifyPhoneOtp, ensureStudentProfile, updatePassword, signOut });
   window.EastudyData = Object.freeze({ upsertProgress, setFavorite, setVocabulary, logStudyEvent, hydrateStudentLearning, getAdminAnalytics });
 })();

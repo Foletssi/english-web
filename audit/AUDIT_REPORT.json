@@ -271,7 +271,7 @@
     {
       "name": "student OTP and password contract regression",
       "ok": true,
-      "detail": "{\n  \"ok\": true,\n  \"tests\": 11\n}"
+      "detail": "{\n  \"ok\": true,\n  \"tests\": 14\n}"
     }
   ]
 }

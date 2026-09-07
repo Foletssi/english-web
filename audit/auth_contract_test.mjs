@@ -34,6 +34,9 @@ vm.runInContext(fs.readFileSync(new URL('../shared/supabase-client.js', import.m
 
 const auth = window.EastudyAuth;
 assert.equal(auth.cleanPhone('138 0013 8000'), '+8613800138000');
+assert.equal(auth.isLearnerProfile({ role: 'learner' }), true);
+assert.equal(auth.isLearnerProfile({ role: 'student' }), true);
+assert.equal(auth.isLearnerProfile({ role: 'admin' }), false);
 
 await auth.sendPhoneOtp({ phone: '13800138000', displayName: '测试学员', shouldCreateUser: true }, 'student');
 assert.deepEqual(JSON.parse(JSON.stringify(calls[0])), ['send', {
@@ -56,4 +59,4 @@ assert.deepEqual(JSON.parse(JSON.stringify(calls[6])), ['rpc', 'mark_my_password
 const invalid = await auth.verifyPhoneOtp({ phone: '13800138000', token: '123' }, 'student');
 assert.equal(invalid.error.message, 'INVALID_OTP');
 
-console.log(JSON.stringify({ ok: true, tests: 11 }, null, 2));
+console.log(JSON.stringify({ ok: true, tests: 14 }, null, 2));

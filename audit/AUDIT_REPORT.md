@@ -1,4 +1,4 @@
-# Eastudy Composite V1 Beta 6.21.0 — Audit Report
+# Eastudy Composite V1 Beta 6.21.1 — Audit Report
 
 Result: **PASS**  (54/54)
 
@@ -63,5 +63,5 @@ Result: **PASS**  (54/54)
 }
 - PASS — student OTP and password contract regression — {
   "ok": true,
-  "tests": 11
+  "tests": 14
 }

@@ -70,6 +70,6 @@ for delete to authenticated using (user_id = auth.uid());
 grant select, insert, delete on public.study_events to authenticated;
 grant select, insert, update, delete on public.user_vocabulary to authenticated;
 
--- Existing new-user trigger uses raw_user_meta_data.nickname and creates role='student'.
+-- Existing new-user trigger uses raw_user_meta_data.nickname and creates role='learner'.
 -- Promote the first administrator after registering their account through the student page:
 -- update public.profiles set role = 'admin' where phone = '+8613812345678';
