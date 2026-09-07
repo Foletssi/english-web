@@ -267,6 +267,46 @@
     return context;
   }
 
+  function normalizeMembership(row) {
+    const expiresAt = row?.expires_at || row?.expiresAt || null;
+    const revokedAt = row?.revoked_at || row?.revokedAt || null;
+    return {
+      productId: row?.product_id || row?.productId || 'eastudy_pro',
+      expiresAt,
+      revokedAt,
+      active: Boolean(expiresAt && !revokedAt && Date.parse(expiresAt) > Date.now())
+    };
+  }
+
+  async function getMembership() {
+    const api = client('student');
+    const context = await getContext('student');
+    if (!api || !context.user || !isLearnerProfile(context.profile)) {
+      return { membership: null, error: context.error || new Error('STUDENT_REQUIRED') };
+    }
+    const result = await api.from('membership_entitlements')
+      .select('product_id,expires_at,revoked_at,updated_at')
+      .eq('user_id', context.user.id)
+      .eq('product_id', 'eastudy_pro')
+      .maybeSingle();
+    if (result.error) return { membership: null, error: result.error };
+    return { membership: result.data ? normalizeMembership(result.data) : null, error: null };
+  }
+
+  async function redeemMembership(code) {
+    const api = client('student');
+    const context = await getContext('student');
+    if (!api || !context.user || !isLearnerProfile(context.profile)) {
+      return { membership: null, error: context.error || new Error('STUDENT_REQUIRED') };
+    }
+    const normalized = String(code || '').trim().toUpperCase().replace(/\s+/g, '');
+    if (!normalized) return { membership: null, error: new Error('INVALID_ACTIVATION_CODE') };
+    const result = await api.rpc('redeem_activation_code', { p_code: normalized });
+    if (result.error) return { membership: null, error: result.error };
+    const row = Array.isArray(result.data) ? result.data[0] : result.data;
+    return { membership: normalizeMembership(row), error: null };
+  }
+
   async function getAdminAnalytics() {
     const api = client('admin');
     const context = await getContext('admin');
@@ -285,5 +325,5 @@
   }
 
   window.EastudyAuth = Object.freeze({ available, client, cleanPhone, isLearnerProfile, getRememberLogin, setRememberLogin, getContext, signUpPhone, signInPhone, sendPhoneOtp, verifyPhoneOtp, ensureStudentProfile, updatePassword, signOut });
-  window.EastudyData = Object.freeze({ upsertProgress, setFavorite, setVocabulary, logStudyEvent, hydrateStudentLearning, getAdminAnalytics });
+  window.EastudyData = Object.freeze({ upsertProgress, setFavorite, setVocabulary, logStudyEvent, hydrateStudentLearning, getMembership, redeemMembership, getAdminAnalytics });
 })();

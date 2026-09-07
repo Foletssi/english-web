@@ -23,7 +23,7 @@
   }catch(e){document.documentElement.dataset.theme='dark'}
 })();
 </script>
-<link rel="stylesheet" href="assets/css/app.css?v=beta6.21.2">
+<link rel="stylesheet" href="assets/css/app.css?v=beta6.22.0">
 </head>
 <body class="production-build">
 <div class="shell">
@@ -211,6 +211,11 @@
 
 <main id="learningPage" class="page product-page"><div class="product-shell learning-dashboard-v3">
   <section class="learning-welcome"><div><span class="section-kicker">YOUR PROGRESS</span><h1>早上好，<span data-student-name>学习者</span> 👋</h1><p>今天再学 18 分钟，就能完成你的每日目标。</p></div><button class="primary" data-route="/video/2805"><i data-icon="play"></i>继续学习</button></section>
+  <section class="learning-plan-card" aria-labelledby="learningPlanTitle">
+    <div class="learning-plan-head"><div><span class="section-kicker">PERSONAL ROADMAP</span><h2 id="learningPlanTitle">我的学习目标</h2><p>词汇、短语、听说读写与复习会按同一个目标统一安排。</p></div><div class="learning-plan-controls"><label><span>主目标</span><select id="learningTrackSelect" aria-label="选择学习主目标"></select></label><label><span>每天时间</span><select id="dailyMinutesSelect" aria-label="选择每天学习时间"><option value="10">10 分钟</option><option value="20" selected>20 分钟</option><option value="40">40 分钟</option><option value="60">60 分钟</option></select></label></div></div>
+    <div class="learning-plan-summary" id="learningPlanSummary" role="status"></div>
+    <div class="learning-plan-body"><div><h3>目标路线</h3><div class="learning-track-grid" id="learningTrackGrid"></div></div><div><h3>今日安排</h3><div class="today-plan-list" id="todayPlanList"></div></div></div>
+  </section>
   <section class="learning-overview-v3">
     <article class="learning-time-card">
       <div class="time-card-head"><span class="time-icon"><i data-icon="clock"></i></span><div><small>总学习时长</small><b>12<em>h</em> 30<em>m</em></b></div><span class="time-growth">↑ 2.4h 本周</span></div>
@@ -240,7 +245,7 @@
 <div class="search-backdrop" id="searchBackdrop"><section class="search-modal"><div class="search-modal-bar"><i data-icon="search"></i><input id="globalSearchInput" placeholder="搜索视频、合集、博主或学习主题…" autocomplete="off"><kbd>ESC</kbd></div><div class="search-suggestions" id="searchSuggestions"><div class="search-section-title">热门搜索</div><div class="search-chips"><button>日常生活</button><button>旅行英语</button><button>Jojo English</button><button>职场表达</button><button>心理学</button></div><div class="search-section-title">最近学习</div></div><div class="search-results" id="globalSearchResults"></div></section></div>
 <nav class="mobile-nav" id="mobileNav"><button data-route="/home"><i data-icon="home"></i><span>首页</span></button><button data-route="/compilation/36"><i data-icon="grid"></i><span>合集</span></button><button data-route="/vocabulary"><i data-icon="book"></i><span>生词</span></button><button data-route="/learning"><i data-icon="chart"></i><span>学习</span></button><button data-route="/favorites"><i data-icon="star"></i><span>收藏</span></button><button data-route="/me"><i data-icon="user"></i><span>我的</span></button></nav>
 
-<div class="dict" id="dict"><div class="dict-top"><div class="dict-row"><div><div class="dict-word" id="dictWord"></div><div class="dict-phon" id="dictPhon"></div><div class="level-badges" id="dictBadges"></div></div><button class="speakbtn" id="speakWord">🔊</button><button class="dict-close" id="dictClose">×</button></div></div><div class="dict-body"><div class="sense"><b>核心释义</b><p id="dictMeaning"></p></div><div class="sense"><b>语境理解</b><p id="dictExplain"></p></div><div class="context-box" id="dictContext"></div><div class="dict-actions"><button id="copyWord">复制词语</button><button class="saveword" id="saveWord">＋ 加入生词本</button></div></div></div>
+<div class="dict" id="dict"><div class="dict-top"><div class="dict-row"><div><div class="dict-word" id="dictWord"></div><div class="dict-phon" id="dictPhon"></div><div class="level-badges" id="dictBadges"></div></div><button class="speakbtn" id="speakWord" type="button" aria-label="播放单词发音" title="播放单词发音">🔊</button><button class="dict-close" id="dictClose" type="button" aria-label="关闭词典">×</button></div></div><div class="dict-body"><div class="pronunciation-status" id="pronunciationStatus" role="status">点击扬声器播放英音</div><div class="sense"><b>核心释义</b><p id="dictMeaning"></p></div><div class="sense"><b>语境理解</b><p id="dictExplain"></p></div><div class="context-box" id="dictContext"></div><div class="dict-actions"><button id="copyWord">复制词语</button><button class="saveword" id="saveWord">＋ 加入生词本</button></div></div></div>
 
 <div class="backdrop" id="settingsBackdrop"><div class="settings settings-v2">
   <div class="set-head"><div><b>偏好设置</b><small>按你的阅读习惯定制学习界面</small></div><button id="closeSettings">×</button></div>
@@ -249,6 +254,7 @@
   <div class="set-sec ui-set-section"><div class="set-title-row"><span class="set-index">3</span><div><b>单词间距</b><small>控制英文句子的阅读密度</small></div></div><div class="choice-grid gap-grid"><button class="visual-choice gap-choice" data-gap-value="0"><strong>A↔B</strong><span>紧凑</span></button><button class="visual-choice gap-choice" data-gap-value=".2"><strong>A↔B</strong><span>标准</span></button><button class="visual-choice gap-choice" data-gap-value=".4"><strong>A ↔ B</strong><span>宽松</span></button><button class="visual-choice gap-choice" data-gap-value=".6"><strong>A ← → B</strong><span>超宽</span></button></div></div>
   <div class="set-sec ui-set-section"><div class="set-title-row"><span class="set-index">4</span><div><b>追踪样式</b><small>词汇等级在字幕中的显示方式</small></div></div><div class="track-grid ui-option-grid"><button class="option setting-card compact" data-track-option="highlight"><span class="setting-icon">▰</span><span class="setting-copy"><b>高亮</b><small>柔和色彩标记重点词</small></span><span class="setting-check">✓</span></button><button class="option setting-card compact" data-track-option="outline"><span class="setting-icon outline-a">A</span><span class="setting-copy"><b>描边</b><small>保留文字原色，仅做轮廓提示</small></span><span class="setting-check">✓</span></button></div><div class="outline-color-control" id="outlineColorControl"><div class="outline-color-head"><b>描边颜色</b><small>保留重点词原文字颜色，仅调整轮廓提示</small></div><div class="outline-color-tools"><input id="outlineColorInput" type="color" value="#AFC3D5" aria-label="选择描边颜色"><div class="outline-swatches"><button type="button" data-outline-color="#AFC3D5" style="--swatch:#AFC3D5" aria-label="冷灰蓝"></button><button type="button" data-outline-color="#5EEAD4" style="--swatch:#5EEAD4" aria-label="青绿色"></button><button type="button" data-outline-color="#D6A84C" style="--swatch:#D6A84C" aria-label="暖金色"></button><button type="button" data-outline-color="#A78BFA" style="--swatch:#A78BFA" aria-label="柔和紫"></button></div></div></div></div>
   <div class="set-sec ui-set-section"><div class="set-title-row"><span class="set-index">5</span><div><b>词汇高亮</b><small>在字幕正文中高亮特定等级词汇</small></div></div><button class="highlight-toggle" id="vocabHighlightToggle"><span><b>已开启</b><small>点击可关闭词汇等级标记</small></span><i></i></button></div>
+  <div class="set-sec ui-set-section"><div class="set-title-row"><span class="set-index">6</span><div><b>单词发音</b><small>选择词典、生词本与复习卡使用的英语口音</small></div></div><div class="pronunciation-choice" role="group" aria-label="单词发音口音"><button type="button" data-pronunciation-dialect="en-GB"><b>英音</b><small>English · UK</small><span>✓</span></button><button type="button" data-pronunciation-dialect="en-US"><b>美音</b><small>English · US</small><span>✓</span></button></div><p class="pronunciation-help">优先使用本设备对应口音；缺少时自动选择可用英语音色。</p></div>
   <div class="set-sec ui-set-section"><div class="set-title-row"><span class="set-index">6</span><div><b>词汇等级</b><small>只显示你关注的考试或词汇类型</small></div></div><div class="level-row v2" id="levelToggles"><button class="level-toggle" data-level="cet4">四级</button><button class="level-toggle" data-level="cet6">六级</button><button class="level-toggle" data-level="gaokao">高考</button><button class="level-toggle" data-level="ielts">雅思</button><button class="level-toggle" data-level="phrase">短语</button><button class="level-toggle" data-level="tem4">专四</button><button class="level-toggle" data-level="tem8">专八</button><button class="level-toggle" data-level="toefl">托福</button><button class="level-toggle" data-level="zsb">专升本</button></div></div>
   <div class="set-sec ui-set-section sentence-preview"><div class="set-title-row"><span class="set-index">7</span><div><b>句子操作</b><small>学习页会使用这套统一操作按钮</small></div></div><div class="sentence-action-preview"><button><span>📋</span>复制句子</button><button><span>☆</span>收藏句子</button><button class="saved"><span>★</span>已收藏 <i>✓</i></button></div></div>
 </div></div>
@@ -256,7 +262,7 @@
 <div class="account-backdrop" id="accountBackdrop">
   <section class="account-dialog" role="dialog" aria-modal="true" aria-labelledby="accountDialogTitle">
     <header><div><span class="dialog-kicker">ACCOUNT</span><h2 id="accountDialogTitle">账户资料</h2><p>管理你的公开资料与学习账号。</p></div><button class="dialog-close" id="closeAccountDialog" aria-label="关闭">×</button></header>
-    <div class="account-profile-card"><span class="account-big-avatar" id="accountAvatar">学</span><div><b id="accountDisplayName" data-student-name>学习者</b><small id="accountPhone">未登录</small><em>Eastudy Pro</em></div></div>
+    <div class="account-profile-card"><span class="account-big-avatar" id="accountAvatar">学</span><div><b id="accountDisplayName" data-student-name>学习者</b><small id="accountPhone">未登录</small><em id="accountMembershipStatus">普通学员</em></div></div>
     <div class="account-detail-grid"><label><span>昵称</span><input id="accountDetailName" value="学习者" readonly></label><label><span>手机号</span><input id="accountDetailPhone" value="未登录" readonly></label><label><span>界面语言</span><input value="中文 / English" readonly></label><label><span>学习等级</span><input value="A2–B1" readonly></label></div>
     <section class="account-security-card">
       <div class="account-security-head"><div><b>登录密码</b><small id="accountPasswordStatus">可设置或更新登录密码</small></div><button type="button" class="secondary" id="accountPasswordToggle">设置密码</button></div>
@@ -268,6 +274,13 @@
       </form>
     </section>
     <footer><button class="secondary" id="accountPreferencesBtn">打开学习偏好</button><button class="danger" id="accountLogoutBtn">退出登录</button></footer>
+  </section>
+</div>
+<div class="vip-redeem-backdrop" id="vipRedeemBackdrop">
+  <section class="vip-redeem-dialog" role="dialog" aria-modal="true" aria-labelledby="vipRedeemTitle">
+    <header><div><span class="dialog-kicker">EASTUDY PRO</span><h2 id="vipRedeemTitle">激活会员</h2><p>只有你获得的有效激活码才能开通或续期 VIP。</p></div><button type="button" id="vipRedeemClose" aria-label="关闭激活会员">×</button></header>
+    <form id="vipRedeemForm"><label for="vipRedeemCode">VIP 激活码</label><input id="vipRedeemCode" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="48" placeholder="例如 EAST-XXXX-XXXX-XXXX" required><p id="vipRedeemMessage" role="alert" aria-live="polite"></p><button type="submit" class="primary" id="vipRedeemSubmit">立即激活</button></form>
+    <small>激活码仅用于本账号，成功后会员状态会从服务器同步。</small>
   </section>
 </div>
 <div class="signin-backdrop" id="signinBackdrop">
@@ -307,10 +320,10 @@
 
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="shared/supabase-config.js?v=beta6.21.2"></script>
-<script src="shared/supabase-client.js?v=beta6.21.2"></script>
+<script src="shared/supabase-config.js?v=beta6.22.0"></script>
+<script src="shared/supabase-client.js?v=beta6.22.0"></script>
 <script src="shared/content-store.js"></script>
-<script src="assets/js/app.js?v=beta6.21.2"></script>
+<script src="assets/js/app.js?v=beta6.22.0"></script>
 </body>
 </html>
 
