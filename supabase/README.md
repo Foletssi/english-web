@@ -13,3 +13,7 @@ It deliberately keeps the existing tables and data intact.
 New phone/password users receive the `student` role from the existing `auth.users`
 trigger. Promote only the intended management account with the SQL shown in
 `../README_SUPABASE_MVP.md`.
+
+`20260907_otp_and_password_status.sql` adds learner activation and password-status
+fields. Its self-service RPCs run only after Supabase accepts an OTP or password.
+The password flag is informational; Supabase Auth remains the only verifier.

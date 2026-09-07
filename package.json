@@ -1,11 +1,12 @@
 {
   "name": "zospeak-composite-v1-beta6",
   "private": true,
-  "version": "1.0.0-beta.6.20.1",
+  "version": "1.0.0-beta.6.21.0",
   "scripts": {
     "serve": "python -m http.server 8080",
     "audit": "python audit/static_audit.py",
-    "contract-test": "node audit/runtime_contract_test.mjs"
+    "contract-test": "node audit/runtime_contract_test.mjs",
+    "auth-test": "node audit/auth_contract_test.mjs"
   },
   "description": "Eastudy Student Web + Chinese Admin Studio + sentence-aware learning analysis"
 }

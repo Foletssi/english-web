@@ -23,7 +23,7 @@ for rel in ['index.html','admin/index.html']:
         target=(base/ref.split('?')[0]).resolve()
         if not target.exists():missing.append(ref)
     add(f'{rel}: local script/css refs exist',not missing,','.join(missing))
-for rel in ['assets/js/app.js','admin/assets/admin.js','shared/content-store.js']:
+for rel in ['assets/js/app.js','admin/assets/admin.js','shared/content-store.js','shared/supabase-client.js']:
     r=subprocess.run(['node','--check',str(root/rel)],capture_output=True,text=True)
     add(f'{rel}: JavaScript syntax',r.returncode==0,(r.stderr or '').strip())
 student=(root/'index.html').read_text(encoding='utf-8')
@@ -46,7 +46,7 @@ add('student preferences dialog is viewport-centered',all(x in student_css for x
 add('student streak uses redesigned weekly rhythm UI','streak-v3' in student and '.streak-v3-days' in student_css)
 add('admin typography meets readability floor',all(x in admin_css for x in ['.side-nav a{height:44px;font-size:14px','.data-table td{padding:12px 14px;font-size:12px','.page-head p{font-size:14px']))
 
-add('student exposes key-word cloze mode',all(x in student for x in ['data-mode="cloze"','data-mode="english"']) and all(x in app for x in ['function clozeSentenceHTML','function checkClozeEntry','function sentenceKeywords']))
+add('student separates caption display from key-word cloze practice',all(x in student for x in ['data-practice="cloze"','data-caption="english"','data-caption="hidden"']) and all(x in app for x in ['function clozeSentenceHTML','function checkClozeEntry','function sentenceKeywords','function setCaptionMode','function setPracticeMode']))
 add('mobile study page uses continuous sentence flow',all(x in student_css for x in ['.mobile-study-tabs{display:none!important}','order:4;display:block!important','.desktop-vocab-mode{display:none!important}']))
 add('admin authors per-sentence keyWords',all(x in admin for x in ['keyword-editor','data-field="keyWords"',"keyWords:input('keyWords')"]))
 add('shared Sentence Contract exposes word-level timings',all(x in (root/'shared/content-store.js').read_text(encoding='utf-8') for x in ['wordTimings','deriveWordTimings','INVALID_WORD_TIMING']))
@@ -79,9 +79,11 @@ add('requested mobile priority explanation is removed','你的进度和继续学
 add('web deployment exposes /admin entry',(root/'README_WEB_DEPLOY.md').exists() and '/admin /admin/index.html 200' in (root/'_redirects').read_text(encoding='utf-8'))
 run=subprocess.run(['node',str(root/'audit/runtime_contract_test.mjs')],capture_output=True,text=True)
 add('runtime shared-contract regression',run.returncode==0,(run.stdout+run.stderr).strip())
+auth_run=subprocess.run(['node',str(root/'audit/auth_contract_test.mjs')],capture_output=True,text=True)
+add('student OTP and password contract regression',auth_run.returncode==0,(auth_run.stdout+auth_run.stderr).strip())
 report={'ok':all(c['ok'] for c in checks),'passed':sum(c['ok'] for c in checks),'total':len(checks),'checks':checks}
 (root/'audit/AUDIT_REPORT.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
-md=['# Eastudy Composite V1 Beta 6.20 — Audit Report','',f"Result: **{'PASS' if report['ok'] else 'FAIL'}**  ({report['passed']}/{report['total']})",'']
+md=['# Eastudy Composite V1 Beta 6.21.0 — Audit Report','',f"Result: **{'PASS' if report['ok'] else 'FAIL'}**  ({report['passed']}/{report['total']})",'']
 for c in checks:md.append(f"- {'PASS' if c['ok'] else 'FAIL'} — {c['name']}"+(f" — {c['detail']}" if c['detail'] else ''))
 (root/'audit/AUDIT_REPORT.md').write_text('\n'.join(md)+'\n',encoding='utf-8')
 print(json.dumps(report,ensure_ascii=False,indent=2))

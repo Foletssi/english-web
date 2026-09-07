@@ -1,6 +1,6 @@
-# Eastudy Composite V1 Beta 6.20 — Audit Report
+# Eastudy Composite V1 Beta 6.21.0 — Audit Report
 
-Result: **PASS**  (52/52)
+Result: **PASS**  (54/54)
 
 - PASS — index.html: unique DOM ids
 - PASS — index.html: local script/css refs exist
@@ -9,6 +9,7 @@ Result: **PASS**  (52/52)
 - PASS — assets/js/app.js: JavaScript syntax
 - PASS — admin/assets/admin.js: JavaScript syntax
 - PASS — shared/content-store.js: JavaScript syntax
+- PASS — shared/supabase-client.js: JavaScript syntax
 - PASS — student loads shared content contract
 - PASS — student hydrates managed published content
 - PASS — student resolves active video id dynamically
@@ -22,7 +23,7 @@ Result: **PASS**  (52/52)
 - PASS — student preferences dialog is viewport-centered
 - PASS — student streak uses redesigned weekly rhythm UI
 - PASS — admin typography meets readability floor
-- PASS — student exposes key-word cloze mode
+- PASS — student separates caption display from key-word cloze practice
 - PASS — mobile study page uses continuous sentence flow
 - PASS — admin authors per-sentence keyWords
 - PASS — shared Sentence Contract exposes word-level timings
@@ -59,4 +60,8 @@ Result: **PASS**  (52/52)
   "videoCount": 10,
   "publishedCount": 9,
   "jobCount": 3
+}
+- PASS — student OTP and password contract regression — {
+  "ok": true,
+  "tests": 11
 }

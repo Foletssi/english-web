@@ -1,7 +1,7 @@
 {
   "ok": true,
-  "passed": 52,
-  "total": 52,
+  "passed": 54,
+  "total": 54,
   "checks": [
     {
       "name": "index.html: unique DOM ids",
@@ -35,6 +35,11 @@
     },
     {
       "name": "shared/content-store.js: JavaScript syntax",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "shared/supabase-client.js: JavaScript syntax",
       "ok": true,
       "detail": ""
     },
@@ -104,7 +109,7 @@
       "detail": ""
     },
     {
-      "name": "student exposes key-word cloze mode",
+      "name": "student separates caption display from key-word cloze practice",
       "ok": true,
       "detail": ""
     },
@@ -262,6 +267,11 @@
       "name": "runtime shared-contract regression",
       "ok": true,
       "detail": "{\n  \"ok\": true,\n  \"tests\": 17,\n  \"videoCount\": 10,\n  \"publishedCount\": 9,\n  \"jobCount\": 3\n}"
+    },
+    {
+      "name": "student OTP and password contract regression",
+      "ok": true,
+      "detail": "{\n  \"ok\": true,\n  \"tests\": 11\n}"
     }
   ]
 }

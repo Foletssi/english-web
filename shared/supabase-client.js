@@ -6,6 +6,31 @@
   const available = Boolean(window.supabase && config.url && config.publishableKey);
   const clients = {};
   const empty = { user: null, session: null, profile: null, error: null };
+  const REMEMBER_LOGIN_KEY = 'eastudy:student:remember-login';
+
+  function getRememberLogin() {
+    try { return localStorage.getItem(REMEMBER_LOGIN_KEY) !== 'false'; } catch (_) { return false; }
+  }
+
+  function studentAuthStorage() {
+    const target = () => getRememberLogin() ? localStorage : sessionStorage;
+    return {
+      getItem(key) { try { return target().getItem(key); } catch (_) { return null; } },
+      setItem(key, value) { try { const keep = target(), drop = keep === localStorage ? sessionStorage : localStorage; keep.setItem(key, value); drop.removeItem(key); } catch (_) {} },
+      removeItem(key) { try { localStorage.removeItem(key); sessionStorage.removeItem(key); } catch (_) {} }
+    };
+  }
+
+  function setRememberLogin(enabled) {
+    const persist = Boolean(enabled), key = 'eastudy-student-auth';
+    try {
+      localStorage.setItem(REMEMBER_LOGIN_KEY, String(persist));
+      const from = persist ? sessionStorage : localStorage, to = persist ? localStorage : sessionStorage;
+      const value = from.getItem(key);
+      if (value) to.setItem(key, value);
+      from.removeItem(key);
+    } catch (_) {}
+  }
 
   function client(scope) {
     if (!available) return null;
@@ -14,6 +39,7 @@
       clients[key] = window.supabase.createClient(config.url, config.publishableKey, {
         auth: {
           storageKey: 'eastudy-' + key + '-auth',
+          storage: key === 'student' ? studentAuthStorage() : localStorage,
           persistSession: true,
           autoRefreshToken: true,
           detectSessionInUrl: false
@@ -24,7 +50,10 @@
   }
 
   function cleanPhone(value) {
-    return String(value || '').trim().replace(/[\s()\-]/g, '');
+    const compact = String(value || '').trim().replace(/[\s()\-]/g, '');
+    if (/^1\d{10}$/.test(compact)) return '+86' + compact;
+    if (/^861\d{10}$/.test(compact)) return '+' + compact;
+    return compact;
   }
 
   function phoneError(phone) {
@@ -60,7 +89,61 @@
     const invalid = phoneError(phone);
     if (!api) return { data: null, error: new Error('SUPABASE_NOT_CONFIGURED') };
     if (invalid) return { data: null, error: new Error(invalid) };
-    return api.auth.signInWithPassword({ phone, password: String(input.password || '') });
+    const result = await api.auth.signInWithPassword({ phone, password: String(input.password || '') });
+    if (!result.error && scope !== 'admin') await api.rpc('mark_my_password_set');
+    return result;
+  }
+
+  async function sendPhoneOtp(input, scope) {
+    const api = client(scope);
+    const phone = cleanPhone(input.phone);
+    const invalid = phoneError(phone);
+    if (!api) return { data: null, error: new Error('SUPABASE_NOT_CONFIGURED') };
+    if (invalid) return { data: null, error: new Error(invalid) };
+    return api.auth.signInWithOtp({
+      phone,
+      options: {
+        shouldCreateUser: input.shouldCreateUser !== false,
+        data: { nickname: String(input.displayName || '').trim() || '新学员' }
+      }
+    });
+  }
+
+  async function verifyPhoneOtp(input, scope) {
+    const api = client(scope);
+    const phone = cleanPhone(input.phone);
+    const invalid = phoneError(phone);
+    const token = String(input.token || '').replace(/\D/g, '');
+    if (!api) return { data: null, error: new Error('SUPABASE_NOT_CONFIGURED') };
+    if (invalid) return { data: null, error: new Error(invalid) };
+    if (!/^\d{6}$/.test(token)) return { data: null, error: new Error('INVALID_OTP') };
+    const result = await api.auth.verifyOtp({ phone, token, type: 'sms' });
+    if (!result.error && scope !== 'admin') await api.rpc('mark_my_phone_verified');
+    return result;
+  }
+
+  async function ensureStudentProfile(displayName) {
+    const api = client('student');
+    const context = await getContext('student');
+    if (!api || !context.user || context.profile) return context;
+    await api.from('profiles').insert({
+      id: context.user.id,
+      phone: context.user.phone || '',
+      nickname: String(displayName || context.user.user_metadata?.nickname || '').trim() || '新学员',
+      role: 'student'
+    });
+    return getContext('student');
+  }
+
+  async function updatePassword(password, scope) {
+    const api = client(scope);
+    const next = String(password || '');
+    if (!api) return { data: null, error: new Error('SUPABASE_NOT_CONFIGURED') };
+    if (next.length < 8) return { data: null, error: new Error('PASSWORD_TOO_SHORT') };
+    const result = await api.auth.updateUser({ password: next });
+    if (result.error) return result;
+    if (scope !== 'admin') await api.rpc('mark_my_password_set');
+    return result;
   }
 
   async function signOut(scope) {
@@ -128,8 +211,15 @@
     });
   }
 
-  function setLocal(key, value) {
-    try { localStorage.setItem('zs:' + key, JSON.stringify(value)); } catch (_) {}
+  function setLocal(userId, key, value) {
+    try { localStorage.setItem('zs:user:' + String(userId) + ':' + key, JSON.stringify(value)); } catch (_) {}
+  }
+
+  function clearLocalPrefix(userId, keyPrefix) {
+    try {
+      const prefix = 'zs:user:' + String(userId) + ':' + keyPrefix;
+      Object.keys(localStorage).filter(key => key.startsWith(prefix)).forEach(key => localStorage.removeItem(key));
+    } catch (_) {}
   }
 
   async function hydrateStudentLearning() {
@@ -138,13 +228,22 @@
     if (!api || !context.user || context.profile?.role !== 'student') return context;
     const [progress, favorites, vocabulary] = await Promise.all([
       api.from('user_progress').select('*').order('last_watched_at', { ascending: false }),
-      api.from('saved_sentences').select('*').eq('video_id', 2805),
+      api.from('saved_sentences').select('*'),
       api.from('user_vocabulary').select('*')
     ]);
     if (!progress.error) {
-      (progress.data || []).forEach(row => setLocal('progress:' + row.video_id, { time: row.position_seconds || 0, updatedAt: Date.parse(row.last_watched_at || '') || Date.now() }));
+      (progress.data || []).forEach(row => setLocal(context.user.id, 'progress:' + row.video_id, { time: row.position_seconds || 0, duration: row.duration_seconds || 0, percent: row.completion_percent || 0, completed: Boolean(row.completed_at), updatedAt: Date.parse(row.last_watched_at || '') || Date.now() }));
     }
-    if (!favorites.error) setLocal('favSentences', (favorites.data || []).map(row => row.sentence_index));
+    if (!favorites.error) {
+      clearLocalPrefix(context.user.id, 'favSentences:');
+      const byVideo = {};
+      (favorites.data || []).forEach(row => {
+        const key = String(row.video_id);
+        if (!byVideo[key]) byVideo[key] = [];
+        byVideo[key].push(Number(row.sentence_index));
+      });
+      Object.entries(byVideo).forEach(([videoId, indexes]) => setLocal(context.user.id, 'favSentences:' + videoId, indexes));
+    }
     if (!vocabulary.error && vocabulary.data) {
       const meta = {};
       vocabulary.data.forEach(row => {
@@ -154,12 +253,12 @@
           lastReviewedAt: row.last_reviewed_at ? Date.parse(row.last_reviewed_at) : null,
           nextReviewAt: row.next_review_at ? Date.parse(row.next_review_at) : null,
           correctStreak: row.correct_streak || 0,
-          sourceVideoId: 2805
+          sourceVideoId: null
         };
       });
-      setLocal('vocabMeta', meta);
-      setLocal('vocab', (vocabulary.data || []).map(row => row.word));
-      setLocal('vocabRemoved', []);
+      setLocal(context.user.id, 'vocabMeta', meta);
+      setLocal(context.user.id, 'vocab', (vocabulary.data || []).map(row => row.word));
+      setLocal(context.user.id, 'vocabRemoved', []);
     }
     return context;
   }
@@ -169,7 +268,7 @@
     const context = await getContext('admin');
     if (!api || !context.user || context.profile?.role !== 'admin') return { error: new Error('ADMIN_REQUIRED') };
     const [users, active, events] = await Promise.all([
-      api.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'student'),
+      api.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'student').eq('is_active', true),
       api.from('user_progress').select('*', { count: 'exact', head: true }),
       api.from('study_events').select('*', { count: 'exact', head: true })
     ]);
@@ -181,6 +280,6 @@
     };
   }
 
-  window.EastudyAuth = Object.freeze({ available, client, cleanPhone, getContext, signUpPhone, signInPhone, signOut });
+  window.EastudyAuth = Object.freeze({ available, client, cleanPhone, getRememberLogin, setRememberLogin, getContext, signUpPhone, signInPhone, sendPhoneOtp, verifyPhoneOtp, ensureStudentProfile, updatePassword, signOut });
   window.EastudyData = Object.freeze({ upsertProgress, setFavorite, setVocabulary, logStudyEvent, hydrateStudentLearning, getAdminAnalytics });
 })();
