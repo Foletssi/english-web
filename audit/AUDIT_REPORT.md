@@ -22,7 +22,7 @@ Result: **PASS**  (71/71)
 - PASS — student hydrates managed published content
 - PASS — student resolves active video id dynamically
 - PASS — admin can CRUD video records
-- PASS — admin exposes pipeline boundary
+- PASS — admin exposes real local pipeline boundary
 - PASS — admin exposes subtitle editor
 - PASS — admin/student same-origin link exists
 - PASS — admin has independent authentication gate
@@ -75,9 +75,9 @@ Result: **PASS**  (71/71)
 }
 - PASS — runtime shared-contract regression — {
   "ok": true,
-  "tests": 17,
+  "tests": 20,
   "videoCount": 10,
-  "publishedCount": 9,
+  "publishedCount": 8,
   "jobCount": 3
 }
 - PASS — student OTP and password contract regression — {
