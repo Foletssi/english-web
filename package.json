@@ -7,8 +7,8 @@
     "audit": "python audit/static_audit.py",
     "contract-test": "node audit/runtime_contract_test.mjs",
     "auth-test": "node audit/auth_contract_test.mjs",
-    "cloud-test": "node audit/cloud_content_contract_test.mjs"
+    "cloud-test": "node audit/cloud_content_contract_test.mjs",
+    "learning-test": "node audit/learning_queue_contract_test.mjs"
   },
   "description": "Eastudy Student Web + Chinese Admin Studio + sentence-aware learning analysis"
 }
-
