@@ -21,11 +21,14 @@ assert.equal(migrated.bag.get(legacyKey),JSON.stringify(fixture),'legacy backup 
 assert.equal(S.listTrash().length,9,'migration idempotent');
 assert.equal(S.listJobs().length,0);assert.equal(S.listSentences(2805).length,0);
 assert.equal(S.acceptsJob(2805,'job-2805'),false);
+assert.throws(()=>S.saveSentence(2805,{english:'orphan'}),/VIDEO_NOT_FOUND/);
 assert.throws(()=>S.saveVideo({id:2805}),/VIDEO_IN_TRASH/);
 assert.throws(()=>S.importSnapshot(fixture),/LOCAL_CONTENT_CLOUD_IMPORT_DISABLED/);
 S.restoreVideo(2805);assert.equal(S.getVideo(2805).status,'DRAFT');assert.equal(S.listSentences(2805).length,10);
+assert.throws(()=>S.setVideoStatus(2805,'PUBLISHED'),/PLACEHOLDER_MEDIA_REMOVED/);
 assert.equal(S.acceptsJob(2805,'job-2805'),false,'late results cannot overwrite restored data');
 assert.equal(S.listVideos({publishedOnly:true}).length,0);
+S.reset();assert.equal(S.listTrash().length,9);assert.equal(S.acceptsJob(2805,'job-2805'),false,'reset retains deletion evidence');
 const real=structuredClone(fixture);real.videos[0].mediaUrl='http://localhost:8788/media/real/master.m3u8';
 real.videos[1].localStudioJobId='real-job';
 assert.equal(setup(real).S.listVideos().length,2,'same ID but genuine upload must survive');

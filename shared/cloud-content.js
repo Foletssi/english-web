@@ -22,6 +22,7 @@
   }
 
   async function pullPublished() {
+    if(global.ZoContent?.localOnly)return {snapshot:null,revision:0,error:null};
     const api = auth('student');
     if (!api) return { snapshot: null, revision: 0, error: new Error('SUPABASE_NOT_CONFIGURED') };
     const { data, error } = await api.rpc('get_published_content');
@@ -30,6 +31,7 @@
   }
 
   async function pullAdmin() {
+    if(global.ZoContent?.localOnly)return {snapshot:null,revision:0,error:null};
     const api = auth('admin');
     if (!api) return { snapshot: null, revision: 0, error: new Error('SUPABASE_NOT_CONFIGURED') };
     const { data, error } = await api.rpc('admin_get_content_snapshot');
@@ -38,6 +40,7 @@
   }
 
   async function saveDraft(snapshot) {
+    if(global.ZoContent?.localOnly)return {error:new Error('LOCAL_CONTENT_CLOUD_WRITE_DISABLED')};
     const api = auth('admin');
     if (!api) return { error: new Error('SUPABASE_NOT_CONFIGURED') };
     const { data, error } = await api.rpc('admin_save_content_snapshot', { p_snapshot: snapshot });
@@ -45,6 +48,7 @@
   }
 
   async function publish(snapshot) {
+    if(global.ZoContent?.localOnly)return {error:new Error('LOCAL_CONTENT_CLOUD_WRITE_DISABLED')};
     const api = auth('admin');
     if (!api) return { error: new Error('SUPABASE_NOT_CONFIGURED') };
     const { data, error } = await api.rpc('admin_publish_content_snapshot', { p_snapshot: snapshot });
