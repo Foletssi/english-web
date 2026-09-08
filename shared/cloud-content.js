@@ -55,6 +55,34 @@
     return { data: firstRow(data), error: error || null };
   }
 
+  async function listTrash() {
+    const api = auth('admin');
+    if (!api) return { rows: [], error: new Error('SUPABASE_NOT_CONFIGURED') };
+    const { data, error } = await api.rpc('admin_list_content_trash');
+    return { rows: Array.isArray(data) ? data : [], error: error || null };
+  }
+
+  async function trashVideos(videoIds, expectedRevision) {
+    const api = auth('admin');
+    if (!api) return { error: new Error('SUPABASE_NOT_CONFIGURED') };
+    const ids = [...new Set((videoIds || []).map(String).filter(Boolean))];
+    const { data, error } = await api.rpc('admin_trash_content_videos', {
+      p_video_ids: ids,
+      p_expected_revision: Number(expectedRevision)
+    });
+    return { data: firstRow(data), error: error || null };
+  }
+
+  async function restoreVideo(videoId, expectedRevision) {
+    const api = auth('admin');
+    if (!api) return { error: new Error('SUPABASE_NOT_CONFIGURED') };
+    const { data, error } = await api.rpc('admin_restore_content_video', {
+      p_video_id: String(videoId),
+      p_expected_revision: Number(expectedRevision)
+    });
+    return { data: firstRow(data), error: error || null };
+  }
+
   async function syncMediaSession(scope) {
     const token = await sessionToken(scope === 'admin' ? 'admin' : 'student');
     const response = await fetch('/api/session', { method: 'POST', headers: { Authorization: 'Bearer ' + token } });
@@ -111,5 +139,5 @@
     }
   }
 
-  global.EastudyCloudContent = Object.freeze({ pullPublished, pullAdmin, saveDraft, publish, syncMediaSession, clearMediaSession, uploadVideo });
+  global.EastudyCloudContent = Object.freeze({ pullPublished, pullAdmin, saveDraft, publish, listTrash, trashVideos, restoreVideo, syncMediaSession, clearMediaSession, uploadVideo });
 })(window);
