@@ -1,0 +1,46 @@
+import fs from 'node:fs';
+import vm from 'node:vm';
+import assert from 'node:assert/strict';
+const source=fs.readFileSync('shared/content-store.js','utf8');
+const fixture=JSON.parse(fs.readFileSync('audit/fixtures/legacy-content.json','utf8'));
+const legacyKey='zs:platform:content:v1',localKey='zs:platform:content:local:v1';
+function setup(input,hostname='localhost'){
+  const bag=new Map(input?[[legacyKey,JSON.stringify(input)]]:[]),events=[];
+  let fail=false;
+  const localStorage={getItem:k=>bag.get(k)??null,setItem(k,v){if(fail)throw Error('QUOTA');bag.set(k,String(v));}};
+  class CustomEvent{constructor(type,{detail}={}){this.type=type;this.detail=detail}}
+  const window={location:{hostname},dispatchEvent:e=>events.push(e)};
+  vm.runInNewContext(source,{window,localStorage,CustomEvent});
+  return {S:window.ZoContent,bag,events,fail:()=>{fail=true}};
+}
+const empty=setup();assert.equal(empty.S.listVideos().length,0);
+const migrated=setup(fixture),S=migrated.S;
+assert.equal(S.listVideos().length,0);assert.equal(S.listTrash().length,9);
+assert.equal(S.listTrash().find(e=>e.video.id===2805).sentences.length,10);
+assert.equal(migrated.bag.get(legacyKey),JSON.stringify(fixture),'legacy backup unchanged');
+assert.equal(S.listTrash().length,9,'migration idempotent');
+assert.equal(S.listJobs().length,0);assert.equal(S.listSentences(2805).length,0);
+assert.equal(S.acceptsJob(2805,'job-2805'),false);
+assert.throws(()=>S.saveVideo({id:2805}),/VIDEO_IN_TRASH/);
+assert.throws(()=>S.importSnapshot(fixture),/LOCAL_CONTENT_CLOUD_IMPORT_DISABLED/);
+S.restoreVideo(2805);assert.equal(S.getVideo(2805).status,'DRAFT');assert.equal(S.listSentences(2805).length,10);
+assert.equal(S.acceptsJob(2805,'job-2805'),false,'late results cannot overwrite restored data');
+assert.equal(S.listVideos({publishedOnly:true}).length,0);
+const real=structuredClone(fixture);real.videos[0].mediaUrl='http://localhost:8788/media/real/master.m3u8';
+real.videos[1].localStudioJobId='real-job';
+assert.equal(setup(real).S.listVideos().length,2,'same ID but genuine upload must survive');
+const add=id=>S.saveVideo({id,title:'Real '+id,status:'DRAFT',pipelineStatus:'READY',mediaUrl:'/real.mp4'});
+add(900);add(901);S.startPipeline(901);
+const before=migrated.bag.get(localKey);
+assert.throws(()=>S.deleteVideos([900,901]),/VIDEO_JOB_ACTIVE/);
+assert.equal(migrated.bag.get(localKey),before,'bulk preflight is all or nothing');
+S.failPipeline(901,{currentStep:'asr',error:{message:'test'}});
+assert.equal(S.deleteVideos([900,901,901]),2);assert.equal(S.deleteVideos([900]),0);
+assert.equal(S.getVideo(900),null);assert.equal(S.listJobs().some(j=>j.videoId===901),false);
+add(902);const beforeQuota=migrated.bag.get(localKey),eventCount=migrated.events.length;migrated.fail();
+assert.throws(()=>S.deleteVideo(902),/QUOTA/);assert.equal(migrated.bag.get(localKey),beforeQuota);
+assert.equal(migrated.events.length,eventCount,'no success event if storage write fails');
+const failedMigration=setup(fixture);failedMigration.fail();assert.throws(()=>failedMigration.S.snapshot(),/QUOTA/);
+assert.equal(failedMigration.bag.has(localKey),false);assert.equal(failedMigration.bag.get(legacyKey),JSON.stringify(fixture));
+const cloud=setup(fixture,'example.com');assert.throws(()=>cloud.S.deleteVideo(2805),/LOCAL_DELETE_ONLY/);
+console.log('Content deletion: migration, preservation, restore, atomic bulk, quota and job tombstones passed.');

@@ -6,6 +6,7 @@
     "serve": "python -m http.server 8080",
     "audit": "python audit/static_audit.py",
     "contract-test": "node audit/runtime_contract_test.mjs",
+    "deletion-test": "node audit/content_deletion_test.mjs",
     "auth-test": "node audit/auth_contract_test.mjs",
     "cloud-test": "node audit/cloud_content_contract_test.mjs",
     "learning-test": "node audit/learning_queue_contract_test.mjs",

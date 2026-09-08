@@ -1,6 +1,8 @@
 (function(global){
   'use strict';
-  const KEY='zs:platform:content:v1';
+  const LEGACY_KEY='zs:platform:content:v1';
+  const localOnly=['localhost','127.0.0.1','[::1]'].includes(global.location?.hostname);
+  const KEY=localOnly?'zs:platform:content:local:v1':LEGACY_KEY;
   const SCHEMA_VERSION=2;
   const deep=x=>JSON.parse(JSON.stringify(x));
   const now=()=>new Date().toISOString();
@@ -49,35 +51,11 @@
       {id:108,title:'科技观察',subtitle:'科技演讲与趋势表达',cover:'assets/images/home_collection_3.png',level:'B1–C1',status:'PUBLISHED'},
       {id:109,title:'本周热门',subtitle:'本周精选真实英语',cover:'assets/images/home_collection_1.png',level:'A2–B2',status:'PUBLISHED'}
     ],
-    videos:[
-      {id:2805,title:'How I Start My Day in the English Countryside',titleZh:'我在英国乡村如何开始一天',description:'Real-life comprehensible input from a calm English countryside morning.',creatorId:'creator-jojo',creator:'Jojo English',collectionIds:[36],goalIds:['daily'],level:'A2–B1',category:'日常生活',duration:30,cover:'assets/images/home_video_1.png',mediaUrl:'assets/video/sample_lesson.mp4',status:'PUBLISHED',pipelineStatus:'READY',publishedAt:'2026-08-28T08:00:00.000Z',updatedAt:now()},
-      {id:2806,title:'A Slow Morning Routine With Natural English',titleZh:'用自然英语开启慢节奏早晨',description:'Slow natural English for everyday routines.',creatorId:'creator-jojo',creator:'Jojo English',collectionIds:[36,12],goalIds:['daily'],level:'A2',category:'日常生活',duration:1120,cover:'assets/images/home_video_2.png',mediaUrl:'assets/video/sample_lesson.mp4',status:'PUBLISHED',pipelineStatus:'READY',publishedAt:'2026-08-25T08:00:00.000Z',updatedAt:now()},
-      {id:2807,title:'Cooking Dinner and Learning Everyday Phrases',titleZh:'边做晚餐边学日常表达',description:'Everyday phrases through cooking context.',creatorId:'creator-jojo',creator:'Jojo English',collectionIds:[12,105],level:'A2–B1',category:'美食',duration:1324,cover:'assets/images/home_video_3.png',mediaUrl:'assets/video/sample_lesson.mp4',status:'DRAFT',pipelineStatus:'REVIEW',publishedAt:null,updatedAt:now()},
-      {id:2808,title:"Steve Jobs' 2005 Stanford Commencement Address",titleZh:'乔布斯 2005 年斯坦福毕业演讲',description:'A classic commencement speech for advanced listening.',creatorId:'creator-ted',creator:'TED Archive',collectionIds:[103,108],level:'B2',category:'科技',duration:857,cover:'assets/images/home_video_4.png',mediaUrl:'assets/video/sample_lesson.mp4',status:'PUBLISHED',pipelineStatus:'READY',publishedAt:'2026-08-14T08:00:00.000Z',updatedAt:now()},
-      {id:2809,title:'The Psychology of Small Habits',titleZh:'微小习惯的心理学',description:'Psychology and habit-building through real English.',creatorId:'creator-mind',creator:'Mind Lab',collectionIds:[107],level:'B1',category:'心理',duration:684,cover:'assets/images/home_video_2.png',mediaUrl:'assets/video/sample_lesson.mp4',status:'PUBLISHED',pipelineStatus:'READY',publishedAt:'2026-08-09T08:00:00.000Z',updatedAt:now()},
-      {id:2810,title:"Street Food Phrases You'll Hear Abroad",titleZh:'在海外街头会听到的美食表达',description:'Practical food and travel expressions.',creatorId:'creator-food',creator:'Food Talk',collectionIds:[105,102],goalIds:['daily'],level:'A2',category:'美食',duration:521,cover:'assets/images/home_video_4.png',mediaUrl:'assets/video/sample_lesson.mp4',status:'PUBLISHED',pipelineStatus:'READY',publishedAt:'2026-08-03T08:00:00.000Z',updatedAt:now()},
-      {id:2811,title:'Useful Office English for Daily Meetings',titleZh:'日常会议实用职场英语',description:'Everyday meeting phrases for workplace communication.',creatorId:'creator-work',creator:'Work English',collectionIds:[104],level:'B1',category:'职场',duration:832,cover:'assets/images/home_video_1.png',mediaUrl:'assets/video/sample_lesson.mp4',status:'PUBLISHED',pipelineStatus:'READY',publishedAt:'2026-08-01T08:00:00.000Z',updatedAt:now()},
-      {id:2812,title:'Nature Walk English: Forest Sounds and Words',titleZh:'自然漫步英语：森林声音与词汇',description:'Simple nature vocabulary in a calm listening context.',creatorId:'creator-nature',creator:'Nature Notes',collectionIds:[106],goalIds:['daily'],level:'A1',category:'自然',duration:603,cover:'assets/images/home_video_3.png',mediaUrl:'assets/video/sample_lesson.mp4',status:'PUBLISHED',pipelineStatus:'READY',publishedAt:'2026-07-30T08:00:00.000Z',updatedAt:now()},
-      {id:2813,title:'Top Real-English Picks This Week',titleZh:'本周精选真实英语',description:'Curated real-English highlights from this week.',creatorId:'creator-curated',creator:'ZoSpeak Curated',collectionIds:[109],level:'A2',category:'热门',duration:648,cover:'assets/images/home_video_4.png',mediaUrl:'assets/video/sample_lesson.mp4',status:'PUBLISHED',pipelineStatus:'READY',publishedAt:'2026-07-28T08:00:00.000Z',updatedAt:now()}
-    ],
-    sentences:{
-      '2805':[
-        {id:'2805-1',videoId:2805,order:0,startTime:0,endTime:3.3,english:'Good morning.',chinese:'早上好。',keyWords:['Good morning'],grammar:'Good + 时间段构成问候语；这是省略主语和谓语的固定寒暄表达。',reviewStatus:'APPROVED'},
-        {id:'2805-2',videoId:2805,order:1,startTime:3.3,endTime:6.3,english:"Today, I've got a long to-do list.",chinese:'今天，我有一长串待办事项。',keyWords:['have got','to-do list'],grammar:'Today 作时间状语；have got + 名词表示“拥有”，to-do 作复合定语修饰 list。',reviewStatus:'APPROVED'},
-        {id:'2805-3',videoId:2805,order:2,startTime:6.3,endTime:9.2,english:"And I'm taking you with me to get it done.",chinese:'我要带着你一起把它们完成。',keyWords:['taking you with me','get it done'],grammar:'am taking 构成现在进行时；to get it done 是目的状语，get + 宾语 + done 表示“使某事完成”。',reviewStatus:'APPROVED'},
-        {id:'2805-4',videoId:2805,order:3,startTime:9.2,endTime:12.4,english:"Along the way, we'll learn some English.",chinese:'一路上，我们还会学一些英语。',keyWords:['along the way'],grammar:'will + 动词原形表示将要；along the way 表示“一路上”。',reviewStatus:'APPROVED'},
-        {id:'2805-5',videoId:2805,order:4,startTime:12.4,endTime:14,english:'Jojo.',chinese:'乔乔。',keyWords:['Jojo'],grammar:'人名作独立句，语调通常下降。',reviewStatus:'APPROVED'},
-        {id:'2805-6',videoId:2805,order:5,startTime:14,endTime:16.4,english:'This is rhubarb.',chinese:'这是大黄。',keyWords:['This is','rhubarb'],grammar:'This is + 名词构成主系表结构，用于指认或介绍眼前的人或事物。',reviewStatus:'APPROVED'},
-        {id:'2805-7',videoId:2805,order:6,startTime:16.4,endTime:20.2,english:"I'm picking it now so the rabbits don't get to it first.",chinese:'我现在就把它摘了，免得兔子先下手。',keyWords:['picking it','get to it first'],grammar:'am picking 是现在进行时；so 引导目的关系，don’t get to it 表示避免兔子先碰到它。',reviewStatus:'APPROVED'},
-        {id:'2805-8',videoId:2805,order:7,startTime:20.2,endTime:24.2,english:"This evening, I'm going to make a crumble.",chinese:'今晚我要做个酥皮点心。',keyWords:['make a crumble','going to'],grammar:'This evening 作时间状语；be going to + 动词原形表示已经形成的计划。',reviewStatus:'APPROVED'},
-        {id:'2805-9',videoId:2805,order:8,startTime:24.2,endTime:27.4,english:"So, let's take it to the kitchen.",chinese:'那么，我们把它拿到厨房去吧。',keyWords:['take it to','let\'s take'],grammar:"So 承接上文；let's + 动词原形用于提出共同建议，take A to B 表示把 A 带到 B。",reviewStatus:'APPROVED'},
-        {id:'2805-10',videoId:2805,order:9,startTime:27.4,endTime:30,english:'Come on.',chinese:'来吧。',keyWords:['Come on'],grammar:'祈使表达 Come on 可表示催促或鼓励，语气由上下文决定。',reviewStatus:'APPROVED'}
-      ]
-    },
-    jobs:[
-      {id:'job-2805',videoId:2805,type:'PIPELINE',status:'SUCCESS',progress:100,currentStep:'publish',steps:[['download','SUCCESS'],['extract_audio','SUCCESS'],['whisperx','SUCCESS'],['translate','SUCCESS'],['dictionary','SUCCESS'],['learning_analysis','SUCCESS'],['review','SUCCESS']],createdAt:now(),updatedAt:now()},
-      {id:'job-2807',videoId:2807,type:'PIPELINE',status:'REVIEW',progress:86,currentStep:'review',steps:[['download','SUCCESS'],['extract_audio','SUCCESS'],['whisperx','SUCCESS'],['translate','SUCCESS'],['dictionary','SUCCESS'],['learning_analysis','SUCCESS'],['review','WAITING']],createdAt:now(),updatedAt:now()}
-    ],
+    videos:[],
+    sentences:{},
+    jobs:[],
+    trash:[],
+    tombstones:{},
     auditLog:[]
   };
   function migrate(parsed){
@@ -107,17 +85,22 @@
     return parsed;
   }
   function load(){
-    try{
-      const raw=localStorage.getItem(KEY);
-      if(!raw) return deep(seed);
-      const parsed=JSON.parse(raw);
-      if(!parsed||typeof parsed!=='object')return deep(seed);
-      if(Number(parsed.schemaVersion)>SCHEMA_VERSION)return deep(seed);
-      const fromVersion=Number(parsed.schemaVersion)||1;
-      const migrated=migrate(parsed);
-      if(fromVersion!==SCHEMA_VERSION)localStorage.setItem(KEY,JSON.stringify(migrated));
-      return migrated;
-    }catch(e){return deep(seed)}
+    const own=localStorage.getItem(KEY),raw=own||(localOnly?localStorage.getItem(LEGACY_KEY):null);
+    if(!raw)return deep(seed);
+    const parsed=JSON.parse(raw);
+    if(!parsed||!Array.isArray(parsed.videos))throw new Error('CONTENT_STORAGE_INVALID');
+    if(Number(parsed.schemaVersion)>SCHEMA_VERSION)throw new Error('CONTENT_SCHEMA_NEWER');
+    const fromVersion=Number(parsed.schemaVersion)||1,migrated=migrate(parsed);
+    migrated.trash=migrated.trash||[];migrated.tombstones=migrated.tombstones||{};
+    let cleaned=false;
+    if(localOnly&&!migrated.placeholderCleanupVersion){
+      for(const video of migrated.videos.filter(isPlaceholder))moveToTrash(migrated,video,'placeholder-cleanup');
+      migrated.placeholderCleanupVersion=1;cleaned=true;
+    }
+    // One atomic write contains both the retained records and the recoverable originals.
+    // Never overwrite a broken/full browser store with empty defaults.
+    if(!own||cleaned||fromVersion!==SCHEMA_VERSION)localStorage.setItem(KEY,JSON.stringify(migrated));
+    return migrated;
   }
   function save(state,event){
     state.schemaVersion=SCHEMA_VERSION;
@@ -128,15 +111,48 @@
   }
   function snapshot(){return deep(load())}
   function importSnapshot(input,event={type:'cloud.import'}){
+    if(localOnly&&event?.type==='cloud.import')throw new Error('LOCAL_CONTENT_CLOUD_IMPORT_DISABLED');
     if(!input||typeof input!=='object'||!Array.isArray(input.videos))throw new Error('INVALID_CONTENT_SNAPSHOT');
     const migrated=migrate(deep(input));
     return save(migrated,event);
   }
   function listVideos(opts={}){const s=load();let rows=s.videos||[];if(opts.publishedOnly)rows=rows.filter(v=>v.status==='PUBLISHED');return deep(rows)}
   function getVideo(id){return deep((load().videos||[]).find(v=>String(v.id)===String(id))||null)}
-  function saveVideo(input){const s=load();const id=input.id??Date.now();const idx=s.videos.findIndex(v=>String(v.id)===String(id));const prev=idx>=0?s.videos[idx]:{};const next={...prev,...deep(input),id,updatedAt:now()};if(idx>=0)s.videos[idx]=next;else s.videos.unshift(next);save(s,{type:idx>=0?'video.update':'video.create',entityId:id,title:next.title});return deep(next)}
+  function saveVideo(input){const s=load();if(s.tombstones?.[String(input.id)]?.deleted)throw new Error('VIDEO_IN_TRASH');const id=input.id??Date.now();const idx=s.videos.findIndex(v=>String(v.id)===String(id));const prev=idx>=0?s.videos[idx]:{};const next={...prev,...deep(input),id,updatedAt:now()};if(idx>=0)s.videos[idx]=next;else s.videos.unshift(next);save(s,{type:idx>=0?'video.update':'video.create',entityId:id,title:next.title});return deep(next)}
   function setVideoStatus(id,status){const s=load();const v=s.videos.find(x=>String(x.id)===String(id));if(!v)throw new Error('VIDEO_NOT_FOUND');if(status==='PUBLISHED'){const rows=s.sentences[String(id)]||[];if(!v.mediaUrl)throw new Error('PUBLISHED_MEDIA_MISSING');if(!rows.length)throw new Error('PUBLISHED_SUBTITLES_MISSING');if(rows.some(row=>row.reviewStatus!=='APPROVED'))throw new Error('HUMAN_REVIEW_REQUIRED');if(v.pipelineStatus&&!['READY','SUCCESS'].includes(v.pipelineStatus))throw new Error('PIPELINE_NOT_READY')}v.status=status;v.publishedAt=status==='PUBLISHED'?(v.publishedAt||now()):v.publishedAt;v.updatedAt=now();save(s,{type:'video.status',entityId:id,status});return deep(v)}
-  function deleteVideo(id){const s=load();s.videos=s.videos.filter(v=>String(v.id)!==String(id));delete s.sentences[String(id)];s.jobs=s.jobs.filter(j=>String(j.videoId)!==String(id));save(s,{type:'video.delete',entityId:id});}
+  function isPlaceholder(video){
+    const path=String(video.mediaUrl||'').replace(/^(\.\/|\.\.\/|\/)/,'').split(/[?#]/)[0];
+    return Number(video.id)>=2805&&Number(video.id)<=2813&&path==='assets/video/sample_lesson.mp4'
+      &&!video.localStudioJobId&&!video.mediaKey&&!video.playback&&!video.processingEvidence;
+  }
+  function moveToTrash(s,video,reason){
+    const key=String(video.id),jobs=s.jobs.filter(j=>String(j.videoId)===key),deletedAt=now();
+    s.trash=s.trash||[];s.tombstones=s.tombstones||{};
+    s.trash.unshift({video:deep(video),sentences:deep(s.sentences[key]||[]),jobs:deep(jobs),deletedAt,reason});
+    s.tombstones[key]={deleted:true,deletedAt,ignoredJobIds:[...new Set([...(s.tombstones[key]?.ignoredJobIds||[]),video.localStudioJobId,...jobs.map(j=>j.id)].filter(Boolean))]};
+    s.videos=s.videos.filter(v=>String(v.id)!==key);delete s.sentences[key];s.jobs=s.jobs.filter(j=>String(j.videoId)!==key);
+  }
+  function deleteVideos(ids){
+    if(!localOnly)throw new Error('LOCAL_DELETE_ONLY');
+    const s=load(),keys=new Set(ids.map(String)),videos=s.videos.filter(v=>keys.has(String(v.id)));
+    if(videos.some(v=>['PROCESSING','QUEUED','UPLOADING'].includes(v.status)||['PROCESSING','QUEUED','UPLOADING'].includes(v.pipelineStatus)||s.jobs.some(j=>String(j.videoId)===String(v.id)&&['PROCESSING','QUEUED','UPLOADING'].includes(j.status))))throw new Error('VIDEO_JOB_ACTIVE');
+    for(const video of videos)moveToTrash(s,video,'admin-delete');
+    if(videos.length)save(s,{type:'video.delete',entityIds:videos.map(v=>v.id),count:videos.length});
+    return videos.length;
+  }
+  function deleteVideo(id){return deleteVideos([id])}
+  function listTrash(){return deep(load().trash||[])}
+  function restoreVideo(id){
+    if(!localOnly)throw new Error('LOCAL_DELETE_ONLY');
+    const s=load(),key=String(id),entry=(s.trash||[]).find(row=>String(row.video.id)===key);
+    if(!entry)throw new Error('TRASH_NOT_FOUND');
+    if(s.videos.some(v=>String(v.id)===key))throw new Error('VIDEO_ID_CONFLICT');
+    const video={...entry.video,status:'DRAFT',publishedAt:null,updatedAt:now()};
+    s.videos.unshift(video);s.sentences[key]=entry.sentences;s.jobs.push(...entry.jobs);
+    s.trash=s.trash.filter(row=>String(row.video.id)!==key);s.tombstones[key]={...s.tombstones[key],deleted:false};
+    save(s,{type:'video.restore',entityId:id});return deep(video);
+  }
+  function acceptsJob(videoId,jobId){const s=load(),t=s.tombstones?.[String(videoId)],v=s.videos.find(v=>String(v.id)===String(videoId));return !t?.deleted&&!(t?.ignoredJobIds||[]).includes(jobId)&&(!v||v.localStudioJobId===jobId)}
   function listSentences(videoId){return deep(((load().sentences||{})[String(videoId)]||[]).map((x,i)=>normalizeSentence(x,videoId,i)))}
   function saveSentence(videoId,input){const s=load();const key=String(videoId);s.sentences[key]=s.sentences[key]||[];const id=input.id||`${key}-${Date.now()}`;const idx=s.sentences[key].findIndex(x=>x.id===id);const prev=idx>=0?s.sentences[key][idx]:{};const next=normalizeSentence({...prev,...deep(input),id},videoId,idx>=0?prev.order:s.sentences[key].length);if(idx>=0)s.sentences[key][idx]=next;else s.sentences[key].push(next);s.sentences[key].sort((a,b)=>a.order-b.order||a.startTime-b.startTime);save(s,{type:'sentence.save',entityId:id,videoId:Number(videoId)});return deep(next)}
   function replaceSentences(videoId,rows){const s=load();s.sentences[String(videoId)]=deep(rows).map((x,i)=>normalizeSentence({...x,id:x.id||`${videoId}-${i+1}`},videoId,i));save(s,{type:'sentences.replace',videoId:Number(videoId),count:rows.length});}
@@ -169,6 +185,6 @@
     const published=(s.videos||[]).filter(v=>v.status==='PUBLISHED');
     return {ok:issues.every(x=>x.severity!=='ERROR'),schemaVersion:s.schemaVersion,videoCount:s.videos.length,publishedCount:published.length,creatorCount:s.creators.length,collectionCount:s.collections.length,jobCount:s.jobs.length,issues};
   }
-  function reset(){localStorage.removeItem(KEY);return snapshot()}
-  global.ZoContent={KEY,SCHEMA_VERSION,snapshot,importSnapshot,listVideos,getVideo,saveVideo,setVideoStatus,deleteVideo,listSentences,saveSentence,replaceSentences,listCreators,saveCreator,listCollections,saveCollection,listJobs,startPipeline,updatePipeline,completePipeline,failPipeline,advancePipeline,audit,reset};
+  function reset(){return save(deep(seed),{type:'content.reset'})}
+  global.ZoContent={KEY,SCHEMA_VERSION,localOnly,isPlaceholder,deleteVideos,listTrash,restoreVideo,acceptsJob,snapshot,importSnapshot,listVideos,getVideo,saveVideo,setVideoStatus,deleteVideo,listSentences,saveSentence,replaceSentences,listCreators,saveCreator,listCollections,saveCollection,listJobs,startPipeline,updatePipeline,completePipeline,failPipeline,advancePipeline,audit,reset};
 })(window);

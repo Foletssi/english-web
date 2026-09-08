@@ -8,6 +8,8 @@ const window={localStorage,CustomEvent,dispatchEvent(){}};
 const context=vm.createContext({window,localStorage,CustomEvent,console,setTimeout,clearTimeout});
 vm.runInContext(fs.readFileSync(new URL('../shared/content-store.js',import.meta.url),'utf8'),context);
 const S=window.ZoContent;
+assert.equal(S.listVideos().length,0,'fresh install must not manufacture demonstration videos');
+S.importSnapshot(JSON.parse(fs.readFileSync(new URL('fixtures/legacy-content.json',import.meta.url),'utf8')),{type:'test.fixture'});
 assert.ok(S,'ZoContent must load');
 assert.equal(S.SCHEMA_VERSION,2,'sentence-aware content schema must be V2');
 let a=S.audit();
