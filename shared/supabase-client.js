@@ -226,14 +226,66 @@
     } catch (_) {}
   }
 
+  function normalizeLearningGoalProfile(row) {
+    if (!row) return null;
+    return {
+      track: row.primary_goal_id || 'general',
+      dailyMinutes: Number(row.daily_minutes) || 20,
+      selfLevel: row.self_level || 'unsure',
+      timezone: row.timezone || 'Asia/Shanghai',
+      onboardingVersion: Number(row.onboarding_version) || 1,
+      revision: Number(row.revision) || 1,
+      updatedAt: row.updated_at || null
+    };
+  }
+
+  async function getLearningGoalProfile() {
+    const api = client('student');
+    const context = await getContext('student');
+    if (!api || !context.user || !isLearnerProfile(context.profile)) {
+      return { profile: null, error: context.error || new Error('STUDENT_REQUIRED') };
+    }
+    const result = await api.from('learner_goal_profiles').select('*').eq('user_id', context.user.id).maybeSingle();
+    return { profile: normalizeLearningGoalProfile(result.data), error: result.error || null };
+  }
+
+  async function saveLearningGoalProfile(input) {
+    const api = client('student');
+    const context = await getContext('student');
+    if (!api || !context.user || !isLearnerProfile(context.profile)) {
+      return { profile: null, error: context.error || new Error('STUDENT_REQUIRED') };
+    }
+    const dailyMinutes = [10, 20, 40, 60].includes(Number(input?.dailyMinutes)) ? Number(input.dailyMinutes) : 20;
+    const selfLevel = ['beginner', 'elementary', 'intermediate', 'advanced', 'unsure'].includes(input?.selfLevel) ? input.selfLevel : 'unsure';
+    const row = {
+      user_id: context.user.id,
+      primary_goal_id: String(input?.track || 'general'),
+      daily_minutes: dailyMinutes,
+      self_level: selfLevel,
+      timezone: String(input?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai'),
+      onboarding_version: Math.max(1, Number(input?.onboardingVersion) || 1)
+    };
+    setLocal(context.user.id, 'learningPlan', {
+      track: row.primary_goal_id,
+      dailyMinutes: row.daily_minutes,
+      selfLevel: row.self_level,
+      timezone: row.timezone,
+      onboardingVersion: row.onboarding_version
+    });
+    const result = await api.from('learner_goal_profiles').upsert(row, { onConflict: 'user_id' }).select('*').single();
+    if (!result.error && result.data) setLocal(context.user.id, 'learningPlan', normalizeLearningGoalProfile(result.data));
+    return { profile: normalizeLearningGoalProfile(result.data) || normalizeLearningGoalProfile(row), error: result.error || null };
+  }
+
   async function hydrateStudentLearning() {
     const api = client('student');
     const context = await getContext('student');
     if (!api || !context.user || !isLearnerProfile(context.profile)) return context;
-    const [progress, favorites, vocabulary] = await Promise.all([
+    const [progress, favorites, vocabulary, learningGoal] = await Promise.all([
       api.from('user_progress').select('*').order('last_watched_at', { ascending: false }),
       api.from('saved_sentences').select('*'),
-      api.from('user_vocabulary').select('*')
+      api.from('user_vocabulary').select('*'),
+      api.from('learner_goal_profiles').select('*').eq('user_id', context.user.id).maybeSingle()
     ]);
     if (!progress.error) {
       (progress.data || []).forEach(row => setLocal(context.user.id, 'progress:' + row.video_id, { time: row.position_seconds || 0, duration: row.duration_seconds || 0, percent: row.completion_percent || 0, completed: Boolean(row.completed_at), updatedAt: Date.parse(row.last_watched_at || '') || Date.now() }));
@@ -263,6 +315,9 @@
       setLocal(context.user.id, 'vocabMeta', meta);
       setLocal(context.user.id, 'vocab', (vocabulary.data || []).map(row => row.word));
       setLocal(context.user.id, 'vocabRemoved', []);
+    }
+    if (!learningGoal.error && learningGoal.data) {
+      setLocal(context.user.id, 'learningPlan', normalizeLearningGoalProfile(learningGoal.data));
     }
     return context;
   }
@@ -325,5 +380,5 @@
   }
 
   window.EastudyAuth = Object.freeze({ available, client, cleanPhone, isLearnerProfile, getRememberLogin, setRememberLogin, getContext, signUpPhone, signInPhone, sendPhoneOtp, verifyPhoneOtp, ensureStudentProfile, updatePassword, signOut });
-  window.EastudyData = Object.freeze({ upsertProgress, setFavorite, setVocabulary, logStudyEvent, hydrateStudentLearning, getMembership, redeemMembership, getAdminAnalytics });
+  window.EastudyData = Object.freeze({ upsertProgress, setFavorite, setVocabulary, logStudyEvent, hydrateStudentLearning, getLearningGoalProfile, saveLearningGoalProfile, getMembership, redeemMembership, getAdminAnalytics });
 })();
