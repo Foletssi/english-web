@@ -10,7 +10,7 @@
 <script>
 try{const raw=localStorage.getItem('zs:admin:theme');const t=raw?JSON.parse(raw):'dark';document.documentElement.dataset.theme=(t==='light'?'light':'dark');document.documentElement.dataset.adminAuth='signed-out'}catch(e){document.documentElement.dataset.adminAuth='signed-out'}
 </script>
-<link rel="stylesheet" href="assets/admin.css?v=beta6.25.2">
+<link rel="stylesheet" href="assets/admin.css?v=beta6.25.3">
 </head>
 <body>
 <div class="admin-shell">
@@ -93,9 +93,11 @@ try{const raw=localStorage.getItem('zs:admin:theme');const t=raw?JSON.parse(raw)
 
 <div class="modal-backdrop" id="studioV2Modal">
   <section class="modal studio-v2-modal">
-    <header><div><span class="eyebrow">AI ASSISTED INTAKE</span><h2>批量导入视频</h2><p>人工只需选择文件、确认标题和创作者，其余内容由 AI 生成后进入核对。</p></div><button class="modal-close" data-close="studioV2Modal">×</button></header>
+    <header><div><span class="eyebrow">AI ASSISTED INTAKE</span><h2>批量导入视频</h2><p id="studioV2Intro">选择视频、填写创作者并核对标题，处理服务就绪后可生成字幕与学习内容。</p></div><button class="modal-close" data-close="studioV2Modal" aria-label="关闭批量导入">×</button></header>
     <form id="studioV2Form">
-      <div class="studio-service-state" id="studioV2Health" data-state="checking">正在检查本地智能处理服务…</div>
+      <div class="studio-service-state" id="studioV2Health" data-state="checking" role="status" aria-live="polite">正在检查视频处理服务…</div>
+      <p class="studio-service-copy" id="studioV2ServiceCopy"></p>
+      <div class="studio-service-tools"><button type="button" class="secondary compact" id="studioV2Recheck" hidden>重新检查连接</button></div>
       <section class="studio-intake-grid">
         <label><span>创作者 *</span><input id="studioV2Creator" list="studioCreatorOptions" required placeholder="直接填写名称；系统会自动匹配或创建"><small>创作者会自动归入英语教育、媒体机构或独立创作者。</small></label>
         <label class="studio-file-button"><span>选择多个视频</span><input id="studioV2Videos" type="file" accept="video/mp4,video/quicktime,video/webm,video/x-m4v" multiple><small>英文标题默认读取文件名；单个文件最大 2 GB。</small></label>
@@ -103,7 +105,7 @@ try{const raw=localStorage.getItem('zs:admin:theme');const t=raw?JSON.parse(raw)
       </section>
       <div class="studio-ai-strip"><b>AI 自动完成</b><span>英文字幕</span><span>中文翻译</span><span>难度</span><span>分类</span><span>学习目标</span><span>中文简介</span><em>全部结果必须人工核对后发布</em></div>
       <div class="studio-upload-list" id="studioV2Rows"></div>
-      <footer class="form-actions"><button type="button" class="secondary" data-close="studioV2Modal">稍后处理</button><button type="submit" class="primary" id="studioV2Submit">开始批量处理</button></footer>
+      <footer class="form-actions"><button type="button" class="secondary" data-close="studioV2Modal">关闭</button><button type="submit" class="primary" id="studioV2Submit" disabled>检查服务中…</button></footer>
     </form>
   </section>
 </div>
@@ -122,8 +124,8 @@ try{const raw=localStorage.getItem('zs:admin:theme');const t=raw?JSON.parse(raw)
 <script src="../shared/supabase-client.js?v=beta6.24.0"></script>
 <script src="../shared/content-store.js?v=beta6.25.2"></script>
 <script src="../shared/cloud-content.js?v=beta6.25.2"></script>
-<script src="../shared/studio-client.js?v=beta6.25.2"></script>
-<script src="assets/studio-v2.js?v=beta6.25.2"></script>
-<script src="assets/admin.js?v=beta6.25.2"></script>
+<script src="../shared/studio-client.js?v=beta6.25.3"></script>
+<script src="assets/studio-v2.js?v=beta6.25.3"></script>
+<script src="assets/admin.js?v=beta6.25.3"></script>
 </body>
 </html>

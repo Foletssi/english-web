@@ -1,8 +1,11 @@
 (function(global){
 'use strict';
 const BASE='http://127.0.0.1:8788';
+const localOnly=['localhost','127.0.0.1','[::1]'].includes(global.location?.hostname);
+const cloudUnavailable=()=>Object.assign(new Error('云端视频处理尚未接入，自动字幕和多清晰度暂不可用。'),{code:'CLOUD_PROCESSING_NOT_CONFIGURED',retryable:false});
 
 async function request(path,options){
+  if(!localOnly)throw cloudUnavailable();
   const response=await fetch(BASE+path,options);
   const data=await response.json().catch(()=>({}));
   if(!response.ok){const error=new Error(data.error?.message||`本地服务返回 ${response.status}`);error.code=data.error?.code||'STUDIO_HTTP_ERROR';error.retryable=Boolean(data.error?.retryable);throw error}
@@ -10,6 +13,7 @@ async function request(path,options){
 }
 
 function createJob({video,cover,metadata={},aiConfig={},onProgress}){
+  if(!localOnly)return Promise.reject(cloudUnavailable());
   if(!(video instanceof File)||!video.size)return Promise.reject(Object.assign(new Error('请选择视频文件。'),{code:'VIDEO_REQUIRED'}));
   const body=new FormData();body.append('metadata',JSON.stringify(metadata));body.append('aiConfig',JSON.stringify(aiConfig));body.append('video',video,video.name);if(cover instanceof File&&cover.size)body.append('cover',cover,cover.name);
   return new Promise((resolve,reject)=>{
@@ -21,7 +25,7 @@ function createJob({video,cover,metadata={},aiConfig={},onProgress}){
   });
 }
 
-global.EastudyStudioClient={BASE,health:()=>request('/health'),listJobs:()=>request('/jobs'),
+global.EastudyStudioClient={BASE,localOnly,health:()=>localOnly?request('/health'):Promise.resolve({ok:false,mode:'cloud',code:'CLOUD_PROCESSING_NOT_CONFIGURED',message:cloudUnavailable().message}),listJobs:()=>request('/jobs'),
   getJob:id=>request('/jobs/'+encodeURIComponent(id)),
   retryJob:id=>request('/jobs/'+encodeURIComponent(id)+'/retry',{method:'POST'}),createJob};
 })(window);

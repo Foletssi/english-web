@@ -112,3 +112,35 @@ html[data-admin-auth="signed-in"] .admin-auth-gate{display:none!important}
 .row-actions [data-delete-video]{width:auto;min-width:48px;padding:0 8px;color:var(--danger)}
 [data-select-video],[data-select-all-videos]{width:18px;height:18px;accent-color:var(--accent)}
 [data-delete-selected]:disabled{opacity:.45;cursor:not-allowed}
+
+/* Keep every video action reachable, including beside a desktop sidebar. */
+.video-table-scroll{max-width:100%;overflow:auto;position:relative;isolation:isolate}
+.video-table{min-width:900px}
+.video-table th:first-child{width:52px}
+.video-table th:nth-child(3){width:104px}
+.video-table th:nth-child(4){width:116px}
+.video-table th:nth-child(5){width:72px}
+.video-table th:nth-child(6){width:76px}
+.video-table th:last-child{width:224px}
+.video-table th:last-child,.video-table td:last-child{position:sticky;right:0;z-index:1;box-shadow:-1px 0 var(--line)}
+.video-table th:last-child{background:var(--panel2);z-index:2}
+.video-table td:last-child{background:var(--panel)}
+.video-table .row-actions{gap:6px;justify-content:flex-end}
+.video-table .row-actions button{flex:none;width:36px;height:36px}
+.video-table .row-actions [data-delete-video]{width:64px}
+.video-table .video-cell img{flex:none}
+.video-table .video-cell small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.video-table-scroll:focus-visible,.video-table button:focus-visible{outline:2px solid var(--accent);outline-offset:-3px}
+.page-head .actions{flex-wrap:wrap}
+.studio-v2-modal{max-width:100%}
+.studio-intake-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.studio-intake-grid label,.studio-cover-picker,.studio-row-state{min-width:0}
+.studio-service-state{line-height:1.65}
+.studio-service-state[data-state="unavailable"]{color:var(--text2);background:var(--panel2);border-color:var(--line2)}
+.studio-service-copy{margin:8px 0 0!important;line-height:1.65}
+.studio-service-tools{display:flex;justify-content:flex-end;margin-top:8px}
+.studio-service-tools [hidden]{display:none}
+#studioV2Submit:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
+@media(max-width:820px){.studio-intake-grid{grid-template-columns:1fr}}
+@media(max-width:840px){.topbar .search-btn{width:42px;flex:none}.topbar .mobile-menu{flex:none}.topbar .breadcrumbs{min-width:0}}
+@media(max-width:520px){.video-table th:last-child{width:196px}.video-table th:last-child,.video-table td:last-child{padding-left:8px;padding-right:8px}.video-table .row-actions{gap:4px}.video-table .row-actions [data-delete-video]{width:56px}}
