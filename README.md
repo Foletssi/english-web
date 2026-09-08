@@ -4,10 +4,11 @@
 
 ## 入口
 
-Windows 双击 `START_ZOSPEAK_PLATFORM.bat`。
+普通浏览学员端可双击 `START_ZOSPEAK_PLATFORM.bat`。需要批量上传、真实转码和 AI 处理时，双击 `START_EASTUDY_STUDIO_V2.bat`。
 
-- 学员端：`http://localhost:8080/`
-- 管理后台：`http://localhost:8080/admin/`
+- 学员端：`http://127.0.0.1:8080/`
+- 管理后台：`http://127.0.0.1:8080/admin/`
+- 本地 Worker 健康检查：`http://127.0.0.1:8788/health`
 
 必须通过 HTTP 服务打开，不要直接双击 HTML。后台和学员端需要保持同一 Origin 才能共享 V1 内容契约。
 
@@ -35,9 +36,9 @@ Windows 双击 `START_ZOSPEAK_PLATFORM.bat`。
 
 ## 重要边界
 
-本 Alpha 已经是完整可运行的“内容管理闭环验证版”，但内容数据仍保存在浏览器 localStorage。真实公网多管理员 / 多学员运营时，应把 `shared/content-store.js` 的 Repository 实现替换成服务端 API + PostgreSQL / Payload CMS；前后台的字段契约与页面不需要重做。
+本地 V2 已经跑通视频上传、FFmpeg 多清晰度 HLS、faster-whisper 英文字幕、真实 AI 内容生成、人工审核和学员播放器。浏览器内容草稿仍使用 localStorage，本地任务与媒体保存在 `local-data/studio/`。
 
-视频解析页面已经建立独立 Job Contract，但此 Alpha 的“推进任务”用于验证状态机，不会在浏览器里执行 yt-dlp / FFmpeg / WhisperX。真实 Worker 必须运行在服务器侧，不能直接塞进前端进程。
+公网多管理员运营仍需把同一 Worker 部署到受控服务并将媒体上传到 R2；本轮特意保持本地模式，不会把本地测试内容同步上线。
 
 ## 审计
 
