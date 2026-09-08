@@ -1320,3 +1320,4 @@ body.session-signed-out{overflow:hidden}.signin-backdrop{z-index:1200!important;
 
 @media(max-width:950px){.learning-plan-head{display:grid}.learning-plan-controls{width:100%}.learning-plan-controls label{flex:1}.learning-plan-controls select{width:100%;min-width:0!important}.learning-plan-body{grid-template-columns:1fr}.learning-track-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:600px){.home-side-actions-inner .home-user-shell,.home-side-actions-inner .home-user{max-width:158px}.home-side-actions-inner .home-user-copy{min-width:50px;max-width:92px}.learning-plan-card{padding:16px}.learning-plan-controls{display:grid;grid-template-columns:1fr 1fr}.learning-track-grid{grid-template-columns:1fr 1fr}.vip-redeem-dialog{padding:21px 17px}.pronunciation-choice{grid-template-columns:1fr}}
+.priority-resume-card[hidden],.daily-pick[hidden]{display:none!important}

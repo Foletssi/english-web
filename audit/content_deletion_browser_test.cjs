@@ -56,6 +56,8 @@ const media=execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-f','lavf
   await student.evaluate(()=>{location.hash='#/home'});
   await student.waitForFunction(()=>document.getElementById('todayPrimaryAction').disabled);
   assert.equal(await student.locator('#priorityResumeCard').evaluate(el=>el.hidden),true);
+  assert.equal(await student.locator('#priorityResumeCard').evaluate(el=>getComputedStyle(el).display),'none','CSS must actually hide the empty resume card');
+  assert.equal(await student.locator('.daily-pick').evaluate(el=>getComputedStyle(el).display),'none','CSS must hide the empty daily pick');
   assert.equal(await student.locator('#videoCards [data-video]').count(),0);
   await student.setViewportSize({width:390,height:844});
   assert.equal(await student.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'mobile must not overflow');
