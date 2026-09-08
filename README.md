@@ -1,5 +1,9 @@
 # ZoSpeak Composite V1 Alpha
 
+当前本地版本：**Beta 6.25.1**。新增占位视频清理、删除/批量删除、回收站恢复与学员端删除联动。
+此版本地内容不再自动同步线上；完整操作和代码方案见
+[占位视频清理与删除回收站迭代方案](E:/英语网页制作/Eastudy_Composite_V1_Beta6_17_VocabularyLogic/design/占位视频清理与删除回收站迭代方案_20260908.md)。
+
 这是 ZoSpeak 学员端 + 内容管理后台的第一版可运行复合工程，不是 UI Review，也不是后台孤立 Demo。
 
 ## 入口
