@@ -52,11 +52,14 @@ await auth.verifyPhoneOtp({ phone: '13800138000', token: '123456' }, 'student');
 assert.deepEqual(JSON.parse(JSON.stringify(calls[3])), ['verify', { phone: '+8613800138000', token: '123456', type: 'sms' }]);
 assert.deepEqual(JSON.parse(JSON.stringify(calls[4])), ['rpc', 'mark_my_phone_verified']);
 
-await auth.updatePassword('Password123', 'student');
-assert.deepEqual(JSON.parse(JSON.stringify(calls[5])), ['password', { password: 'Password123' }]);
+await auth.updatePassword('123456', 'student');
+assert.deepEqual(JSON.parse(JSON.stringify(calls[5])), ['password', { password: '123456' }]);
 assert.deepEqual(JSON.parse(JSON.stringify(calls[6])), ['rpc', 'mark_my_password_set']);
+
+const shortPassword = await auth.updatePassword('12345', 'student');
+assert.equal(shortPassword.error.message, 'PASSWORD_TOO_SHORT');
 
 const invalid = await auth.verifyPhoneOtp({ phone: '13800138000', token: '123' }, 'student');
 assert.equal(invalid.error.message, 'INVALID_OTP');
 
-console.log(JSON.stringify({ ok: true, tests: 14 }, null, 2));
+console.log(JSON.stringify({ ok: true, tests: 15 }, null, 2));

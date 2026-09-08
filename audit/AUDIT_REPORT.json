@@ -1,7 +1,7 @@
 {
   "ok": true,
-  "passed": 54,
-  "total": 54,
+  "passed": 67,
+  "total": 67,
   "checks": [
     {
       "name": "index.html: unique DOM ids",
@@ -40,6 +40,46 @@
     },
     {
       "name": "shared/supabase-client.js: JavaScript syntax",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "shared/cloud-content.js: JavaScript syntax",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "functions/_lib/auth.js: JavaScript syntax",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "functions/api/session.js: JavaScript syntax",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "functions/api/media.js: JavaScript syntax",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "functions/api/admin/uploads/init.js: JavaScript syntax",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "functions/api/admin/uploads/part.js: JavaScript syntax",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "functions/api/admin/uploads/complete.js: JavaScript syntax",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "functions/api/admin/uploads/abort.js: JavaScript syntax",
       "ok": true,
       "detail": ""
     },
@@ -264,6 +304,31 @@
       "detail": ""
     },
     {
+      "name": "admin supports authenticated R2 multipart upload",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "media delivery requires a signed-in Supabase session",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Cloudflare upload gate checks administrator role",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Supabase content publishing is authenticated and atomic",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "cloud content and R2 contract regression",
+      "ok": true,
+      "detail": "{\n  \"ok\": true,\n  \"tests\": 12\n}"
+    },
+    {
       "name": "runtime shared-contract regression",
       "ok": true,
       "detail": "{\n  \"ok\": true,\n  \"tests\": 17,\n  \"videoCount\": 10,\n  \"publishedCount\": 9,\n  \"jobCount\": 3\n}"
@@ -271,7 +336,7 @@
     {
       "name": "student OTP and password contract regression",
       "ok": true,
-      "detail": "{\n  \"ok\": true,\n  \"tests\": 14\n}"
+      "detail": "{\n  \"ok\": true,\n  \"tests\": 15\n}"
     }
   ]
 }

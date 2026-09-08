@@ -23,7 +23,7 @@ for rel in ['index.html','admin/index.html']:
         target=(base/ref.split('?')[0]).resolve()
         if not target.exists():missing.append(ref)
     add(f'{rel}: local script/css refs exist',not missing,','.join(missing))
-for rel in ['assets/js/app.js','admin/assets/admin.js','shared/content-store.js','shared/supabase-client.js']:
+for rel in ['assets/js/app.js','admin/assets/admin.js','shared/content-store.js','shared/supabase-client.js','shared/cloud-content.js','functions/_lib/auth.js','functions/api/session.js','functions/api/media.js','functions/api/admin/uploads/init.js','functions/api/admin/uploads/part.js','functions/api/admin/uploads/complete.js','functions/api/admin/uploads/abort.js']:
     r=subprocess.run(['node','--check',str(root/rel)],capture_output=True,text=True)
     add(f'{rel}: JavaScript syntax',r.returncode==0,(r.stderr or '').strip())
 student=(root/'index.html').read_text(encoding='utf-8')
@@ -77,13 +77,23 @@ add('mobile categories expose view all action','mobile-category-heading' in stud
 add('home recommended creators are de-duplicated and mobile safe','new Map(UI_CREATORS.map' in app and all(x in student_css for x in ['.home-creator-copy','.home-creator .creator-mini-follow{position:static!important']))
 add('requested mobile priority explanation is removed','你的进度和继续学习入口放在第一屏，不再沉到页面底部。' not in student)
 add('web deployment exposes /admin entry',(root/'README_WEB_DEPLOY.md').exists() and '/admin /admin/index.html 200' in (root/'_redirects').read_text(encoding='utf-8'))
+cloud=(root/'shared/cloud-content.js').read_text(encoding='utf-8')
+cloud_sql=(root/'supabase/migrations/20260908_cloud_content_and_admin.sql').read_text(encoding='utf-8')
+function_auth=(root/'functions/_lib/auth.js').read_text(encoding='utf-8')
+media_function=(root/'functions/api/media.js').read_text(encoding='utf-8')
+add('admin supports authenticated R2 multipart upload',all(x in cloud for x in ['/api/admin/uploads/init','/api/admin/uploads/part','/api/admin/uploads/complete','Authorization']))
+add('media delivery requires a signed-in Supabase session',all(x in media_function for x in ['authenticate(request, env)','VIDEO_BUCKET','Range','Content-Range']))
+add('Cloudflare upload gate checks administrator role',all(x in function_auth for x in ['requireAdmin','PROFILE_LOOKUP_FAILED','ADMIN_REQUIRED']))
+add('Supabase content publishing is authenticated and atomic',all(x in cloud_sql for x in ['private.content_snapshots','admin_publish_content_snapshot','get_published_content','revision = private.content_snapshots.revision + 1']))
+cloud_run=subprocess.run(['node',str(root/'audit/cloud_content_contract_test.mjs')],capture_output=True,text=True)
+add('cloud content and R2 contract regression',cloud_run.returncode==0,(cloud_run.stdout+cloud_run.stderr).strip())
 run=subprocess.run(['node',str(root/'audit/runtime_contract_test.mjs')],capture_output=True,text=True)
 add('runtime shared-contract regression',run.returncode==0,(run.stdout+run.stderr).strip())
 auth_run=subprocess.run(['node',str(root/'audit/auth_contract_test.mjs')],capture_output=True,text=True)
 add('student OTP and password contract regression',auth_run.returncode==0,(auth_run.stdout+auth_run.stderr).strip())
 report={'ok':all(c['ok'] for c in checks),'passed':sum(c['ok'] for c in checks),'total':len(checks),'checks':checks}
 (root/'audit/AUDIT_REPORT.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
-md=['# Eastudy Composite V1 Beta 6.21.2 — Audit Report','',f"Result: **{'PASS' if report['ok'] else 'FAIL'}**  ({report['passed']}/{report['total']})",'']
+md=['# Eastudy Composite V1 Beta 6.23.0 — Audit Report','',f"Result: **{'PASS' if report['ok'] else 'FAIL'}**  ({report['passed']}/{report['total']})",'']
 for c in checks:md.append(f"- {'PASS' if c['ok'] else 'FAIL'} — {c['name']}"+(f" — {c['detail']}" if c['detail'] else ''))
 (root/'audit/AUDIT_REPORT.md').write_text('\n'.join(md)+'\n',encoding='utf-8')
 print(json.dumps(report,ensure_ascii=False,indent=2))

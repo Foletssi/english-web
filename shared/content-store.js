@@ -127,6 +127,11 @@
     return deep(state);
   }
   function snapshot(){return deep(load())}
+  function importSnapshot(input,event={type:'cloud.import'}){
+    if(!input||typeof input!=='object'||!Array.isArray(input.videos))throw new Error('INVALID_CONTENT_SNAPSHOT');
+    const migrated=migrate(deep(input));
+    return save(migrated,event);
+  }
   function listVideos(opts={}){const s=load();let rows=s.videos||[];if(opts.publishedOnly)rows=rows.filter(v=>v.status==='PUBLISHED');return deep(rows)}
   function getVideo(id){return deep((load().videos||[]).find(v=>String(v.id)===String(id))||null)}
   function saveVideo(input){const s=load();const id=input.id??Date.now();const idx=s.videos.findIndex(v=>String(v.id)===String(id));const prev=idx>=0?s.videos[idx]:{};const next={...prev,...deep(input),id,updatedAt:now()};if(idx>=0)s.videos[idx]=next;else s.videos.unshift(next);save(s,{type:idx>=0?'video.update':'video.create',entityId:id,title:next.title});return deep(next)}
@@ -158,5 +163,5 @@
     return {ok:issues.every(x=>x.severity!=='ERROR'),schemaVersion:s.schemaVersion,videoCount:s.videos.length,publishedCount:published.length,creatorCount:s.creators.length,collectionCount:s.collections.length,jobCount:s.jobs.length,issues};
   }
   function reset(){localStorage.removeItem(KEY);return snapshot()}
-  global.ZoContent={KEY,SCHEMA_VERSION,snapshot,listVideos,getVideo,saveVideo,setVideoStatus,deleteVideo,listSentences,saveSentence,replaceSentences,listCreators,saveCreator,listCollections,saveCollection,listJobs,startPipeline,advancePipeline,audit,reset};
+  global.ZoContent={KEY,SCHEMA_VERSION,snapshot,importSnapshot,listVideos,getVideo,saveVideo,setVideoStatus,deleteVideo,listSentences,saveSentence,replaceSentences,listCreators,saveCreator,listCollections,saveCollection,listJobs,startPipeline,advancePipeline,audit,reset};
 })(window);

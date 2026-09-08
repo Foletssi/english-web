@@ -39,9 +39,9 @@ if not exist "%CHROME%" set "CHROME=%LocalAppData%\Google\Chrome\Application\chr
 
 echo 启动成功：http://127.0.0.1:8080/
 if exist "%CHROME%" (
-  start "" "%CHROME%" "http://127.0.0.1:8080/?local=beta6.22.0"
+  start "" "%CHROME%" "http://127.0.0.1:8080/?local=beta6.23.0"
 ) else (
-  start "" "http://127.0.0.1:8080/?local=beta6.22.0"
+  start "" "http://127.0.0.1:8080/?local=beta6.23.0"
 )
 endlocal
 exit /b 0

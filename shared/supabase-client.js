@@ -143,7 +143,7 @@
     const api = client(scope);
     const next = String(password || '');
     if (!api) return { data: null, error: new Error('SUPABASE_NOT_CONFIGURED') };
-    if (next.length < 8) return { data: null, error: new Error('PASSWORD_TOO_SHORT') };
+    if (next.length < 6) return { data: null, error: new Error('PASSWORD_TOO_SHORT') };
     const result = await api.auth.updateUser({ password: next });
     if (result.error) return result;
     if (scope !== 'admin') await api.rpc('mark_my_password_set');

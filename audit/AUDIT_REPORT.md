@@ -1,6 +1,6 @@
-# Eastudy Composite V1 Beta 6.21.2 — Audit Report
+# Eastudy Composite V1 Beta 6.23.0 — Audit Report
 
-Result: **PASS**  (54/54)
+Result: **PASS**  (67/67)
 
 - PASS — index.html: unique DOM ids
 - PASS — index.html: local script/css refs exist
@@ -10,6 +10,14 @@ Result: **PASS**  (54/54)
 - PASS — admin/assets/admin.js: JavaScript syntax
 - PASS — shared/content-store.js: JavaScript syntax
 - PASS — shared/supabase-client.js: JavaScript syntax
+- PASS — shared/cloud-content.js: JavaScript syntax
+- PASS — functions/_lib/auth.js: JavaScript syntax
+- PASS — functions/api/session.js: JavaScript syntax
+- PASS — functions/api/media.js: JavaScript syntax
+- PASS — functions/api/admin/uploads/init.js: JavaScript syntax
+- PASS — functions/api/admin/uploads/part.js: JavaScript syntax
+- PASS — functions/api/admin/uploads/complete.js: JavaScript syntax
+- PASS — functions/api/admin/uploads/abort.js: JavaScript syntax
 - PASS — student loads shared content contract
 - PASS — student hydrates managed published content
 - PASS — student resolves active video id dynamically
@@ -54,6 +62,14 @@ Result: **PASS**  (54/54)
 - PASS — home recommended creators are de-duplicated and mobile safe
 - PASS — requested mobile priority explanation is removed
 - PASS — web deployment exposes /admin entry
+- PASS — admin supports authenticated R2 multipart upload
+- PASS — media delivery requires a signed-in Supabase session
+- PASS — Cloudflare upload gate checks administrator role
+- PASS — Supabase content publishing is authenticated and atomic
+- PASS — cloud content and R2 contract regression — {
+  "ok": true,
+  "tests": 12
+}
 - PASS — runtime shared-contract regression — {
   "ok": true,
   "tests": 17,
@@ -63,5 +79,5 @@ Result: **PASS**  (54/54)
 }
 - PASS — student OTP and password contract regression — {
   "ok": true,
-  "tests": 14
+  "tests": 15
 }
