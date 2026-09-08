@@ -15,3 +15,7 @@ Thumbs.db
 .idea/
 # Cloudflare local files
 .wrangler/
+
+# Local Studio generated media and job state
+local-data/
+services/local-studio/__pycache__/
