@@ -135,7 +135,6 @@
   function deleteVideos(ids){
     if(!localOnly)throw new Error('LOCAL_DELETE_ONLY');
     const s=load(),keys=new Set(ids.map(String)),videos=s.videos.filter(v=>keys.has(String(v.id)));
-    if(videos.some(v=>['PROCESSING','QUEUED','UPLOADING'].includes(v.status)||['PROCESSING','QUEUED','UPLOADING'].includes(v.pipelineStatus)||s.jobs.some(j=>String(j.videoId)===String(v.id)&&['PROCESSING','QUEUED','UPLOADING'].includes(j.status))))throw new Error('VIDEO_JOB_ACTIVE');
     for(const video of videos)moveToTrash(s,video,'admin-delete');
     if(videos.length)save(s,{type:'video.delete',entityIds:videos.map(v=>v.id),count:videos.length});
     return videos.length;

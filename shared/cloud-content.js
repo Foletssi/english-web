@@ -39,19 +39,19 @@
     return { snapshot: row?.snapshot || null, revision: Number(row?.revision) || 0, updatedAt: row?.updated_at || null, error: error || null };
   }
 
-  async function saveDraft(snapshot) {
+  async function saveDraft(snapshot, expectedRevision) {
     if(global.ZoContent?.localOnly)return {error:new Error('LOCAL_CONTENT_CLOUD_WRITE_DISABLED')};
     const api = auth('admin');
     if (!api) return { error: new Error('SUPABASE_NOT_CONFIGURED') };
-    const { data, error } = await api.rpc('admin_save_content_snapshot', { p_snapshot: snapshot });
+    const { data, error } = await api.rpc('admin_save_content_snapshot_v2', { p_snapshot: snapshot, p_expected_revision: Number(expectedRevision) });
     return { data: firstRow(data), error: error || null };
   }
 
-  async function publish(snapshot) {
+  async function publish(snapshot, expectedRevision) {
     if(global.ZoContent?.localOnly)return {error:new Error('LOCAL_CONTENT_CLOUD_WRITE_DISABLED')};
     const api = auth('admin');
     if (!api) return { error: new Error('SUPABASE_NOT_CONFIGURED') };
-    const { data, error } = await api.rpc('admin_publish_content_snapshot', { p_snapshot: snapshot });
+    const { data, error } = await api.rpc('admin_publish_content_snapshot_v2', { p_snapshot: snapshot, p_expected_revision: Number(expectedRevision) });
     return { data: firstRow(data), error: error || null };
   }
 

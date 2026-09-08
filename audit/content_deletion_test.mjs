@@ -33,12 +33,9 @@ const real=structuredClone(fixture);real.videos[0].mediaUrl='http://localhost:87
 real.videos[1].localStudioJobId='real-job';
 assert.equal(setup(real).S.listVideos().length,2,'same ID but genuine upload must survive');
 const add=id=>S.saveVideo({id,title:'Real '+id,status:'DRAFT',pipelineStatus:'READY',mediaUrl:'/real.mp4'});
-add(900);add(901);S.startPipeline(901);
-const before=migrated.bag.get(localKey);
-assert.throws(()=>S.deleteVideos([900,901]),/VIDEO_JOB_ACTIVE/);
-assert.equal(migrated.bag.get(localKey),before,'bulk preflight is all or nothing');
-S.failPipeline(901,{currentStep:'asr',error:{message:'test'}});
+add(900);add(901);const active=S.startPipeline(901);
 assert.equal(S.deleteVideos([900,901,901]),2);assert.equal(S.deleteVideos([900]),0);
+assert.equal(S.acceptsJob(901,active.id),false,'active job is cancelled by tombstone and late results are rejected');
 assert.equal(S.getVideo(900),null);assert.equal(S.listJobs().some(j=>j.videoId===901),false);
 add(902);const beforeQuota=migrated.bag.get(localKey),eventCount=migrated.events.length;migrated.fail();
 assert.throws(()=>S.deleteVideo(902),/QUOTA/);assert.equal(migrated.bag.get(localKey),beforeQuota);
