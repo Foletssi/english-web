@@ -83,6 +83,49 @@
     return { data: firstRow(data), error: error || null };
   }
 
+  async function processingHealth() {
+    try {
+      const response = await fetch('https://ehxqtgakjgqgmghhdmjg.supabase.co/functions/v1/video-processing', { cache: 'no-store' });
+      const data = await response.json().catch(() => ({}));
+      return { data, error: response.ok ? null : new Error(data.error || ('PROCESSING_HEALTH_' + response.status)) };
+    } catch (error) {
+      return { data: null, error };
+    }
+  }
+
+  async function createProcessingJob(video, sourceKey, idempotencyKey, expectedRevision) {
+    const api = auth('admin');
+    if (!api) return { error: new Error('SUPABASE_NOT_CONFIGURED') };
+    const { data, error } = await api.rpc('admin_create_processing_job', {
+      p_video: video, p_source_key: sourceKey, p_idempotency_key: idempotencyKey,
+      p_expected_revision: Number(expectedRevision)
+    });
+    return { data: firstRow(data), error: error || null };
+  }
+
+  async function listProcessingJobs(limit = 50) {
+    const api = auth('admin');
+    if (!api) return { rows: [], error: new Error('SUPABASE_NOT_CONFIGURED') };
+    const { data, error } = await api.rpc('admin_list_processing_jobs', { p_limit: Number(limit) || 50 });
+    const stageStep = { STREAM_SUBMIT: 'transcode', STREAM_ENCODING: 'transcode', CAPTIONING: 'asr', ENRICH: 'enrich', METADATA: 'enrich', REVIEW: 'review' };
+    const order = ['upload', 'transcode', 'asr', 'enrich', 'review'];
+    const rows = (Array.isArray(data) ? data : []).map((row) => row.job || row).map((job) => {
+      const currentStep = stageStep[job.stage] || 'upload';
+      const current = order.indexOf(currentStep);
+      const status = ['QUEUED', 'RUNNING', 'WAITING'].includes(job.status) ? 'PROCESSING' : job.status;
+      return { ...job, videoId: Number(job.videoId), rawStatus: job.status, status, currentStep,
+        steps: order.map((step, index) => [step, index < current ? 'SUCCESS' : index === current ? (status === 'ERROR' ? 'ERROR' : status === 'REVIEW' ? 'WAITING' : 'PROCESSING') : 'WAITING']) };
+    });
+    return { rows, error: error || null };
+  }
+
+  async function retryProcessingJob(jobId) {
+    const api = auth('admin');
+    if (!api) return { error: new Error('SUPABASE_NOT_CONFIGURED') };
+    const { data, error } = await api.rpc('admin_retry_processing_job', { p_job_id: jobId });
+    return { data: firstRow(data), error: error || null };
+  }
+
   async function syncMediaSession(scope) {
     const token = await sessionToken(scope === 'admin' ? 'admin' : 'student');
     const response = await fetch('/api/session', { method: 'POST', headers: { Authorization: 'Bearer ' + token } });
@@ -139,5 +182,7 @@
     }
   }
 
-  global.EastudyCloudContent = Object.freeze({ pullPublished, pullAdmin, saveDraft, publish, listTrash, trashVideos, restoreVideo, syncMediaSession, clearMediaSession, uploadVideo });
+  global.EastudyCloudContent = Object.freeze({ pullPublished, pullAdmin, saveDraft, publish, listTrash, trashVideos, restoreVideo,
+    processingHealth, createProcessingJob, listProcessingJobs, retryProcessingJob,
+    syncMediaSession, clearMediaSession, uploadVideo });
 })(window);

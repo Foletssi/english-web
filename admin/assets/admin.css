@@ -116,6 +116,7 @@ html[data-admin-auth="signed-in"] .admin-auth-gate{display:none!important}
 /* Keep every video action reachable, including beside a desktop sidebar. */
 .video-table-scroll{max-width:100%;overflow:auto;position:relative;isolation:isolate}
 .video-table{min-width:900px}
+.video-table .video-select-col{width:52px}.video-table .video-status-col{width:104px}.video-table .video-pipeline-col{width:116px}.video-table .video-level-col{width:72px}.video-table .video-duration-col{width:76px}.video-table .video-actions-col{width:224px}
 .video-table th:first-child{width:52px}
 .video-table th:nth-child(3){width:104px}
 .video-table th:nth-child(4){width:116px}
@@ -123,6 +124,7 @@ html[data-admin-auth="signed-in"] .admin-auth-gate{display:none!important}
 .video-table th:nth-child(6){width:76px}
 .video-table th:last-child{width:224px}
 .video-table th:last-child,.video-table td:last-child{position:sticky;right:0;z-index:1;box-shadow:-1px 0 var(--line)}
+.video-table th:last-child,.video-table td:last-child{width:224px;min-width:224px;white-space:nowrap}
 .video-table th:last-child{background:var(--panel2);z-index:2}
 .video-table td:last-child{background:var(--panel)}
 .video-table .row-actions{gap:6px;justify-content:flex-end}

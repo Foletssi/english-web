@@ -8,6 +8,7 @@ const fakeClient=`
 (()=>{let snapshot=${JSON.stringify(snapshot)},revision=8,trash=[];window.__rpcCalls=[];
  const ok=data=>Promise.resolve({data,error:null}),api={auth:{getSession:()=>ok({session:{access_token:'fixture-token'}})},rpc(name,args={}){window.__rpcCalls.push({name,args});
   if(name==='admin_get_content_snapshot')return ok([{snapshot,revision,updated_at:new Date().toISOString()}]);
+  if(name==='admin_list_processing_jobs')return ok([]);
   if(name==='admin_list_content_trash')return ok(trash.map(x=>({video_id:String(x.video.id),video:x.video,deleted_at:x.deletedAt,reason:'admin-delete'})));
   if(name==='admin_save_content_snapshot_v2'){if(args.p_expected_revision!==revision)return Promise.resolve({data:null,error:{message:'CONTENT_REVISION_CONFLICT'}});snapshot=args.p_snapshot;revision++;return ok([{revision,updated_at:new Date().toISOString()}])}
   if(name==='admin_publish_content_snapshot'){snapshot=args.p_snapshot;revision++;return ok([{revision,published_at:new Date().toISOString()}])}

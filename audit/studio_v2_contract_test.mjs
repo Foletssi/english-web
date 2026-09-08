@@ -11,7 +11,7 @@ const checks=[
   js.includes('Math.min(2,state.rows.length)'),
   js.includes('completePipeline'),
   js.includes('Client.retryJob'),
-  admin.includes('关闭网页也会继续处理'),
+  admin.includes('Supabase 定时调度')&&js.includes('createProcessingJob')&&js.includes('processingHealth'),
   !admin.includes('data-advance-job='),
 ];
 checks.forEach((value,index)=>assert.ok(value,`Studio V2 contract check ${index+1} failed`));

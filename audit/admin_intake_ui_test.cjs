@@ -58,7 +58,7 @@ const types={'.js':'text/javascript','.css':'text/css','.html':'text/html','.png
    await page.waitForSelector('#studioV2Modal.show');
    assert.equal(await page.locator('#studioV2Creator').inputValue(),'');
    if(mode==='cloud'){
-    await page.waitForSelector('#studioV2Health[data-state="unavailable"]');
+    await page.waitForSelector('#studioV2Health[data-state="error"]');
     assert.ok(await page.locator('#studioV2Submit').isDisabled());
     assert.equal(localRequests.length,0,'cloud UI must not poll localhost');
     assert.equal((await page.locator('#studioV2Modal').innerText()).includes('START_EASTUDY'),false);

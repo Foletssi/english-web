@@ -71,7 +71,7 @@ Result: **PASS**  (71/71)
 - PASS — autoplay queue filters reviewed target content and supports fixed collections
 - PASS — cloud content and R2 contract regression — {
   "ok": true,
-  "tests": 21
+  "tests": 35
 }
 - PASS — runtime shared-contract regression — {
   "ok": true,
