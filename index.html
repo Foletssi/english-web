@@ -88,6 +88,12 @@
           <div><span class="section-kicker">TODAY</span><h2>今天先完成最重要的学习</h2></div>
           <button class="priority-learning-link" data-route="/learning">查看完整学习数据 <i data-icon="chevron-right"></i></button>
         </div>
+        <article class="home-goal-card" id="homeGoalCard">
+          <div class="home-goal-icon"><i data-icon="target"></i></div>
+          <div class="home-goal-copy"><small>我的主目标</small><h3 id="homeGoalName">综合英语提升</h3><p id="homeGoalMeta">每天 20 分钟 · 目标视频自动连播</p></div>
+          <button type="button" class="primary" id="homeGoalStart"><i data-icon="play"></i><span>开始目标学习</span></button>
+          <button type="button" class="home-goal-edit" id="homeGoalEdit">调整目标</button>
+        </article>
         <div class="home-priority-grid">
           <article class="today-progress-card">
             <div class="today-progress-top"><div><small>今日学习</small><strong><span id="todayMinutes">0</span> <em>min</em></strong></div><button class="today-streak time-detail-link" data-route="/learning" type="button" title="查看学习时长明细"><i data-icon="flame"></i><span><b id="currentStreak">0 天</b><small>连续学习 · 查看明细</small></span></button></div>
@@ -314,9 +320,24 @@
   </section>
 </div>
 
+<div class="goal-onboarding" id="goalOnboarding" hidden>
+  <section class="goal-onboarding-card" role="dialog" aria-modal="true" aria-labelledby="goalOnboardingTitle">
+    <span class="dialog-kicker">PERSONAL ROADMAP</span>
+    <h2 id="goalOnboardingTitle">先选一个学习目标</h2>
+    <p>我们会按这个目标安排首页内容和视频连播。之后可在“我的学习”随时修改。</p>
+    <div class="goal-onboarding-options" id="goalOnboardingOptions"></div>
+    <div class="goal-onboarding-controls">
+      <label><span>每天学习时间</span><select id="goalOnboardingMinutes"><option value="10">10 分钟</option><option value="20" selected>20 分钟</option><option value="40">40 分钟</option><option value="60">60 分钟</option></select></label>
+      <label><span>目前水平</span><select id="goalOnboardingLevel"><option value="unsure">暂不确定</option><option value="beginner">零基础</option><option value="elementary">初级 A1–A2</option><option value="intermediate">中级 B1–B2</option><option value="advanced">高级 C1+</option></select></label>
+    </div>
+    <p class="goal-onboarding-message" id="goalOnboardingMessage" role="alert" aria-live="polite"></p>
+    <button type="button" class="primary goal-onboarding-save" id="goalOnboardingSave">保存并进入首页</button>
+  </section>
+</div>
+
 <div class="follow" id="follow" role="dialog" aria-modal="true" aria-labelledby="followTitle"><div class="follow-head"><b id="followTitle">跟读训练</b><button id="closeFollow" aria-label="关闭跟读训练">×</button></div><div class="follow-sentence" id="followSentence"></div><button type="button" class="play-original" id="playOriginalSentence">▶ 播放原句</button><div class="wave" id="wave" aria-hidden="true"></div><p class="record-status" id="recordStatus" role="status">播放原句后，点击下方按钮开始录音</p><button class="record" id="recordBtn" aria-label="开始录音"></button><audio id="recordPlayback" controls hidden></audio><div class="record-actions" id="recordActions" hidden><button type="button" id="recordAgain">重新录音</button></div></div>
 
-<div class="lesson-complete" id="lessonComplete" role="dialog" aria-modal="true" aria-labelledby="lessonCompleteTitle" hidden><div class="lesson-complete-card"><span class="complete-mark"><i data-icon="check"></i></span><h2 id="lessonCompleteTitle">这一段学完了</h2><p id="lessonCompleteSummary">本次学习已经保存。</p><div class="lesson-complete-actions"><button type="button" class="primary" id="reviewLessonFavorites">复习本次收藏</button><button type="button" class="secondary" id="continueCollection">继续同一合集</button><button type="button" class="text-action" id="completeBackHome">返回首页</button></div></div></div>
+<div class="lesson-complete" id="lessonComplete" role="dialog" aria-modal="true" aria-labelledby="lessonCompleteTitle" hidden><div class="lesson-complete-card"><span class="complete-mark"><i data-icon="check"></i></span><h2 id="lessonCompleteTitle">本条视频播放结束</h2><p id="lessonCompleteSummary">本次学习已经保存。</p><article class="next-lesson-preview" id="nextLessonPreview" hidden><img id="nextLessonCover" src="assets/images/home_video_1.png" alt=""><div><small id="nextLessonReason">来自你的学习目标</small><b id="nextLessonTitle">下一条视频</b><span id="nextLessonCountdown">5 秒后自动播放</span></div></article><label class="queue-loop-option"><input id="queueLoopToggle" type="checkbox" checked><span>本目标视频播完后循环</span></label><div class="lesson-complete-actions"><button type="button" class="primary" id="continueCollection">立即播放下一条</button><button type="button" class="secondary" id="cancelNextLesson">取消本次自动播放</button><button type="button" class="secondary" id="reviewLessonFavorites">复习本次收藏</button><button type="button" class="text-action" id="completeBackHome">返回首页</button></div></div></div>
 
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -324,9 +345,10 @@
 <script src="shared/supabase-client.js?v=beta6.23.0"></script>
 <script src="shared/content-store.js?v=beta6.23.0"></script>
 <script src="shared/cloud-content.js?v=beta6.23.0"></script>
+<script src="shared/learning-queue.js?v=beta6.24.0"></script>
+<script src="shared/playback-controller.js?v=beta6.24.0"></script>
 <script src="assets/js/app.js?v=beta6.23.0"></script>
 </body>
 </html>
-
 
 
