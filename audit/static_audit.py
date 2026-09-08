@@ -85,15 +85,22 @@ add('admin supports authenticated R2 multipart upload',all(x in cloud for x in [
 add('media delivery requires a signed-in Supabase session',all(x in media_function for x in ['authenticate(request, env)','VIDEO_BUCKET','Range','Content-Range']))
 add('Cloudflare upload gate checks administrator role',all(x in function_auth for x in ['requireAdmin','PROFILE_LOOKUP_FAILED','ADMIN_REQUIRED']))
 add('Supabase content publishing is authenticated and atomic',all(x in cloud_sql for x in ['private.content_snapshots','admin_publish_content_snapshot','get_published_content','revision = private.content_snapshots.revision + 1']))
+learning_sql=(root/'supabase/migrations/20260908_learning_goal_autoplay.sql').read_text(encoding='utf-8')
+learning_queue=(root/'shared/learning-queue.js').read_text(encoding='utf-8')
+add('learner goal profile is isolated by Supabase RLS',all(x in learning_sql for x in ['learner_goal_profiles','user_id = auth.uid()','primary_goal_id','onboarding_version']))
+add('student exposes goal onboarding and explicit autoplay controls',all(x in student for x in ['goalOnboarding','homeGoalStart','nextLessonCountdown','cancelNextLesson','queueLoopToggle']) and all(x in app for x in ['maybeShowGoalOnboarding','playNextQueueLesson','ensurePlaybackCountdown']))
+add('autoplay queue filters reviewed target content and supports fixed collections',all(x in learning_queue for x in ['mappedGoalIds','eligibleVideos','collectionId','queue?.loop']))
 cloud_run=subprocess.run(['node',str(root/'audit/cloud_content_contract_test.mjs')],capture_output=True,text=True)
 add('cloud content and R2 contract regression',cloud_run.returncode==0,(cloud_run.stdout+cloud_run.stderr).strip())
 run=subprocess.run(['node',str(root/'audit/runtime_contract_test.mjs')],capture_output=True,text=True)
 add('runtime shared-contract regression',run.returncode==0,(run.stdout+run.stderr).strip())
 auth_run=subprocess.run(['node',str(root/'audit/auth_contract_test.mjs')],capture_output=True,text=True)
 add('student OTP and password contract regression',auth_run.returncode==0,(auth_run.stdout+auth_run.stderr).strip())
+learning_run=subprocess.run(['node',str(root/'audit/learning_queue_contract_test.mjs')],capture_output=True,text=True)
+add('learning queue and countdown contract regression',learning_run.returncode==0,(learning_run.stdout+learning_run.stderr).strip())
 report={'ok':all(c['ok'] for c in checks),'passed':sum(c['ok'] for c in checks),'total':len(checks),'checks':checks}
 (root/'audit/AUDIT_REPORT.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
-md=['# Eastudy Composite V1 Beta 6.23.0 — Audit Report','',f"Result: **{'PASS' if report['ok'] else 'FAIL'}**  ({report['passed']}/{report['total']})",'']
+md=['# Eastudy Composite V1 Beta 6.24.0 — Audit Report','',f"Result: **{'PASS' if report['ok'] else 'FAIL'}**  ({report['passed']}/{report['total']})",'']
 for c in checks:md.append(f"- {'PASS' if c['ok'] else 'FAIL'} — {c['name']}"+(f" — {c['detail']}" if c['detail'] else ''))
 (root/'audit/AUDIT_REPORT.md').write_text('\n'.join(md)+'\n',encoding='utf-8')
 print(json.dumps(report,ensure_ascii=False,indent=2))

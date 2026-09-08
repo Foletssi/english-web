@@ -166,6 +166,8 @@
       position_seconds: Math.max(0, Number(input.position) || 0),
       duration_seconds: Math.max(0, Math.round(Number(input.duration) || 0)),
       completion_percent: Math.max(0, Math.min(100, Number(input.progressPercent) || 0)),
+      watch_coverage_percent: Math.max(0, Math.min(100, Number(input.watchCoveragePercent) || 0)),
+      watch_ranges: Array.isArray(input.watchRanges) ? input.watchRanges.slice(-500) : [],
       last_watched_at: now,
       completed_at: input.completed ? now : null
     };
@@ -288,7 +290,10 @@
       api.from('learner_goal_profiles').select('*').eq('user_id', context.user.id).maybeSingle()
     ]);
     if (!progress.error) {
-      (progress.data || []).forEach(row => setLocal(context.user.id, 'progress:' + row.video_id, { time: row.position_seconds || 0, duration: row.duration_seconds || 0, percent: row.completion_percent || 0, completed: Boolean(row.completed_at), updatedAt: Date.parse(row.last_watched_at || '') || Date.now() }));
+      (progress.data || []).forEach(row => {
+        setLocal(context.user.id, 'progress:' + row.video_id, { time: row.position_seconds || 0, duration: row.duration_seconds || 0, percent: row.completion_percent || 0, watchCoveragePercent: row.watch_coverage_percent || 0, completed: Boolean(row.completed_at), updatedAt: Date.parse(row.last_watched_at || '') || Date.now() });
+        setLocal(context.user.id, 'watchCoverage:' + row.video_id, Array.isArray(row.watch_ranges) ? row.watch_ranges : []);
+      });
     }
     if (!favorites.error) {
       clearLocalPrefix(context.user.id, 'favSentences:');

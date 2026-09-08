@@ -13,8 +13,8 @@ function load(file) {
 const win = load(new URL('../shared/learning-queue.js', import.meta.url));
 const queue = win.EastudyLearningQueue;
 const videos = [
-  { id: 1, status: 'PUBLISHED', mediaUrl: '/1.mp4', goalIds: ['daily'], publishedAt: '2026-01-03' },
-  { id: 2, status: 'PUBLISHED', mediaUrl: '/2.mp4', goalMappings: [{ goalId: 'cet4', approved: true }], publishedAt: '2026-01-02' },
+  { id: 1, status: 'PUBLISHED', mediaUrl: '/1.mp4', goalIds: ['daily'], collectionIds: [10], publishedAt: '2026-01-03' },
+  { id: 2, status: 'PUBLISHED', mediaUrl: '/2.mp4', goalMappings: [{ goalId: 'cet4', approved: true }], collectionIds: [10, 20], publishedAt: '2026-01-02' },
   { id: 3, status: 'DRAFT', mediaUrl: '/3.mp4', goalIds: ['cet4'] },
   { id: 4, status: 'PUBLISHED', mediaUrl: '', goalIds: ['cet4'] }
 ];
@@ -33,6 +33,7 @@ const preferred = queue.create({ videos, goalId: 'daily', preferredVideoId: 2 })
 equal(preferred.ids, ['2', '1'], 'direct video stays first before returning to goal pool');
 equal(queue.next(preferred, 2).id, '1', 'direct entry continues into selected goal');
 equal(queue.create({ videos, goalId: 'toefl' }).ids, [], 'unmapped goal stays empty');
+equal(queue.create({ videos, goalId: 'toefl', collectionId: 10 }).ids, ['1', '2'], 'explicit collection uses only its published playable items');
 
 const playbackWindow = load(new URL('../shared/playback-controller.js', import.meta.url));
 let done = 0;
@@ -42,4 +43,4 @@ controller.cancel('route-change');
 await new Promise(resolve => setTimeout(resolve, 1100));
 equal(done, 0, 'cancel prevents late navigation');
 
-console.log('Learning queue contract: 8/8 checks passed.');
+console.log('Learning queue contract: 9/9 checks passed.');

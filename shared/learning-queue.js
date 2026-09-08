@@ -21,7 +21,11 @@
   function create(input) {
     const goalId = String(input?.goalId || 'general');
     const preferred = input?.preferredVideoId == null ? '' : String(input.preferredVideoId);
-    const candidates = eligibleVideos(input?.videos, goalId).slice().sort((a, b) => {
+    const collectionId = input?.collectionId == null ? null : String(input.collectionId);
+    const pool = collectionId
+      ? (Array.isArray(input?.videos) ? input.videos : []).filter(video => (video?.collectionIds || []).map(String).includes(collectionId))
+      : input?.videos;
+    const candidates = eligibleVideos(pool, collectionId ? 'general' : goalId).slice().sort((a, b) => {
       const pa = Number(a.teacherOrder ?? a.goalOrder ?? Number.MAX_SAFE_INTEGER);
       const pb = Number(b.teacherOrder ?? b.goalOrder ?? Number.MAX_SAFE_INTEGER);
       return pa - pb || String(b.publishedAt || '').localeCompare(String(a.publishedAt || '')) || String(a.id).localeCompare(String(b.id));
@@ -36,7 +40,7 @@
     return {
       goalId,
       source: input?.source || 'goal',
-      collectionId: input?.collectionId || null,
+      collectionId,
       ids,
       cursor: ids.length ? 0 : -1,
       cycle: 0,

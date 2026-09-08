@@ -1,7 +1,7 @@
 {
   "ok": true,
-  "passed": 67,
-  "total": 67,
+  "passed": 71,
+  "total": 71,
   "checks": [
     {
       "name": "index.html: unique DOM ids",
@@ -324,6 +324,21 @@
       "detail": ""
     },
     {
+      "name": "learner goal profile is isolated by Supabase RLS",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "student exposes goal onboarding and explicit autoplay controls",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "autoplay queue filters reviewed target content and supports fixed collections",
+      "ok": true,
+      "detail": ""
+    },
+    {
       "name": "cloud content and R2 contract regression",
       "ok": true,
       "detail": "{\n  \"ok\": true,\n  \"tests\": 12\n}"
@@ -337,6 +352,11 @@
       "name": "student OTP and password contract regression",
       "ok": true,
       "detail": "{\n  \"ok\": true,\n  \"tests\": 15\n}"
+    },
+    {
+      "name": "learning queue and countdown contract regression",
+      "ok": true,
+      "detail": "Learning queue contract: 9/9 checks passed."
     }
   ]
 }

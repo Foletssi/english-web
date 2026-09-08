@@ -26,6 +26,10 @@ create table if not exists public.learner_goal_profiles (
   updated_at timestamptz not null default now()
 );
 
+alter table if exists public.user_progress
+  add column if not exists watch_coverage_percent numeric(5,2) not null default 0 check (watch_coverage_percent between 0 and 100),
+  add column if not exists watch_ranges jsonb not null default '[]'::jsonb check (jsonb_typeof(watch_ranges) = 'array');
+
 create or replace function public.bump_learner_goal_profile_revision()
 returns trigger
 language plpgsql

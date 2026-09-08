@@ -1,6 +1,6 @@
-# Eastudy Composite V1 Beta 6.23.0 — Audit Report
+# Eastudy Composite V1 Beta 6.24.0 — Audit Report
 
-Result: **PASS**  (67/67)
+Result: **PASS**  (71/71)
 
 - PASS — index.html: unique DOM ids
 - PASS — index.html: local script/css refs exist
@@ -66,6 +66,9 @@ Result: **PASS**  (67/67)
 - PASS — media delivery requires a signed-in Supabase session
 - PASS — Cloudflare upload gate checks administrator role
 - PASS — Supabase content publishing is authenticated and atomic
+- PASS — learner goal profile is isolated by Supabase RLS
+- PASS — student exposes goal onboarding and explicit autoplay controls
+- PASS — autoplay queue filters reviewed target content and supports fixed collections
 - PASS — cloud content and R2 contract regression — {
   "ok": true,
   "tests": 12
@@ -81,3 +84,4 @@ Result: **PASS**  (67/67)
   "ok": true,
   "tests": 15
 }
+- PASS — learning queue and countdown contract regression — Learning queue contract: 9/9 checks passed.
