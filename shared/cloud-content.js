@@ -107,7 +107,7 @@
     const api = auth('admin');
     if (!api) return { rows: [], error: new Error('SUPABASE_NOT_CONFIGURED') };
     const { data, error } = await api.rpc('admin_list_processing_jobs', { p_limit: Number(limit) || 50 });
-    const stageStep = { STREAM_SUBMIT: 'transcode', STREAM_ENCODING: 'transcode', CAPTIONING: 'asr', ENRICH: 'enrich', METADATA: 'enrich', REVIEW: 'review' };
+    const stageStep = { LOCAL_DOWNLOAD: 'upload', PROBE: 'transcode', TRANSCODE: 'transcode', ASR: 'asr', ENRICH: 'enrich', LOCAL_UPLOAD: 'enrich', REVIEW: 'review' };
     const order = ['upload', 'transcode', 'asr', 'enrich', 'review'];
     const rows = (Array.isArray(data) ? data : []).map((row) => row.job || row).map((job) => {
       const currentStep = stageStep[job.stage] || 'upload';

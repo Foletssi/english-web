@@ -11,6 +11,10 @@ const sql = read('../supabase/migrations/20260908_cloud_content_and_admin.sql');
 const trashSql = read('../supabase/migrations/20260908_content_video_trash.sql');
 const processingSql = read('../supabase/migrations/20260908_cloud_video_processing.sql');
 const processingSource = read('../functions/api/processing/source.js');
+const localWorkerSql = read('../supabase/migrations/20260908_local_cloud_worker.sql');
+const processingOutput = read('../functions/api/processing/output.js');
+const processingMedia = read('../functions/api/processing/media/[[path]].js');
+const edgeWorker = read('../supabase/functions/video-processing/index.ts');
 
 for (const route of ['/api/session', '/api/admin/uploads/init', '/api/admin/uploads/part', '/api/admin/uploads/complete', '/api/admin/uploads/abort', '/api/media?key=']) {
   assert.ok(client.includes(route), `client must use ${route}`);
@@ -43,8 +47,24 @@ assert.ok(processingSql.includes("status='CANCELLED'"), 'late results must remai
 assert.ok(!processingSql.includes('VIDEO_BUCKET'), 'processing migration must never physically delete R2 objects');
 assert.ok(processingSource.includes("request.headers.get('Range')"), 'Stream source must support byte ranges');
 assert.ok(processingSource.includes('resolve_processing_source'), 'Stream source must require a short-lived database token');
+for (const rpc of ['processing_worker_heartbeat', 'processing_claim_local_job', 'processing_heartbeat_job',
+  'processing_progress_job', 'processing_fail_job', 'processing_commit_leased_result',
+  'resolve_processing_output', 'resolve_processing_media']) {
+  assert.ok(localWorkerSql.includes(`public.${rpc}`), `local worker migration must define ${rpc}`);
+}
+assert.ok(localWorkerSql.includes('for update skip locked'), 'desktop workers must atomically lease jobs');
+assert.ok(localWorkerSql.includes('cancel_requested_at is null'), 'worker leases and tokens must reject logically deleted jobs');
+assert.ok(!localWorkerSql.includes('delete from') && !localWorkerSql.includes('VIDEO_BUCKET'), 'local migration must not delete R2 data');
+assert.ok(processingOutput.includes('resolve_processing_output'), 'R2 output writes must use a scoped database token');
+assert.ok(processingOutput.includes('MAX_ASSET_BYTES'), 'R2 output writes must be bounded');
+assert.ok(processingMedia.includes('authenticate(request, env)'), 'processed media must require an authenticated session');
+assert.ok(processingMedia.includes("request.headers.get('Range')"), 'processed media must support byte ranges');
+for (const action of ['worker-heartbeat', 'worker-claim', 'worker-job-heartbeat', 'worker-progress', 'worker-fail', 'worker-complete']) {
+  assert.ok(edgeWorker.includes(`'${action}'`), `Edge worker must expose ${action}`);
+}
+assert.ok(edgeWorker.includes("env('WORKER_SECRET')"), 'desktop worker actions must require a server-side secret');
 for (const method of ['processingHealth', 'createProcessingJob', 'listProcessingJobs', 'retryProcessingJob']) {
   assert.ok(client.includes(method), `cloud client must expose ${method}`);
 }
 
-console.log(JSON.stringify({ ok: true, tests: 35 }, null, 2));
+console.log(JSON.stringify({ ok: true, tests: 52 }, null, 2));

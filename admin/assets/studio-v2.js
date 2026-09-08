@@ -59,10 +59,10 @@ async function checkService(){
   state.serviceReady=false;const health=$('#studioV2Health'),button=$('#studioV2Submit');
   button.disabled=true;button.textContent='检查服务中…';health.dataset.state='checking';
   health.textContent='正在检查视频处理服务…';$('#studioV2Recheck').hidden=false;
-  if(!Store.localOnly){$('#studioV2Intro').textContent='原片上传 R2 后，云端自动完成转码、英文字幕、翻译和学习内容，结果进入人工审核。';
-    $('#studioV2ServiceCopy').textContent='Cloudflare Stream 负责转码与字幕，DeepSeek 负责翻译、难度、分类和简介；Supabase 持久任务确保关闭网页后继续执行。';
-    const result=await cloud()?.processingHealth();if(result?.error||!result?.data?.ready){health.dataset.state='error';health.textContent='云端处理尚未完全配置';button.textContent='云端服务未就绪';return}
-    state.serviceReady=true;health.dataset.state='ok';health.textContent='云端视频处理服务已就绪';button.disabled=false;button.textContent='开始批量处理';return}
+  if(!Store.localOnly){$('#studioV2Intro').textContent='原片上传 R2 后，本机 Worker 自动转码、识别英文字幕并调用 DeepSeek 生成学习内容，成品回传 R2 后进入人工审核。';
+    $('#studioV2ServiceCopy').textContent='网页可以关闭；处理期间请保持这台电脑和 Eastudy Worker 运行。处理完成后，学生播放完全来自云端，不再依赖本机。';
+    const result=await cloud()?.processingHealth();if(result?.error||!result?.data?.ready){health.dataset.state='error';health.textContent='本机云任务 Worker 未连接或能力未就绪';button.textContent='请先启动本机 Worker';return}
+    state.serviceReady=true;health.dataset.state='ok';health.textContent='本机云任务 Worker 已连接（FFmpeg / Whisper / DeepSeek）';button.disabled=false;button.textContent='开始批量处理';return}
   $('#studioV2Intro').textContent='选择视频、填写创作者并核对标题，处理完成后进入人工审核。';
   $('#studioV2ServiceCopy').textContent='当前为本地开发环境：由这台电脑处理视频。上传完成后可关闭网页，请保持电脑和处理程序运行。';
   try{const result=await Client.health();if(!result.ok)throw new Error(result.message||'服务不可用');
