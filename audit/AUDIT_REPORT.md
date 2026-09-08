@@ -1,4 +1,4 @@
-# Eastudy Composite V1 Beta 6.24.0 — Audit Report
+# Eastudy Composite V1 Beta 6.25.2 — Audit Report
 
 Result: **PASS**  (71/71)
 
@@ -71,7 +71,7 @@ Result: **PASS**  (71/71)
 - PASS — autoplay queue filters reviewed target content and supports fixed collections
 - PASS — cloud content and R2 contract regression — {
   "ok": true,
-  "tests": 12
+  "tests": 21
 }
 - PASS — runtime shared-contract regression — {
   "ok": true,

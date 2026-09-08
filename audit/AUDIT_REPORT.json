@@ -341,7 +341,7 @@
     {
       "name": "cloud content and R2 contract regression",
       "ok": true,
-      "detail": "{\n  \"ok\": true,\n  \"tests\": 12\n}"
+      "detail": "{\n  \"ok\": true,\n  \"tests\": 21\n}"
     },
     {
       "name": "runtime shared-contract regression",
