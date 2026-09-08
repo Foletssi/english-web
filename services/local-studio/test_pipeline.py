@@ -1,0 +1,53 @@
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+from contracts import StudioError
+from job_store import JobStore
+from pipeline import process_job
+
+
+class PipelineTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        self.store = JobStore(self.root / 'jobs')
+        self.job = self.store.create({'creator': 'Alice'}, 'My Morning.mp4')
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    @patch('pipeline.make_cover')
+    @patch('pipeline.enrich')
+    @patch('pipeline.transcribe')
+    @patch('pipeline.extract_audio')
+    @patch('pipeline.transcode')
+    @patch('pipeline.probe')
+    def test_real_outputs_required_before_review(self, probe, transcode, audio, asr, enrich, cover):
+        probe.return_value = {'duration': 10, 'width': 1920, 'height': 1080}
+        transcode.return_value = [{'label': '720p', 'path': '720p/index.m3u8'}]
+        audio.return_value = self.root / 'audio.wav'
+        asr.return_value = [{'id': 'one', 'english': 'Good morning', 'startTime': 0, 'endTime': 2}]
+        enrich.return_value = (asr.return_value, {'titleZh': '我的清晨日常',
+            'descriptionZh': '跟着创作者体验轻松自然的清晨日常，同时积累真实常用的英语表达。',
+            'level': 'A2', 'levelReason': '短句为主', 'topicIds': ['daily'],
+            'goalMappings': [{'goalId': 'daily', 'sentenceIds': ['one'], 'reason': '日常表达'}]},
+            [{'model': 'fixture'}])
+        result = process_job(self.store, self.job['id'], self.root / 'source.mp4', None,
+                             {}, self.root / 'media')
+        self.assertEqual(result['status'], 'REVIEW')
+        self.assertEqual(result['result']['evidence']['subtitleCount'], 1)
+        self.assertEqual(result['result']['evidence']['aiRequestCount'], 1)
+        self.assertTrue(result['result']['evidence']['humanReviewRequired'])
+
+    @patch('pipeline.probe', side_effect=StudioError('NO_AUDIO_TRACK', '没有音轨'))
+    def test_failure_never_reports_complete(self, _):
+        result = process_job(self.store, self.job['id'], 'source.mp4', None, {}, self.root / 'media')
+        self.assertEqual(result['status'], 'ERROR')
+        self.assertLess(result['progress'], 100)
+        self.assertEqual(result['error']['code'], 'NO_AUDIO_TRACK')
+
+
+if __name__ == '__main__':
+    unittest.main()
