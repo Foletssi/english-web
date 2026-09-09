@@ -1,6 +1,7 @@
 import json
 import os
 import ssl
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -21,6 +22,24 @@ GOALS = {'general': '综合英语提升', 'k12': '中考/高考', 'cet4': '大�
          'toeic': '托业', 'cambridge': '剑桥英语', 'career': '职场商务',
          'daily': '旅行/日常口语', 'custom': '自定义目标'}
 _models = {}
+_cuda_dll_handles = []
+
+
+def configure_cuda_dlls():
+    if os.name != 'nt' or _cuda_dll_handles:
+        return
+    seen = set()
+    for entry in sys.path:
+        provider_root = Path(entry) / 'nvidia'
+        if not provider_root.is_dir():
+            continue
+        for bin_dir in provider_root.glob('*/bin'):
+            resolved = str(bin_dir.resolve())
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            _cuda_dll_handles.append(os.add_dll_directory(resolved))
+            os.environ['PATH'] = resolved + os.pathsep + os.environ.get('PATH', '')
 
 
 def ai_concurrency():
@@ -57,6 +76,7 @@ def asr_profile(model_name=None):
 
 
 def prepare_asr_model(model_name=None, verify_inference=False, model_factory=None):
+    configure_cuda_dlls()
     try:
         if model_factory is None:
             from faster_whisper import WhisperModel
