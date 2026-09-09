@@ -13,6 +13,34 @@ SPEC.loader.exec_module(worker)
 
 
 class WorkerTests(unittest.TestCase):
+    def test_upload_concurrency_is_bounded(self):
+        with patch.dict('os.environ', {'EASTUDY_UPLOAD_CONCURRENCY': '99'}):
+            self.assertEqual(worker.upload_concurrency(), 8)
+        with patch.dict('os.environ', {'EASTUDY_UPLOAD_CONCURRENCY': 'invalid'}):
+            self.assertEqual(worker.upload_concurrency(), 6)
+
+    def test_parallel_upload_preserves_manifest_order_and_receipts(self):
+        calls = []
+        class Client:
+            def upload(self, _url, _token, _job_id, path, source):
+                return {'size': source.stat().st_size, 'sha256': path.replace('/', '-'), 'etag': path}
+            def call(self, action, **values):
+                calls.append((action, values))
+                return {'ok': True}
+        lease = {'job': {'id': '00000000-0000-0000-0000-000000000001',
+                         'run_id': '00000000-0000-0000-0000-000000000002'},
+                 'token': 'x' * 32, 'outputUrl': 'https://example.test/upload?job=one'}
+        with tempfile.TemporaryDirectory() as folder:
+            output = Path(folder)
+            assets = []
+            for name in ('z.ts', 'a.m3u8', 'm.webp'):
+                path = output / name
+                path.write_bytes(name.encode())
+                assets.append(path)
+            manifest = worker.upload_assets(Client(), lease, output, assets)
+        self.assertEqual([item['path'] for item in manifest], ['a.m3u8', 'm.webp', 'z.ts'])
+        self.assertEqual(sum(action == 'worker-output-receipt-v2' for action, _ in calls), 3)
+
     def test_v2_progress_carries_run_and_monotonic_sequence(self):
         calls = []
         class Client:

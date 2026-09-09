@@ -11,6 +11,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -157,6 +158,42 @@ def content_type(path):
     if path.endswith('.webp'):
         return 'image/webp'
     return 'application/octet-stream'
+
+
+def upload_concurrency():
+    try:
+        value = int(os.getenv('EASTUDY_UPLOAD_CONCURRENCY', '6'))
+    except ValueError:
+        value = 6
+    return min(8, max(1, value))
+
+
+def upload_assets(client, lease, output, assets):
+    job_id = lease['job']['id']
+    ordered = sorted(assets)
+    manifest = {}
+
+    def upload_one(path):
+        relative = path.relative_to(output).as_posix()
+        receipt = client.upload(lease['outputUrl'], lease['token'], job_id, relative, path)
+        return relative, receipt
+
+    with ThreadPoolExecutor(max_workers=min(upload_concurrency(), len(ordered))) as executor:
+        futures = {executor.submit(upload_one, path): path for path in ordered}
+        for completed, future in enumerate(as_completed(futures), 1):
+            relative, receipt = future.result()
+            item = {'path': relative, 'size': int(receipt['size']), 'sha256': str(receipt['sha256'])}
+            manifest[relative] = item
+            if run_id(lease):
+                client.call('worker-output-receipt-v2', jobId=job_id, token=lease['token'],
+                            runId=run_id(lease), path=relative, size=item['size'],
+                            sha256=item['sha256'], etag=str(receipt['etag']))
+            progress = 96 + int(3 * completed / len(ordered))
+            report_progress(client, lease, 'LOCAL_UPLOAD', min(99, progress),
+                            f'正在上传成品 {completed}/{len(ordered)}',
+                            {'substage': relative, 'current': completed,
+                             'total': len(ordered), 'unit': 'files'})
+    return [manifest[path.relative_to(output).as_posix()] for path in ordered]
 
 
 def capabilities():
@@ -325,20 +362,7 @@ def process_lease(client, lease):
         assets = [path for path in output.rglob('*') if path.is_file() and path.suffix.lower() in {'.m3u8', '.ts', '.webp'}]
         if not assets or not (output / 'master.m3u8').is_file():
             raise ApiError('OUTPUT_ASSETS_EMPTY')
-        manifest = []
-        for index, path in enumerate(sorted(assets)):
-            relative = path.relative_to(output).as_posix()
-            receipt = client.upload(lease['outputUrl'], lease['token'], job_id, relative, path)
-            item = {'path': relative, 'size': int(receipt['size']), 'sha256': str(receipt['sha256'])}
-            manifest.append(item)
-            if run_id(lease):
-                client.call('worker-output-receipt-v2', jobId=job_id, token=lease['token'],
-                            runId=run_id(lease), path=relative, size=item['size'],
-                            sha256=item['sha256'], etag=str(receipt['etag']))
-            progress = 96 + int(3 * (index + 1) / len(assets))
-            report_progress(client, lease, 'LOCAL_UPLOAD', min(99, progress),
-                            f'正在上传成品 {index + 1}/{len(assets)}',
-                            {'substage': relative, 'current': index + 1, 'total': len(assets), 'unit': 'files'})
+        manifest = upload_assets(client, lease, output, assets)
         final = rewrite_result(result_job['result'], job_id)
         if run_id(lease):
             client.call('worker-complete-v2', jobId=job_id, token=lease['token'], runId=run_id(lease),
