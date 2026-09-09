@@ -210,7 +210,7 @@ function setAuthMessage(text,kind='error'){const message=$('#signinMessage');if(
 function loadStudentRemember(){const password=$('#rememberPassword');try{localStorage.removeItem('eastudy:student:remember-account');localStorage.removeItem('eastudy:student:remember-phone')}catch(_){}if(password)password.checked=window.EastudyAuth?.getRememberLogin?.()!==false}
 function saveStudentRemember(){const password=$('#rememberPassword');window.EastudyAuth?.setRememberLogin?.(password?.checked!==false)}
 function passwordStatusText(profile){if(profile?.has_password===true)return'已设置，可随时更新';if(profile?.has_password===false)return'尚未设置，可继续使用验证码登录';return'可设置或更新登录密码'}
-function isStudentProfile(profile){return window.EastudyAuth?.isLearnerProfile?.(profile)??['learner','student'].includes(String(profile?.role||'').toLowerCase())}
+function isStudentProfile(profile){return window.EastudyAuth?.isLearnerProfile?.(profile)??['learner','student','admin'].includes(String(profile?.role||'').toLowerCase())}
 function syncPasswordStatus(){const target=$('#accountPasswordStatus');if(target)target.textContent=passwordStatusText(StudentAuth.context?.profile)}
 function syncSessionUI(){const active=Boolean(StudentAuth.context?.user&&isStudentProfile(StudentAuth.context?.profile));document.body.classList.toggle('session-signed-out',!active);document.getElementById('signinBackdrop')?.classList.toggle('show',!active);return active}
 function togglePasswordForm(force){const form=$('#accountPasswordForm'),button=$('#accountPasswordToggle');if(!form)return;const open=typeof force==='boolean'?force:form.hidden;form.hidden=!open;if(button)button.textContent=open?'收起':'设置密码';if(open)requestAnimationFrame(()=>$('#accountNewPassword')?.focus())}

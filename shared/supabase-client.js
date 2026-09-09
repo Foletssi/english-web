@@ -61,7 +61,7 @@
   }
 
   function isLearnerProfile(profile) {
-    return ['learner', 'student'].includes(String(profile?.role || '').toLowerCase());
+    return ['learner', 'student', 'admin'].includes(String(profile?.role || '').toLowerCase());
   }
 
   async function getContext(scope) {

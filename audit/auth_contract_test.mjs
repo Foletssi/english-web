@@ -36,7 +36,7 @@ const auth = window.EastudyAuth;
 assert.equal(auth.cleanPhone('138 0013 8000'), '+8613800138000');
 assert.equal(auth.isLearnerProfile({ role: 'learner' }), true);
 assert.equal(auth.isLearnerProfile({ role: 'student' }), true);
-assert.equal(auth.isLearnerProfile({ role: 'admin' }), false);
+assert.equal(auth.isLearnerProfile({ role: 'admin' }), true);
 
 await auth.sendPhoneOtp({ phone: '13800138000', displayName: '测试学员', shouldCreateUser: true }, 'student');
 assert.deepEqual(JSON.parse(JSON.stringify(calls[0])), ['send', {
