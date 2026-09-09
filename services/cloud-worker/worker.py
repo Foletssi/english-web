@@ -303,14 +303,35 @@ def download(url, target, progress=None):
         raise ApiError('SOURCE_DOWNLOAD_EMPTY')
 
 
-def rewrite_result(result, job_id):
+def selected_assets(output, result):
+    output = Path(output)
+    paths = [output / 'master.m3u8', output / 'cover.webp']
+    variants = result.get('video', {}).get('playback', {}).get('variants', [])
+    for row in variants:
+        relative = str(row.get('path') or '')
+        if not re.fullmatch(r'[0-9]{3,4}p/index\.m3u8', relative):
+            raise ApiError('OUTPUT_VARIANT_PATH_INVALID')
+        folder = (output / relative).parent
+        paths.extend(path for path in folder.iterdir()
+                     if path.is_file() and path.suffix.lower() in {'.m3u8', '.ts'})
+    assets = sorted(set(paths))
+    if any(not path.is_file() or path.stat().st_size <= 0 for path in assets):
+        raise ApiError('OUTPUT_ASSETS_EMPTY')
+    return assets
+
+
+def rewrite_result(result, job_id, source_key):
     base = f'/api/processing/media/{job_id}'
     video = result['video']
     video['cover'] = f'{base}/cover.webp'
     video['mediaUrl'] = f'{base}/master.m3u8'
+    playback = video.get('playback', {})
+    original = dict(playback.get('original') or {})
+    original['url'] = '/api/media?key=' + urllib.parse.quote(source_key, safe='')
+    original.setdefault('label', '1080p 原画')
     video['playback'] = {'masterUrl': video['mediaUrl'], 'variants': [
-        {**row, 'url': f"{base}/{row['path']}"} for row in video.get('playback', {}).get('variants', [])
-    ]}
+        {**row, 'url': f"{base}/{row['path']}"} for row in playback.get('variants', [])
+    ], 'original': original}
     result.setdefault('evidence', {})['storage'] = 'cloudflare-r2'
     result['evidence']['workerVersion'] = VERSION
     return result
@@ -359,11 +380,9 @@ def process_lease(client, lease):
             return
         report_progress(client, lease, 'LOCAL_UPLOAD', 96, '正在把 HLS 与封面上传回 R2')
         output = work / 'output' / job_id
-        assets = [path for path in output.rglob('*') if path.is_file() and path.suffix.lower() in {'.m3u8', '.ts', '.webp'}]
-        if not assets or not (output / 'master.m3u8').is_file():
-            raise ApiError('OUTPUT_ASSETS_EMPTY')
+        assets = selected_assets(output, result_job['result'])
         manifest = upload_assets(client, lease, output, assets)
-        final = rewrite_result(result_job['result'], job_id)
+        final = rewrite_result(result_job['result'], job_id, lease['job']['source_key'])
         if run_id(lease):
             client.call('worker-complete-v2', jobId=job_id, token=lease['token'], runId=run_id(lease),
                         result=final, manifest=manifest)

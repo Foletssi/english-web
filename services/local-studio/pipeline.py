@@ -41,7 +41,7 @@ def process_job(store, job_id, source_path, cover_path, ai_config, media_root,
             save_json_checkpoint(checkpoints / 'probe.json', probe_key, info)
         else:
             progress('probe', 10, '已复用素材检查结果')
-        progress('transcode', 18, '正在生成 480p / 720p / 1080p 自适应清晰度')
+        progress('transcode', 18, '正在生成节省空间的 480p / 720p 自适应清晰度')
         variants = transcode(source_path, output, info, progress=transcode_progress)
         cover = make_cover(source_path, output / 'cover.webp', info['duration'], cover_path)
         progress('asr', 48, '正在提取英语音轨')
@@ -75,7 +75,9 @@ def process_job(store, job_id, source_path, cover_path, ai_config, media_root,
             'cover': public_media(base_url, job_id, 'cover.webp'),
             'mediaUrl': public_media(base_url, job_id, 'master.m3u8'),
             'playback': {'masterUrl': public_media(base_url, job_id, 'master.m3u8'),
-                         'variants': playback_variants},
+                         'variants': playback_variants,
+                         'original': {'label': f"{min(info['width'], info['height'])}p 原画",
+                                      'width': info['width'], 'height': info['height']}},
             'pipelineStatus': 'READY', 'status': 'REVIEW',
         }
         result = {'video': video, 'sentences': learning, 'evidence': {

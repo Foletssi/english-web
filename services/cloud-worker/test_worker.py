@@ -65,10 +65,27 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(worker.content_type('720p/segment_00001.ts'), 'video/mp2t')
 
     def test_result_urls_point_to_cloud_route(self):
-        result = {'video': {'playback': {'variants': [{'path': '720p/index.m3u8'}]}}, 'evidence': {}}
-        value = worker.rewrite_result(result, '00000000-0000-0000-0000-000000000001')
+        result = {'video': {'playback': {'variants': [{'path': '720p/index.m3u8'}],
+                                        'original': {'label': '1080p 原画'}}}, 'evidence': {}}
+        value = worker.rewrite_result(result, '00000000-0000-0000-0000-000000000001',
+                                      'videos/00000000-0000-0000-0000-000000000099/source.mp4')
         self.assertEqual(value['video']['mediaUrl'], '/api/processing/media/00000000-0000-0000-0000-000000000001/master.m3u8')
+        self.assertEqual(value['video']['playback']['original']['url'],
+                         '/api/media?key=videos%2F00000000-0000-0000-0000-000000000099%2Fsource.mp4')
         self.assertEqual(value['evidence']['storage'], 'cloudflare-r2')
+
+    def test_selected_assets_ignore_stale_renditions(self):
+        with tempfile.TemporaryDirectory() as folder:
+            output = Path(folder)
+            for name in ('master.m3u8', 'cover.webp', '720p/index.m3u8',
+                         '720p/segment_00000.ts', '1080p/index.m3u8', '1080p/segment_00000.ts'):
+                path = output / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b'x')
+            result = {'video': {'playback': {'variants': [{'path': '720p/index.m3u8'}]}}}
+            assets = worker.selected_assets(output, result)
+            self.assertEqual([path.relative_to(output).as_posix() for path in assets],
+                             ['720p/index.m3u8', '720p/segment_00000.ts', 'cover.webp', 'master.m3u8'])
 
     def test_empty_download_is_rejected(self):
         with tempfile.TemporaryDirectory() as folder:

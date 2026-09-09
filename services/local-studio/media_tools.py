@@ -116,21 +116,54 @@ def probe(source):
     rotation = next((x.get('rotation', 0) for x in video.get('side_data_list', []) if 'rotation' in x), 0)
     if round(abs(float(rotation))) % 180 == 90:
         width, height = height, width
-    return {'duration': duration, 'width': width, 'height': height}
+    fps = 0.0
+    for value in (video.get('avg_frame_rate'), video.get('r_frame_rate')):
+        try:
+            numerator, denominator = str(value).split('/', 1)
+            fps = float(numerator) / float(denominator)
+        except (TypeError, ValueError, ZeroDivisionError):
+            continue
+        if math.isfinite(fps) and fps > 0:
+            break
+    if not math.isfinite(fps) or fps <= 0:
+        fps = 30.0
+    return {'duration': duration, 'width': width, 'height': height, 'fps': fps}
 
 
-def ladder(width, height):
+def ladder(width, height, source_fps=30):
     short = min(width, height)
-    values = [(size, rate) for size, rate in ((480, 900), (720, 1800), (1080, 3500)) if size <= short]
+    # The uploaded source remains available as the original-quality rendition.
+    # Re-encoding the same 1080p input at a fixed 3.5 Mbps only duplicates it
+    # (and can make it larger), so HLS is reserved for network fallback levels.
+    # FormatFactory's space-saving profile also caps 480p at 24 fps. Keep H.264
+    # here for browser-wide HLS support instead of copying its HEVC-only output.
+    profiles = ((480, 900, 24, 64), (720, 1800, 30, 96))
+    values = [(size, rate, fps, audio) for size, rate, fps, audio in profiles if size <= short]
     if not values:
-        values = [(max(2, short // 2 * 2), 600)]
-    return [{'label': f'{size}p', 'size': size, 'rateK': rate} for size, rate in values]
+        values = [(max(2, short // 2 * 2), 600, 24, 64)]
+    try:
+        source_fps = float(source_fps)
+    except (TypeError, ValueError):
+        source_fps = 30.0
+    if not math.isfinite(source_fps) or source_fps <= 0:
+        source_fps = 30.0
+    return [{'label': f'{size}p', 'size': size, 'rateK': rate, 'crf': 23,
+             'fps': min(source_fps, fps), 'audioRateK': audio}
+            for size, rate, fps, audio in values]
 
 
-def _valid_hls(folder):
+def _profile_signature(level):
+    fps = f"{level['fps']:.3f}".rstrip('0').rstrip('.')
+    return (f"web-h264-crf{level['crf']}-{level['label']}-{fps}fps-"
+            f"a{level['audioRateK']}-v1")
+
+
+def _valid_hls(folder, expected_profile=None):
     playlist = Path(folder) / 'index.m3u8'
     try:
         text = playlist.read_text(encoding='utf-8')
+        if expected_profile and f'#EASTUDY-PROFILE:{expected_profile}' not in text:
+            return None
         names = [line.strip() for line in text.splitlines() if line.strip() and not line.startswith('#')]
         if '#EXT-X-ENDLIST' not in text or not names or any('/' in name or '\\' in name for name in names):
             return None
@@ -150,22 +183,26 @@ def transcode(source, output, info, progress=None):
     vertical = info['height'] > info['width']
     master = ['#EXTM3U', '#EXT-X-VERSION:3', '#EXT-X-INDEPENDENT-SEGMENTS']
     variants = []
-    levels = ladder(info['width'], info['height'])
+    levels = ladder(info['width'], info['height'], info.get('fps', 30))
     for level_index, level in enumerate(levels):
         folder = output / level['label']
         scale = f"{level['size']}:-2" if vertical else f"-2:{level['size']}"
         rate = level['rateK']
-        video = _valid_hls(folder)
+        audio_rate = level['audioRateK']
+        fps = f"{level['fps']:.3f}".rstrip('0').rstrip('.')
+        gop = max(1, round(level['fps'] * 4))
+        profile_signature = _profile_signature(level)
+        video = _valid_hls(folder, profile_signature)
         if video is None:
             partial = output / f".{level['label']}.{uuid.uuid4().hex}.partial"
             partial.mkdir()
             try:
                 run_progress(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-nostdin', '-y', '-i', str(source),
-             '-map', '0:v:0', '-map', '0:a:0', '-sn', '-dn', '-vf', f'scale={scale}:flags=lanczos,setsar=1,fps=30',
+             '-map', '0:v:0', '-map', '0:a:0', '-sn', '-dn', '-vf', f'scale={scale}:flags=lanczos,setsar=1,fps={fps}',
              '-c:v', 'libx264', '-profile:v', 'high', '-pix_fmt', 'yuv420p', '-preset', 'veryfast',
-             '-b:v', f'{rate}k', '-maxrate', f'{int(rate * 1.2)}k', '-bufsize', f'{rate * 2}k',
-             '-g', '120', '-keyint_min', '120', '-sc_threshold', '0', '-force_key_frames', 'expr:gte(t,n_forced*4)',
-             '-c:a', 'aac', '-b:a', '96k', '-ar', '48000', '-ac', '2', '-f', 'hls', '-hls_time', '4',
+             '-crf', str(level['crf']), '-maxrate', f'{rate}k', '-bufsize', f'{rate * 2}k',
+             '-g', str(gop), '-keyint_min', str(gop), '-sc_threshold', '0', '-force_key_frames', 'expr:gte(t,n_forced*4)',
+             '-c:a', 'aac', '-b:a', f'{audio_rate}k', '-ar', '44100', '-ac', '2', '-f', 'hls', '-hls_time', '4',
              '-hls_playlist_type', 'vod', '-hls_flags', 'independent_segments', '-hls_list_size', '0',
              '-hls_segment_filename', str(partial / 'segment_%05d.ts'), str(partial / 'index.m3u8')],
              info['duration'], lambda current, total: progress and progress(
@@ -173,6 +210,13 @@ def transcode(source, output, info, progress=None):
                 video = _valid_hls(partial)
                 if not video:
                     raise StudioError('HLS_OUTPUT_INVALID', f"{level['label']} 转码产物无法解码。")
+                playlist = partial / 'index.m3u8'
+                text = playlist.read_text(encoding='utf-8')
+                text = text.replace('#EXTM3U\n', f'#EXTM3U\n#EASTUDY-PROFILE:{profile_signature}\n', 1)
+                playlist.write_text(text, encoding='utf-8')
+                video = _valid_hls(partial, profile_signature)
+                if not video:
+                    raise StudioError('HLS_OUTPUT_INVALID', f"{level['label']} 转码配置校验失败。")
                 if folder.exists():
                     shutil.rmtree(folder)
                 os.replace(partial, folder)
@@ -184,11 +228,12 @@ def transcode(source, output, info, progress=None):
         if not video:
             raise StudioError('HLS_OUTPUT_INVALID', f"{level['label']} 无法解码。")
         width, height = int(video['width']), int(video['height'])
-        bandwidth = (rate + 96) * 1000
-        master.extend([f'#EXT-X-STREAM-INF:BANDWIDTH={bandwidth},RESOLUTION={width}x{height}',
+        bandwidth = (rate + audio_rate) * 1000
+        master.extend([f'#EXT-X-STREAM-INF:BANDWIDTH={bandwidth},RESOLUTION={width}x{height},FRAME-RATE={level["fps"]:.3f}',
                        f"{level['label']}/index.m3u8"])
         variants.append({'label': level['label'], 'path': f"{level['label']}/index.m3u8",
-                         'width': width, 'height': height, 'bandwidth': bandwidth})
+                         'width': width, 'height': height, 'bandwidth': bandwidth,
+                         'frameRate': round(level['fps'], 3)})
     (output / 'master.m3u8').write_text('\n'.join(master) + '\n', encoding='utf-8')
     return variants
 

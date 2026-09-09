@@ -37,6 +37,7 @@ class PipelineTests(unittest.TestCase):
         result = process_job(self.store, self.job['id'], self.root / 'source.mp4', None,
                              {}, self.root / 'media')
         self.assertEqual(result['status'], 'REVIEW')
+        self.assertEqual(result['result']['video']['playback']['original']['label'], '1080p 原画')
         self.assertEqual(result['result']['evidence']['subtitleCount'], 1)
         self.assertEqual(result['result']['evidence']['aiRequestCount'], 1)
         self.assertTrue(result['result']['evidence']['humanReviewRequired'])
