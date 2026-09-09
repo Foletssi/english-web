@@ -55,5 +55,7 @@ const encoded = timelineContext.wordTimelineValue({ wordTimings: original });
 const decoded = timelineContext.parseWordTimeline(encoded);
 assert.deepEqual(JSON.parse(JSON.stringify(decoded)), original, 'punctuation and Whisper precision must survive a round trip');
 assert.throws(() => timelineContext.parseWordTimeline('No,@16.98-17.22'), /JSON/, 'legacy comma parsing must not silently corrupt words');
+assert.ok(adminSource.includes("else location.hash='#/analytics'"), 'audit actions must open a persistent result view');
+assert.ok(adminSource.includes('failed?6000:2600'), 'failed operations must stay visible and remain replaceable');
 
-console.log(JSON.stringify({ ok: true, tests: 8 }, null, 2));
+console.log(JSON.stringify({ ok: true, tests: 10 }, null, 2));
