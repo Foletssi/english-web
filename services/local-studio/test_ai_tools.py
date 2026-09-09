@@ -1,7 +1,7 @@
 import io
 import json
 import unittest
-from ai_tools import call_json, endpoint
+from ai_tools import asr_profile, call_json, endpoint, prepare_asr_model
 from contracts import StudioError
 
 
@@ -17,6 +17,26 @@ class FakeResponse:
 
 
 class AiTools(unittest.TestCase):
+    def test_asr_defaults_to_cached_multilingual_small(self):
+        profile = asr_profile()
+        self.assertEqual(profile['model'], 'small')
+        self.assertTrue(profile['localFilesOnly'])
+
+    def test_model_preflight_is_offline_and_consumes_inference(self):
+        calls = []
+        class FakeModel:
+            def transcribe(self, *_args, **kwargs):
+                calls.append(('transcribe', kwargs))
+                return iter(()), object()
+        def factory(source, **kwargs):
+            calls.append(('factory', source, kwargs))
+            return FakeModel()
+        model, profile = prepare_asr_model('fixture', verify_inference=True, model_factory=factory)
+        self.assertIsInstance(model, FakeModel)
+        self.assertEqual(profile['model'], 'fixture')
+        self.assertTrue(calls[0][2]['local_files_only'])
+        self.assertEqual(calls[1][1]['language'], 'en')
+
     def test_endpoint(self):
         self.assertEqual(endpoint('https://api.deepseek.com'), 'https://api.deepseek.com/chat/completions')
 

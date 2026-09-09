@@ -3,6 +3,7 @@ import os
 import ssl
 import urllib.error
 import urllib.request
+from pathlib import Path
 from urllib.parse import urlparse
 from contracts import StudioError, strict_json, validate_learning, validate_metadata, validate_transcript
 
@@ -19,22 +20,54 @@ GOALS = {'general': '综合英语提升', 'k12': '中考/高考', 'cet4': '大�
 _models = {}
 
 
-def transcribe(audio_path, video_id, duration, model_name='small.en', progress=None):
+def asr_profile(model_name=None):
+    device = os.getenv('EASTUDY_ASR_DEVICE', 'cpu').strip() or 'cpu'
+    compute = os.getenv('EASTUDY_ASR_COMPUTE', 'int8' if device == 'cpu' else 'float16').strip()
+    configured = str(model_name or os.getenv('EASTUDY_ASR_MODEL', 'small')).strip() or 'small'
+    model_dir = os.getenv('EASTUDY_ASR_MODEL_DIR', '').strip()
+    source = str(Path(model_dir).expanduser().resolve()) if model_dir else configured
+    return {'model': configured, 'source': source, 'device': device, 'computeType': compute,
+            'language': 'en', 'localFilesOnly': True}
+
+
+def prepare_asr_model(model_name=None, verify_inference=False, model_factory=None):
     try:
-        from faster_whisper import WhisperModel
+        if model_factory is None:
+            from faster_whisper import WhisperModel
+            model_factory = WhisperModel
     except ImportError as error:
         raise StudioError('ASR_NOT_INSTALLED', '本地没有安装 faster-whisper。') from error
-    progress = progress or (lambda *_: None)
-    device = os.getenv('EASTUDY_ASR_DEVICE', 'cpu')
-    compute = os.getenv('EASTUDY_ASR_COMPUTE', 'int8' if device == 'cpu' else 'float16')
-    key = (model_name, device, compute)
-    progress('asr', 55, '正在加载英文语音识别模型')
+    profile = asr_profile(model_name)
+    key = (profile['source'], profile['device'], profile['computeType'])
     try:
-        model = _models.get(key) or WhisperModel(model_name, device=device, compute_type=compute)
-        _models[key] = model
-        segments, _ = model.transcribe(str(audio_path), language='en', vad_filter=True,
-                                       word_timestamps=True, beam_size=5)
+        model = _models.get(key)
+        if model is None:
+            model = model_factory(profile['source'], device=profile['device'],
+                                  compute_type=profile['computeType'], local_files_only=True)
+            _models[key] = model
+        if verify_inference:
+            import numpy as np
+            segments, _ = model.transcribe(np.zeros(16000, dtype=np.float32), language='en',
+                                           vad_filter=False, beam_size=1)
+            list(segments)
+        return model, profile
+    except StudioError:
+        raise
+    except Exception as error:
+        raise StudioError('ASR_MODEL_NOT_READY',
+                          f"语音模型 {profile['model']} 尚未准备完成：{error}", True) from error
+
+
+def transcribe(audio_path, video_id, duration, model_name=None, progress=None, model=None):
+    progress = progress or (lambda *_: None)
+    profile = asr_profile(model_name)
+    progress('asr', 55, f"正在加载英文语音识别模型 {profile['model']}")
+    try:
+        model = model or prepare_asr_model(model_name)[0]
+        segments, info = model.transcribe(str(audio_path), language='en', vad_filter=True,
+                                          word_timestamps=True, beam_size=5)
         rows = []
+        audio_duration = float(getattr(info, 'duration', 0) or duration)
         for index, segment in enumerate(segments):
             english = segment.text.strip()
             if not english:
@@ -45,7 +78,9 @@ def transcribe(audio_path, video_id, duration, model_name='small.en', progress=N
             rows.append({'id': f'{video_id}-{index + 1}', 'order': index,
                          'startTime': float(segment.start), 'endTime': float(segment.end),
                          'english': english, 'wordTimings': words, 'timingSource': 'faster-whisper'})
-            progress('asr', min(69, 55 + len(rows)), f'已识别 {len(rows)} 句英文')
+            ratio = min(1, max(0, float(segment.end) / max(audio_duration, .001)))
+            progress('asr', min(69, 55 + round(14 * ratio)),
+                     f'已识别至 {float(segment.end):.0f}/{audio_duration:.0f} 秒，共 {len(rows)} 句英文')
     except StudioError:
         raise
     except Exception as error:

@@ -19,6 +19,7 @@ LOCAL_STUDIO = ROOT / 'services' / 'local-studio'
 sys.path.insert(0, str(LOCAL_STUDIO))
 
 from pipeline import process_job  # noqa: E402
+from ai_tools import prepare_asr_model  # noqa: E402
 
 
 VERSION = '1.0.0'
@@ -110,14 +111,17 @@ def content_type(path):
 
 def capabilities():
     try:
-        import faster_whisper  # noqa: F401
+        _, profile = prepare_asr_model(verify_inference=True)
         whisper = True
-    except ImportError:
+        whisper_detail = {**profile, 'inferenceReady': True}
+    except Exception as error:
         whisper = False
+        whisper_detail = {'inferenceReady': False, 'error': str(error)[:240]}
     deepseek = all(os.getenv(name, '').strip() for name in
                    ('ZOSPEAK_AI_API_KEY', 'ZOSPEAK_AI_BASE_URL', 'ZOSPEAK_AI_MODEL'))
     return {'ffmpeg': bool(shutil.which('ffmpeg') and shutil.which('ffprobe')),
-            'whisper': whisper, 'deepseek': bool(deepseek), 'platform': platform.system().lower()}
+            'whisper': whisper, 'asr': whisper_detail,
+            'deepseek': bool(deepseek), 'platform': platform.system().lower()}
 
 
 def configure_ai_environment():
