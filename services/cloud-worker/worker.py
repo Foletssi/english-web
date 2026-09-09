@@ -6,7 +6,6 @@ import re
 import shutil
 import socket
 import sys
-import tempfile
 import threading
 import time
 import urllib.error
@@ -20,6 +19,7 @@ sys.path.insert(0, str(LOCAL_STUDIO))
 
 from pipeline import process_job  # noqa: E402
 from ai_tools import prepare_asr_model  # noqa: E402
+from checkpoint import atomic_json  # noqa: E402
 
 
 VERSION = '1.0.0'
@@ -143,15 +143,76 @@ def default_worker_id(hostname=None):
     return 'eastudy-' + host_id[:60]
 
 
-def download(url, target):
-    request = urllib.request.Request(url, headers={'User-Agent': f'EastudyCloudWorker/{VERSION}'})
-    with urllib.request.urlopen(request, timeout=300) as response, Path(target).open('wb') as output:
-        while True:
-            chunk = response.read(1024 * 1024)
-            if not chunk:
-                break
-            output.write(chunk)
-    if not Path(target).is_file() or Path(target).stat().st_size == 0:
+def download_response_mode(status, headers, offset, total, etag):
+    if str(headers.get('ETag') or '') != etag:
+        raise ApiError('SOURCE_VERSION_CHANGED')
+    if status == 206:
+        expected = f'bytes {offset}-{total - 1}/{total}'
+        if headers.get('Content-Range') != expected:
+            raise ApiError('SOURCE_CONTENT_RANGE_MISMATCH')
+        return 'ab', total - offset
+    if status == 200:
+        return 'wb', total
+    raise ApiError(f'SOURCE_HTTP_{status}')
+
+
+def worker_root():
+    configured = os.getenv('EASTUDY_WORK_ROOT', '').strip()
+    base = Path(configured) if configured else Path(os.getenv('LOCALAPPDATA', str(ROOT))) / 'Eastudy' / 'processing-jobs'
+    base.mkdir(parents=True, exist_ok=True)
+    return base.resolve()
+
+
+def download(url, target, progress=None):
+    target = Path(target)
+    partial = target.with_suffix(target.suffix + '.part')
+    sidecar = target.with_suffix(target.suffix + '.source.json')
+    headers = {'User-Agent': f'EastudyCloudWorker/{VERSION}'}
+    head_request = urllib.request.Request(url, method='HEAD', headers=headers)
+    with urllib.request.urlopen(head_request, timeout=90) as response:
+        total = int(response.headers.get('Content-Length') or 0)
+        etag = str(response.headers.get('ETag') or '')
+    if total <= 0 or not etag:
+        raise ApiError('SOURCE_METADATA_INCOMPLETE')
+    expected = {'version': 1, 'etag': etag, 'totalBytes': total}
+    try:
+        saved = json.loads(sidecar.read_text(encoding='utf-8')) if sidecar.is_file() else None
+    except (OSError, ValueError):
+        saved = None
+    if target.is_file() and target.stat().st_size == total and saved == expected:
+        if progress:
+            progress(total, total)
+        return
+    if partial.exists() and (saved != expected or partial.stat().st_size > total):
+        partial.write_bytes(b'')
+    atomic_json(sidecar, expected)
+    offset = partial.stat().st_size if partial.is_file() else 0
+    request_headers = dict(headers)
+    if offset:
+        request_headers.update({'Range': f'bytes={offset}-', 'If-Range': etag})
+    request = urllib.request.Request(url, headers=request_headers)
+    with urllib.request.urlopen(request, timeout=300) as response:
+        mode, expected_bytes = download_response_mode(response.status, response.headers, offset, total, etag)
+        received = 0
+        with partial.open(mode) as output:
+            if mode == 'wb':
+                offset = 0
+            while True:
+                chunk = response.read(1024 * 1024)
+                if not chunk:
+                    break
+                output.write(chunk)
+                received += len(chunk)
+                if progress:
+                    progress(offset + received, total)
+            output.flush()
+            os.fsync(output.fileno())
+        if received != expected_bytes:
+            raise ApiError('SOURCE_DOWNLOAD_TRUNCATED')
+    if partial.stat().st_size != total:
+        raise ApiError('SOURCE_DOWNLOAD_SIZE_MISMATCH')
+    os.replace(partial, target)
+    if not target.is_file() or target.stat().st_size == 0:
         raise ApiError('SOURCE_DOWNLOAD_EMPTY')
 
 
@@ -182,34 +243,47 @@ def process_lease(client, lease):
     thread = threading.Thread(target=heartbeat_loop, args=(client, lease, stop), daemon=True)
     thread.start()
     try:
-        with tempfile.TemporaryDirectory(prefix=f'eastudy-{job_id[:8]}-') as folder:
-            work = Path(folder)
-            source = work / Path(lease['job']['source_key']).name
-            client.call('worker-progress', jobId=job_id, token=lease['token'], stage='LOCAL_DOWNLOAD',
-                        progress=2, message='正在从 R2 下载原片')
-            download(lease['downloadUrl'], source)
-            store = RemoteProgressStore(client, lease)
-            result_job = process_job(store, job_id, source, None, {}, work / 'output', base_url='')
-            if result_job.get('status') != 'REVIEW':
-                error = result_job.get('error') or {'code': 'PIPELINE_FAILED', 'message': result_job.get('message', '处理失败')}
-                client.call('worker-fail', jobId=job_id, token=lease['token'], error=error,
-                            retryable=bool(error.get('retryable', True)))
+        if not re.fullmatch(r'[0-9a-f-]{36}', job_id, re.I):
+            raise ApiError('JOB_ID_INVALID')
+        work = worker_root() / job_id
+        work.mkdir(parents=True, exist_ok=True)
+        if not work.resolve().is_relative_to(worker_root()):
+            raise ApiError('WORK_PATH_INVALID')
+        source = work / Path(lease['job']['source_key']).name
+        client.call('worker-progress', jobId=job_id, token=lease['token'], stage='LOCAL_DOWNLOAD',
+                    progress=2, message='正在从 R2 下载原片')
+        last_reported = [0.0]
+        def report_download(current, total):
+            now = time.monotonic()
+            if current < total and now - last_reported[0] < 5:
                 return
+            last_reported[0] = now
+            percent = min(8, 2 + int(6 * current / max(total, 1)))
+            client.call('worker-progress', jobId=job_id, token=lease['token'], stage='LOCAL_DOWNLOAD',
+                        progress=percent, message=f'正在下载原片 {current}/{total} 字节')
+        download(lease['downloadUrl'], source, report_download)
+        store = RemoteProgressStore(client, lease)
+        result_job = process_job(store, job_id, source, None, {}, work / 'output', base_url='')
+        if result_job.get('status') != 'REVIEW':
+            error = result_job.get('error') or {'code': 'PIPELINE_FAILED', 'message': result_job.get('message', '处理失败')}
+            client.call('worker-fail', jobId=job_id, token=lease['token'], error=error,
+                        retryable=bool(error.get('retryable', True)))
+            return
+        client.call('worker-progress', jobId=job_id, token=lease['token'], stage='LOCAL_UPLOAD',
+                    progress=96, message='正在把 HLS 与封面上传回 R2')
+        output = work / 'output' / job_id
+        assets = [path for path in output.rglob('*') if path.is_file() and path.suffix.lower() in {'.m3u8', '.ts', '.webp'}]
+        if not assets or not (output / 'master.m3u8').is_file():
+            raise ApiError('OUTPUT_ASSETS_EMPTY')
+        for index, path in enumerate(sorted(assets)):
+            relative = path.relative_to(output).as_posix()
+            client.upload(lease['outputUrl'], lease['token'], job_id, relative, path)
+            progress = 96 + int(3 * (index + 1) / len(assets))
             client.call('worker-progress', jobId=job_id, token=lease['token'], stage='LOCAL_UPLOAD',
-                        progress=96, message='正在把 HLS 与封面上传回 R2')
-            output = work / 'output' / job_id
-            assets = [path for path in output.rglob('*') if path.is_file() and path.suffix.lower() in {'.m3u8', '.ts', '.webp'}]
-            if not assets or not (output / 'master.m3u8').is_file():
-                raise ApiError('OUTPUT_ASSETS_EMPTY')
-            for index, path in enumerate(sorted(assets)):
-                relative = path.relative_to(output).as_posix()
-                client.upload(lease['outputUrl'], lease['token'], job_id, relative, path)
-                progress = 96 + int(3 * (index + 1) / len(assets))
-                client.call('worker-progress', jobId=job_id, token=lease['token'], stage='LOCAL_UPLOAD',
-                            progress=min(99, progress), message=f'正在上传成品 {index + 1}/{len(assets)}')
-            final = rewrite_result(result_job['result'], job_id)
-            client.call('worker-complete', jobId=job_id, token=lease['token'], result=final)
-            print(f'[complete] {job_id}', flush=True)
+                        progress=min(99, progress), message=f'正在上传成品 {index + 1}/{len(assets)}')
+        final = rewrite_result(result_job['result'], job_id)
+        client.call('worker-complete', jobId=job_id, token=lease['token'], result=final)
+        print(f'[complete] {job_id}', flush=True)
     except Exception as error:
         print(f'[error] {job_id}: {error}', flush=True)
         try:

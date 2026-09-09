@@ -1,7 +1,10 @@
 import io
 import json
+import tempfile
 import unittest
-from ai_tools import asr_profile, call_json, endpoint, prepare_asr_model
+from pathlib import Path
+from unittest.mock import patch
+from ai_tools import asr_profile, call_json, endpoint, enrich, prepare_asr_model
 from contracts import StudioError
 
 
@@ -53,6 +56,28 @@ class AiTools(unittest.TestCase):
     def test_missing_config(self):
         with self.assertRaisesRegex(StudioError, 'AI_NOT_CONFIGURED'):
             call_json({}, 'x', {})
+
+    def test_enrichment_reuses_validated_batches(self):
+        rows = [{'id': 'v-1', 'english': 'Good morning', 'startTime': 0, 'endTime': 1}]
+        learning = {'sentences': [{'id': 'v-1', 'chinese': '早上好',
+            'keyWords': ['Good morning'], 'grammar': '问候语'}],
+            'batchSummary': {'summary': '日常问候', 'evidenceIds': ['v-1']}}
+        metadata = {'titleZh': '我的清晨日常',
+            'descriptionZh': '跟着视频积累真实自然的清晨问候表达，并练习日常英语听力和口语。',
+            'level': 'A2', 'levelReason': '短句为主', 'topicIds': ['daily'],
+            'goalMappings': [{'goalId': 'daily', 'sentenceIds': ['v-1'], 'reason': '日常表达'}]}
+        config = {'model': 'fixture', 'baseUrl': 'https://api.example.com', 'apiKey': 'secret'}
+        info = {'title': 'Morning', 'creator': 'Alice', 'duration': 10, 'wordsPerMinute': 12}
+        with tempfile.TemporaryDirectory() as folder, \
+                patch('ai_tools.call_json', side_effect=[(learning, {'requestId': 'one'}),
+                                                         (metadata, {'requestId': 'two'})]) as mocked:
+            first = enrich(rows, info, config, cache_dir=Path(folder))
+            self.assertEqual(mocked.call_count, 2)
+            mocked.reset_mock()
+            second = enrich(rows, info, config, cache_dir=Path(folder))
+            self.assertEqual(mocked.call_count, 0)
+            self.assertEqual(first[0], second[0])
+            self.assertTrue(all(item['cacheReused'] for item in second[2]))
 
 
 if __name__ == '__main__':

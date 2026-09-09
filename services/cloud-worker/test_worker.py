@@ -3,6 +3,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 MODULE = Path(__file__).with_name('worker.py')
 SPEC = importlib.util.spec_from_file_location('cloud_worker', MODULE)
@@ -32,6 +33,19 @@ class WorkerTests(unittest.TestCase):
             target = Path(folder) / 'source.mp4'
             target.write_bytes(b'')
             self.assertEqual(target.stat().st_size, 0)
+
+    def test_range_response_must_match_version_and_offset(self):
+        headers = {'ETag': 'v1', 'Content-Range': 'bytes 50-99/100'}
+        self.assertEqual(worker.download_response_mode(206, headers, 50, 100, 'v1'), ('ab', 50))
+        self.assertEqual(worker.download_response_mode(200, {'ETag': 'v1'}, 50, 100, 'v1'), ('wb', 100))
+        with self.assertRaisesRegex(worker.ApiError, 'SOURCE_VERSION_CHANGED'):
+            worker.download_response_mode(206, headers, 50, 100, 'v2')
+        with self.assertRaisesRegex(worker.ApiError, 'SOURCE_CONTENT_RANGE_MISMATCH'):
+            worker.download_response_mode(206, headers, 0, 100, 'v1')
+
+    def test_worker_root_honors_dedicated_directory(self):
+        with tempfile.TemporaryDirectory() as folder, patch.dict('os.environ', {'EASTUDY_WORK_ROOT': folder}):
+            self.assertEqual(worker.worker_root(), Path(folder).resolve())
 
 
 if __name__ == '__main__':

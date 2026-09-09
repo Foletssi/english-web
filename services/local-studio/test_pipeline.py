@@ -40,6 +40,11 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(result['result']['evidence']['subtitleCount'], 1)
         self.assertEqual(result['result']['evidence']['aiRequestCount'], 1)
         self.assertTrue(result['result']['evidence']['humanReviewRequired'])
+        repeated = process_job(self.store, self.job['id'], self.root / 'source.mp4', None,
+                               {}, self.root / 'media')
+        self.assertEqual(repeated['status'], 'REVIEW')
+        self.assertEqual(probe.call_count, 1)
+        self.assertEqual(asr.call_count, 1)
 
     @patch('pipeline.probe', side_effect=StudioError('NO_AUDIO_TRACK', '没有音轨'))
     def test_failure_never_reports_complete(self, _):

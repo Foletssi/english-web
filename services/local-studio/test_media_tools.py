@@ -28,6 +28,11 @@ class MediaTools(unittest.TestCase):
             variants = transcode(sample, root / 'hls', info)
             self.assertTrue((root / 'hls' / 'master.m3u8').exists())
             self.assertEqual([x['label'] for x in variants], ['480p', '720p'])
+            playlist = root / 'hls' / '480p' / 'index.m3u8'
+            modified = playlist.stat().st_mtime_ns
+            repeated = transcode(sample, root / 'hls', info)
+            self.assertEqual([x['label'] for x in repeated], ['480p', '720p'])
+            self.assertEqual(playlist.stat().st_mtime_ns, modified)
 
 
 if __name__ == '__main__':
