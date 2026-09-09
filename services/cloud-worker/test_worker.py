@@ -12,6 +12,11 @@ SPEC.loader.exec_module(worker)
 
 
 class WorkerTests(unittest.TestCase):
+    def test_worker_id_is_ascii_safe_for_non_ascii_hostname(self):
+        value = worker.default_worker_id('学习电脑')
+        self.assertRegex(value, r'^[A-Za-z0-9._-]{3,80}$')
+        self.assertEqual(value, worker.default_worker_id('学习电脑'))
+
     def test_content_types(self):
         self.assertEqual(worker.content_type('720p/index.m3u8'), 'application/vnd.apple.mpegurl')
         self.assertEqual(worker.content_type('720p/segment_00001.ts'), 'video/mp2t')

@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import platform
+import re
 import shutil
 import socket
 import sys
@@ -130,6 +131,14 @@ def configure_ai_environment():
             os.environ[target] = os.environ[source]
 
 
+def default_worker_id(hostname=None):
+    hostname = socket.gethostname() if hostname is None else str(hostname)
+    host_id = re.sub(r'[^a-z0-9._-]+', '-', hostname.lower()).strip('.-_')
+    if len(host_id) < 3:
+        host_id = hostname.encode('utf-8').hex()[:32]
+    return 'eastudy-' + host_id[:60]
+
+
 def download(url, target):
     request = urllib.request.Request(url, headers={'User-Agent': f'EastudyCloudWorker/{VERSION}'})
     with urllib.request.urlopen(request, timeout=300) as response, Path(target).open('wb') as output:
@@ -223,7 +232,7 @@ def main():
     if not secret:
         print('缺少 EASTUDY_WORKER_SECRET；请运行安装脚本或设置用户环境变量。', file=sys.stderr)
         return 2
-    worker_id = os.getenv('EASTUDY_WORKER_ID', '').strip() or ('eastudy-' + socket.gethostname().lower().replace('_', '-')[:60])
+    worker_id = os.getenv('EASTUDY_WORKER_ID', '').strip() or default_worker_id()
     client = EdgeClient(os.getenv('EASTUDY_PROCESSING_ENDPOINT', DEFAULT_ENDPOINT).strip(), secret, worker_id, caps)
     print(f'Eastudy Worker {VERSION} started: {worker_id} {caps}', flush=True)
     while True:
