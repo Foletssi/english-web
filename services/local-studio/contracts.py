@@ -55,20 +55,40 @@ def validate_learning(source, payload):
         chinese = str(row.get('chinese', '')).strip()
         grammar = str(row.get('grammar', '')).strip()
         key_words = row.get('keyWords', [])
+        expressions = row.get('expressions', [])
         if not chinese or not isinstance(key_words, list) or len(key_words) > 5:
             raise StudioError('AI_SENTENCE_SCHEMA', 'AI 字幕翻译或重点表达格式错误。', True)
+        if not isinstance(expressions, list) or len(expressions) != len(key_words):
+            raise StudioError('AI_EXPRESSION_COUNT', 'AI 重点表达与释义数量不一致。', True)
         english = ' ' + normalize_words(original['english']) + ' '
         for phrase in key_words:
             normalized = normalize_words(phrase)
             if not normalized or (' ' + normalized + ' ') not in english:
                 raise StudioError('AI_PHRASE_NOT_FOUND', 'AI 重点表达不在英文原句中。', True)
+        by_surface = {}
+        for expression in expressions:
+            if not isinstance(expression, dict):
+                raise StudioError('AI_EXPRESSION_SCHEMA', 'AI 重点表达释义格式错误。', True)
+            surface = normalize_words(expression.get('surface', ''))
+            if surface in by_surface or surface not in {normalize_words(x) for x in key_words}:
+                raise StudioError('AI_EXPRESSION_SURFACE', 'AI 重点表达释义与重点词不一致。', True)
+            core = str(expression.get('coreMeaningZh', '')).strip()
+            context = str(expression.get('contextMeaningZh', '')).strip()
+            usage = str(expression.get('usageNoteZh', '')).strip()
+            if not core or not context or len(core) > 300 or len(context) > 500 or len(usage) > 500:
+                raise StudioError('AI_EXPRESSION_MEANING', 'AI 重点表达释义为空或过长。', True)
+            by_surface[surface] = {**expression, 'surface': str(expression['surface']).strip(),
+                                   'coreMeaningZh': core, 'contextMeaningZh': context,
+                                   'usageNoteZh': usage, 'reviewStatus': 'REVIEW', 'source': 'ai'}
         merged.append({**original, 'chinese': chinese, 'grammar': grammar,
-                       'keyWords': key_words, 'reviewStatus': 'REVIEW',
+                       'keyWords': key_words,
+                       'expressions': [by_surface[normalize_words(x)] for x in key_words],
+                       'reviewStatus': 'REVIEW',
                        'learningAnalysis': {'method': 'server-ai', 'requiresReview': True}})
     return merged
 
 
-def validate_metadata(payload, topic_ids, goal_ids, sentence_ids):
+def validate_metadata(payload, topic_ids, goal_ids, sentence_ids, tag_ids=None):
     if not isinstance(payload, dict):
         raise StudioError('AI_METADATA_SCHEMA', 'AI 元数据不是 JSON 对象。', True)
     title = str(payload.get('titleZh', '')).strip()
@@ -76,6 +96,7 @@ def validate_metadata(payload, topic_ids, goal_ids, sentence_ids):
     level = payload.get('level')
     topics = payload.get('topicIds', [])
     goals = payload.get('goalMappings', [])
+    tags = payload.get('tags', [])
     if not 4 <= len(title) <= 40 or not 20 <= len(description) <= 180:
         raise StudioError('AI_COPY_INVALID', 'AI 中文标题或简介长度异常。', True)
     if level not in {'A1', 'A2', 'B1', 'B2', 'C1', 'C2'}:
@@ -84,6 +105,21 @@ def validate_metadata(payload, topic_ids, goal_ids, sentence_ids):
         raise StudioError('AI_TOPIC_INVALID', 'AI 返回了未知分类。', True)
     if not isinstance(goals, list):
         raise StudioError('AI_GOAL_INVALID', 'AI 学习目标格式错误。', True)
+    if tag_ids is not None:
+        if not isinstance(tags, list) or not 3 <= len(tags) <= 8:
+            raise StudioError('AI_TAG_COUNT', 'AI 标签必须有3到8个。', True)
+        seen_tags = set()
+        for tag in tags:
+            evidence = tag.get('sentenceIds', []) if isinstance(tag, dict) else []
+            tag_id = tag.get('tagId') if isinstance(tag, dict) else None
+            if tag_id not in tag_ids or tag_id in seen_tags or not evidence or any(x not in sentence_ids for x in evidence):
+                raise StudioError('AI_TAG_EVIDENCE', 'AI 标签未知、重复或缺少字幕证据。', True)
+            reason = str(tag.get('reasonZh', '')).strip()
+            if not reason:
+                raise StudioError('AI_TAG_REASON', 'AI 标签缺少理由。', True)
+            seen_tags.add(tag_id)
+            tag['reviewStatus'] = 'REVIEW'
+            tag['source'] = 'ai'
     for goal in goals:
         evidence = goal.get('sentenceIds', []) if isinstance(goal, dict) else []
         if goal.get('goalId') not in goal_ids or not evidence or any(x not in sentence_ids for x in evidence):
@@ -92,7 +128,8 @@ def validate_metadata(payload, topic_ids, goal_ids, sentence_ids):
         goal['status'] = 'REVIEW'
     return {'titleZh': title, 'descriptionZh': description, 'level': level,
             'levelReason': str(payload.get('levelReason', '')).strip(),
-            'topicIds': topics, 'goalMappings': goals}
+            'topicIds': topics, 'tagIds': [x['tagId'] for x in tags],
+            'tagAssignments': tags, 'goalMappings': goals}
 
 
 def strict_json(text):

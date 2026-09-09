@@ -155,23 +155,51 @@
     if (api) await api.auth.signOut();
   }
 
-  async function upsertProgress(input) {
+  function learningSession() {
+    const idKey = 'eastudy.learning.session.v2';
+    const seqKey = 'eastudy.learning.sequence.v2';
+    let id = sessionStorage.getItem(idKey);
+    if (!id) {
+      id = globalThis.crypto?.randomUUID?.() || '00000000-0000-4000-8000-' + String(Date.now()).padStart(12, '0').slice(-12);
+      sessionStorage.setItem(idKey, id);
+      sessionStorage.setItem(seqKey, '0');
+    }
+    const sequence = Math.max(0, Number(sessionStorage.getItem(seqKey)) || 0) + 1;
+    sessionStorage.setItem(seqKey, String(sequence));
+    return { id, sequence };
+  }
+
+  async function applyStudySync(input, activeSeconds, activityStartedAt, activityEndedAt) {
     const api = client('student');
     const context = await getContext('student');
-    if (!api || !context.user || !isLearnerProfile(context.profile)) return { error: null };
-    const now = new Date().toISOString();
-    const row = {
-      user_id: context.user.id,
-      video_id: Number(input.videoId),
-      position_seconds: Math.max(0, Number(input.position) || 0),
-      duration_seconds: Math.max(0, Math.round(Number(input.duration) || 0)),
-      completion_percent: Math.max(0, Math.min(100, Number(input.progressPercent) || 0)),
-      watch_coverage_percent: Math.max(0, Math.min(100, Number(input.watchCoveragePercent) || 0)),
-      watch_ranges: Array.isArray(input.watchRanges) ? input.watchRanges.slice(-500) : [],
-      last_watched_at: now,
-      completed_at: input.completed ? now : null
-    };
-    return api.from('user_progress').upsert(row, { onConflict: 'user_id,video_id' });
+    const duration = Math.max(0, Number(input?.duration) || 0);
+    if (!api || !context.user || !isLearnerProfile(context.profile) || !duration) return { error: null };
+    const session = learningSession();
+    return api.rpc('apply_study_event_v2', {
+      p_session_id: session.id,
+      p_sequence_no: session.sequence,
+      p_video_id: Number(input.videoId),
+      p_media_version: String(input.mediaVersion || 'published-v1'),
+      p_position_seconds: Math.max(0, Math.min(duration, Number(input.position) || 0)),
+      p_duration_seconds: duration,
+      p_watch_ranges: Array.isArray(input.watchRanges) ? input.watchRanges.slice(-500) : [],
+      p_active_seconds: Math.max(0, Math.min(60, Math.round(Number(activeSeconds) || 0))),
+      p_activity_started_at: activityStartedAt || null,
+      p_activity_ended_at: activityEndedAt || null,
+      p_client_recorded_at: new Date().toISOString()
+    });
+  }
+
+  async function upsertProgress(input) {
+    return applyStudySync(input, 0, null, null);
+  }
+
+  async function recordStudyActivity(input) {
+    const seconds = Math.max(0, Math.min(60, Number(input?.activeSeconds) || 0));
+    if (!seconds) return { error: null };
+    const endedAt = input.activityEndedAt || new Date().toISOString();
+    const startedAt = input.activityStartedAt || new Date(Date.parse(endedAt) - seconds * 1000).toISOString();
+    return applyStudySync(input, seconds, startedAt, endedAt);
   }
 
   async function setFavorite(input) {
@@ -179,7 +207,7 @@
     const context = await getContext('student');
     if (!api || !context.user || !isLearnerProfile(context.profile)) return { error: null };
     return input.active
-      ? api.from('saved_sentences').upsert({ user_id: context.user.id, video_id: Number(input.videoId), sentence_index: Number(input.sentenceIndex), english: input.english || '', chinese: input.chinese || '' }, { onConflict: 'user_id,video_id,sentence_index' })
+      ? api.from('saved_sentences').upsert({ user_id: context.user.id, video_id: Number(input.videoId), sentence_index: Number(input.sentenceIndex), sentence_id: String(input.sentenceId || ''), content_version: String(input.contentVersion || 'published-v1'), english: input.english || '', chinese: input.chinese || '' }, { onConflict: 'user_id,video_id,sentence_index' })
       : api.from('saved_sentences').delete().eq('user_id', context.user.id).eq('video_id', Number(input.videoId)).eq('sentence_index', Number(input.sentenceIndex));
   }
 
@@ -201,7 +229,10 @@
       correct_streak: Number(input.correctStreak) || 0,
       added_at: input.addedAt || new Date().toISOString(),
       last_reviewed_at: input.lastReviewedAt || null,
-      next_review_at: input.nextReviewAt || null
+      next_review_at: input.nextReviewAt || null,
+      source_video_id: input.sourceVideoId ? Number(input.sourceVideoId) : null,
+      source_sentence_id: input.sourceSentenceId ? String(input.sourceSentenceId) : null,
+      content_version: String(input.contentVersion || 'published-v1')
     }, { onConflict: 'user_id,word_key' });
   }
 
@@ -215,6 +246,24 @@
       video_id: input?.videoId ? Number(input.videoId) : null,
       payload: input?.payload || {}
     });
+  }
+
+  async function setCreatorFollow(creatorId, active) {
+    const api = client('student'), context = await getContext('student');
+    if (!api || !context.user || !isLearnerProfile(context.profile)) return { error: null };
+    return api.from('user_creator_follows').upsert({ user_id: context.user.id, creator_id: String(creatorId), active: Boolean(active), updated_at: new Date().toISOString() }, { onConflict: 'user_id,creator_id' });
+  }
+
+  async function setCollectionSave(collectionId, active) {
+    const api = client('student'), context = await getContext('student');
+    if (!api || !context.user || !isLearnerProfile(context.profile)) return { error: null };
+    return api.from('user_collection_saves').upsert({ user_id: context.user.id, collection_id: String(collectionId), active: Boolean(active), updated_at: new Date().toISOString() }, { onConflict: 'user_id,collection_id' });
+  }
+
+  async function saveLearningPreferences(settings) {
+    const api = client('student'), context = await getContext('student');
+    if (!api || !context.user || !isLearnerProfile(context.profile)) return { error: null };
+    return api.from('user_learning_preferences').upsert({ user_id: context.user.id, settings: settings || {}, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
   }
 
   function setLocal(userId, key, value) {
@@ -283,11 +332,15 @@
     const api = client('student');
     const context = await getContext('student');
     if (!api || !context.user || !isLearnerProfile(context.profile)) return context;
-    const [progress, favorites, vocabulary, learningGoal] = await Promise.all([
+    const [progress, favorites, vocabulary, learningGoal, daily, follows, collectionSaves, preferences] = await Promise.all([
       api.from('user_progress').select('*').order('last_watched_at', { ascending: false }),
       api.from('saved_sentences').select('*'),
       api.from('user_vocabulary').select('*'),
-      api.from('learner_goal_profiles').select('*').eq('user_id', context.user.id).maybeSingle()
+      api.from('learner_goal_profiles').select('*').eq('user_id', context.user.id).maybeSingle(),
+      api.from('daily_learning_stats').select('study_date,learning_seconds').order('study_date', { ascending: true }).limit(366),
+      api.from('user_creator_follows').select('creator_id,active'),
+      api.from('user_collection_saves').select('collection_id,active'),
+      api.from('user_learning_preferences').select('settings').eq('user_id', context.user.id).maybeSingle()
     ]);
     if (!progress.error) {
       (progress.data || []).forEach(row => {
@@ -307,6 +360,7 @@
     }
     if (!vocabulary.error && vocabulary.data) {
       const meta = {};
+      const details = {};
       vocabulary.data.forEach(row => {
         meta[row.word_key] = {
           state: row.state,
@@ -314,16 +368,28 @@
           lastReviewedAt: row.last_reviewed_at ? Date.parse(row.last_reviewed_at) : null,
           nextReviewAt: row.next_review_at ? Date.parse(row.next_review_at) : null,
           correctStreak: row.correct_streak || 0,
-          sourceVideoId: null
+          sourceVideoId: row.source_video_id || null,
+          sourceSentenceId: row.source_sentence_id || null
         };
+        details[row.word_key] = { phon: row.phonetic || '', meaning: row.meaning || '', context: row.context || '', sourceVideoId: row.source_video_id || null, sourceSentenceId: row.source_sentence_id || null };
       });
       setLocal(context.user.id, 'vocabMeta', meta);
+      setLocal(context.user.id, 'vocabDetails', details);
       setLocal(context.user.id, 'vocab', (vocabulary.data || []).map(row => row.word));
       setLocal(context.user.id, 'vocabRemoved', []);
     }
     if (!learningGoal.error && learningGoal.data) {
       setLocal(context.user.id, 'learningPlan', normalizeLearningGoalProfile(learningGoal.data));
     }
+    if (!daily.error) {
+      const sessions = {};
+      (daily.data || []).forEach(row => { sessions[row.study_date] = Math.max(0, Number(row.learning_seconds) || 0); });
+      setLocal(context.user.id, 'studySessions', sessions);
+    }
+    if (!follows.error) (follows.data || []).forEach(row => setLocal(context.user.id, 'follow:' + row.creator_id, Boolean(row.active)));
+    if (!collectionSaves.error) (collectionSaves.data || []).forEach(row => setLocal(context.user.id, 'collectionSaved:' + row.collection_id, Boolean(row.active)));
+    if (!preferences.error && preferences.data?.settings) setLocal(context.user.id, 'settings', preferences.data.settings);
+    window.dispatchEvent(new CustomEvent('eastudy:learning-hydrated', { detail: { userId: context.user.id } }));
     return context;
   }
 
@@ -385,5 +451,5 @@
   }
 
   window.EastudyAuth = Object.freeze({ available, client, cleanPhone, isLearnerProfile, getRememberLogin, setRememberLogin, getContext, signUpPhone, signInPhone, sendPhoneOtp, verifyPhoneOtp, ensureStudentProfile, updatePassword, signOut });
-  window.EastudyData = Object.freeze({ upsertProgress, setFavorite, setVocabulary, logStudyEvent, hydrateStudentLearning, getLearningGoalProfile, saveLearningGoalProfile, getMembership, redeemMembership, getAdminAnalytics });
+  window.EastudyData = Object.freeze({ upsertProgress, recordStudyActivity, setFavorite, setVocabulary, setCreatorFollow, setCollectionSave, saveLearningPreferences, logStudyEvent, hydrateStudentLearning, getLearningGoalProfile, saveLearningGoalProfile, getMembership, redeemMembership, getAdminAnalytics });
 })();

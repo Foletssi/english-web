@@ -11,7 +11,7 @@ const S=window.ZoContent;
 assert.equal(S.listVideos().length,0,'fresh install must not manufacture demonstration videos');
 S.importSnapshot(JSON.parse(fs.readFileSync(new URL('fixtures/legacy-content.json',import.meta.url),'utf8')),{type:'test.fixture'});
 assert.ok(S,'ZoContent must load');
-assert.equal(S.SCHEMA_VERSION,2,'sentence-aware content schema must be V2');
+assert.equal(S.SCHEMA_VERSION,3,'sentence-aware content schema must be V3');
 let a=S.audit();
 assert.equal(a.ok,true,'seed contract audit must pass');
 assert.equal(S.listVideos({publishedOnly:true}).length,8,'student projection should expose only the 8 seeded PUBLISHED videos');
@@ -22,7 +22,7 @@ assert.ok(S.listSentences(2805).every(row=>row.keyWords.length&&row.grammar),'ev
 S.saveVideo({...original,title:'Contract Test Title'});
 assert.equal(S.getVideo(2805).title,'Contract Test Title','admin update must round-trip');
 assert.equal(S.listVideos({publishedOnly:true}).find(v=>v.id===2805).title,'Contract Test Title','student-visible projection must use same record');
-const created=S.saveVideo({id:99001,title:'Draft Contract Video',creatorId:'creator-jojo',creator:'Jojo English',level:'A2',status:'DRAFT',pipelineStatus:'READY',mediaUrl:'assets/video/sample_lesson.mp4'});
+const created=S.saveVideo({id:99001,title:'Draft Contract Video',creatorId:'creator-jojo',creator:'Jojo English',level:'A2',status:'DRAFT',pipelineStatus:'READY',mediaUrl:'assets/video/sample_lesson.mp4',tagIds:['daily-life','natural-speech','a2-listening']});
 assert.ok(!S.listVideos({publishedOnly:true}).some(v=>v.id===created.id),'draft must not leak to student projection');
 S.saveSentence(created.id,{id:'99001-1',order:0,startTime:0,endTime:2.4,english:'Hello from the shared contract.',chinese:'来自共享契约的问候。',keyWords:['shared'],reviewStatus:'APPROVED'});
 S.setVideoStatus(created.id,'PUBLISHED');

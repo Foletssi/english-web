@@ -2,17 +2,16 @@
   'use strict';
 
   function mappedGoalIds(video) {
-    const direct = Array.isArray(video?.goalIds) ? video.goalIds : [];
     const reviewed = Array.isArray(video?.goalMappings)
-      ? video.goalMappings.filter(row => row && row.approved !== false && row.status !== 'REJECTED').map(row => row.goalId || row.goal_id)
+      ? video.goalMappings.filter(row => row && (row.approved === true || row.status === 'APPROVED' || row.reviewStatus === 'APPROVED')).map(row => row.goalId || row.goal_id)
       : [];
-    return [...new Set([...direct, ...reviewed].map(String).filter(Boolean))];
+    return [...new Set(reviewed.map(String).filter(Boolean))];
   }
 
   function eligibleVideos(videos, goalId) {
     const target = String(goalId || 'general');
     return (Array.isArray(videos) ? videos : []).filter(video => {
-      if (!video || video.status === 'DRAFT' || video.status === 'REVIEW' || video.pipelineStatus === 'FAILED') return false;
+      if (!video || video.status !== 'PUBLISHED') return false;
       if (!video.mediaUrl) return false;
       return target === 'general' || mappedGoalIds(video).includes(target);
     });
@@ -31,10 +30,8 @@
       return pa - pb || String(b.publishedAt || '').localeCompare(String(a.publishedAt || '')) || String(a.id).localeCompare(String(b.id));
     });
     if (preferred) {
-      const preferredVideo = (input?.videos || []).find(video => String(video?.id) === preferred && video?.mediaUrl);
       const index = candidates.findIndex(video => String(video.id) === preferred);
       if (index > 0) candidates.unshift(candidates.splice(index, 1)[0]);
-      else if (index < 0 && preferredVideo) candidates.unshift(preferredVideo);
     }
     const ids = [...new Set(candidates.map(video => String(video.id)))];
     return {

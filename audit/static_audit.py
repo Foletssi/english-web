@@ -1,7 +1,7 @@
 from pathlib import Path
 from html.parser import HTMLParser
 import json, subprocess, re, sys
-root=Path(__file__).resolve().parents[1]
+root=Path.cwd()
 checks=[]
 def add(name,ok,detail=''):
     checks.append({'name':name,'ok':bool(ok),'detail':detail})
@@ -51,17 +51,17 @@ add('admin typography meets readability floor',all(x in admin_css for x in ['.si
 
 add('student separates caption display from key-word cloze practice',all(x in student for x in ['data-practice="cloze"','data-caption="english"','data-caption="hidden"']) and all(x in app for x in ['function clozeSentenceHTML','function checkClozeEntry','function sentenceKeywords','function setCaptionMode','function setPracticeMode']))
 add('mobile study page uses continuous sentence flow',all(x in student_css for x in ['.mobile-study-tabs{display:none!important}','order:4;display:block!important','.desktop-vocab-mode{display:none!important}']))
-add('admin authors per-sentence keyWords',all(x in admin for x in ['keyword-editor','data-field="keyWords"',"keyWords:input('keyWords')"]))
+add('admin authors per-sentence keyWords',all(x in admin for x in ['keyword-editor','data-field="keyWords"',"keyWords:String(input('keyWords')"]))
 add('shared Sentence Contract exposes word-level timings',all(x in (root/'shared/content-store.js').read_text(encoding='utf-8') for x in ['wordTimings','deriveWordTimings','INVALID_WORD_TIMING']))
 add('student synchronizes spoken word highlight',all(x in app for x in ['data-word-start','function updateWordTimeline','timing-active']))
 add('admin authors word-level timings',all(x in admin for x in ['data-field="wordTimings"','parseWordTimeline','word-timeline-editor']))
 add('admin theme is independent from learner theme',all(x in admin for x in ['ADMIN_THEME_KEY',"zs:admin:theme"]) and 'zs:admin:theme' in (root/'admin/index.html').read_text(encoding='utf-8'))
-add('subtitle review offers automatic alignment before advanced timing edits',all(x in admin for x in ['timeline-summary','data-auto-timeline','timeline-advanced']))
+add('subtitle review offers automatic alignment before advanced timing edits',all(x in admin for x in ['timeline-summary','data-check-all-timelines','timeline-advanced']))
 add('admin offers AI connection configuration guidance',(root/'README_AI_CONFIGURATION.md').exists() and (root/'.env.example').exists() and 'aiConfigForm' in admin)
 add('admin pipeline performs sentence-aware learning analysis',all(x in admin+studio_v2+studio_pipeline for x in ['data-analyze-learning','analyzeVideoLearningFields','analyzeSentenceLearningFields','sentences','humanReviewRequired']))
 add('admin upload captures bilingual title and learning-analysis option',all(x in (root/'admin/index.html').read_text(encoding='utf-8') for x in ['name="titleZh"','name="doLearningAnalysis"']))
 add('student switches active video title by interface language',all(x in app for x in ['function localizedVideoTitle','function syncStudyVideoTitle','video.titleZh||video.title']) and 'data-no-ui-translate' in student)
-add('learner insight renders every authored key expression',"sentenceKeywords(d).slice(0,3)" in app and "join('；')" in app)
+add('learner insight renders every authored key expression',"const keys=sentenceKeywords(d);" in app and "join('；')" in app and "sentenceKeywords(d).slice(0,3)" not in app)
 add('learner typography uses readable 16px support copy',all(x in student_css for x in ['--eastudy-body:19px','.video-page .insight-grid p{font-size:16px!important','.collection-video-info h3{font-size:21px!important']))
 add('official Eastudy logo asset is used on every brand surface',all(x in student for x in ['eastudy-logo--top','eastudy-logo--mobile','eastudy-logo--sidebar','eastudy-logo--signin','eastudy-icon.png']) and all(x in (root/'admin/index.html').read_text(encoding='utf-8') for x in ['eastudy-logo--studio','eastudy-icon.png']) and (root/'assets/images/eastudy-logo.png').exists() and (root/'assets/images/eastudy-icon.png').exists())
 add('supplied VIP artwork is used on all membership surfaces',all((root/'assets/images'/name).exists() for name in ['eastudy-vip-dark.png','eastudy-vip-light.png']) and all(x in student_css for x in ["--eastudy-vip-logo:url('../images/eastudy-vip-light.png')","--eastudy-vip-logo:url('../images/eastudy-vip-dark.png')",'.vip-badge,','.vip-emblem,']))
@@ -77,18 +77,18 @@ add('mobile app navigation includes dedicated account route','data-route="/me"' 
 add('mobile header no longer exposes account avatar','class="mobile-avatar"' not in student)
 add('home carousel supports phone swipe gestures',all(x in app for x in ["addEventListener('pointerdown'","addEventListener('pointerup'",'Math.abs(dx)>45']))
 add('mobile categories expose view all action','mobile-category-heading' in student and 'data-route="/videos">查看全部' in student)
-add('home recommended creators are de-duplicated and mobile safe','new Map(UI_CREATORS.map' in app and all(x in student_css for x in ['.home-creator-copy','.home-creator .creator-mini-follow{position:static!important']))
+add('home recommended creators are de-duplicated and mobile safe','new Map(UI_CREATORS.filter' in app and all(x in student_css for x in ['.home-creator-copy','.home-creator .creator-mini-follow{position:static!important']))
 add('requested mobile priority explanation is removed','你的进度和继续学习入口放在第一屏，不再沉到页面底部。' not in student)
 add('web deployment exposes /admin entry',(root/'README_WEB_DEPLOY.md').exists() and '/admin /admin/index.html 200' in (root/'_redirects').read_text(encoding='utf-8'))
 cloud=(root/'shared/cloud-content.js').read_text(encoding='utf-8')
-cloud_sql=(root/'supabase/migrations/20260908_cloud_content_and_admin.sql').read_text(encoding='utf-8')
+cloud_sql=(root/'supabase/migrations/20260908101008_cloud_content_and_admin.sql').read_text(encoding='utf-8')
 function_auth=(root/'functions/_lib/auth.js').read_text(encoding='utf-8')
 media_function=(root/'functions/api/media.js').read_text(encoding='utf-8')
 add('admin supports authenticated R2 multipart upload',all(x in cloud for x in ['/api/admin/uploads/init','/api/admin/uploads/part','/api/admin/uploads/complete','Authorization']))
 add('media delivery requires a signed-in Supabase session',all(x in media_function for x in ['authenticate(request, env)','VIDEO_BUCKET','Range','Content-Range']))
 add('Cloudflare upload gate checks administrator role',all(x in function_auth for x in ['requireAdmin','PROFILE_LOOKUP_FAILED','ADMIN_REQUIRED']))
 add('Supabase content publishing is authenticated and atomic',all(x in cloud_sql for x in ['private.content_snapshots','admin_publish_content_snapshot','get_published_content','revision = private.content_snapshots.revision + 1']))
-learning_sql=(root/'supabase/migrations/20260908_learning_goal_autoplay.sql').read_text(encoding='utf-8')
+learning_sql=(root/'supabase/migrations/20260908114654_learning_goal_autoplay.sql').read_text(encoding='utf-8')
 learning_queue=(root/'shared/learning-queue.js').read_text(encoding='utf-8')
 add('learner goal profile is isolated by Supabase RLS',all(x in learning_sql for x in ['learner_goal_profiles','user_id = auth.uid()','primary_goal_id','onboarding_version']))
 add('student exposes goal onboarding and explicit autoplay controls',all(x in student for x in ['goalOnboarding','homeGoalStart','nextLessonCountdown','cancelNextLesson','queueLoopToggle']) and all(x in app for x in ['maybeShowGoalOnboarding','playNextQueueLesson','ensurePlaybackCountdown']))

@@ -32,6 +32,10 @@ class PipelineTests(unittest.TestCase):
         enrich.return_value = (asr.return_value, {'titleZh': '我的清晨日常',
             'descriptionZh': '跟着创作者体验轻松自然的清晨日常，同时积累真实常用的英语表达。',
             'level': 'A2', 'levelReason': '短句为主', 'topicIds': ['daily'],
+            'tagIds': ['vlog', 'daily-life', 'spoken-english'],
+            'tagAssignments': [{'tagId': tag, 'sentenceIds': ['one'], 'reasonZh': '字幕证据',
+                                'reviewStatus': 'REVIEW', 'source': 'ai'}
+                               for tag in ('vlog', 'daily-life', 'spoken-english')],
             'goalMappings': [{'goalId': 'daily', 'sentenceIds': ['one'], 'reason': '日常表达'}]},
             [{'model': 'fixture'}])
         result = process_job(self.store, self.job['id'], self.root / 'source.mp4', None,

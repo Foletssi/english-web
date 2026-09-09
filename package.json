@@ -1,7 +1,7 @@
 {
   "name": "zospeak-composite-v1-beta6",
   "private": true,
-  "version": "1.0.0-beta.6.28.1",
+  "version": "1.0.0-beta.6.29.0",
   "scripts": {
     "serve": "python -m http.server 8080",
     "audit": "python audit/static_audit.py",
@@ -12,7 +12,7 @@
     "admin-intake-ui-test": "node audit/admin_intake_ui_test.cjs",
     "auth-test": "node audit/auth_contract_test.mjs",
     "cloud-test": "node audit/cloud_content_contract_test.mjs && node audit/cloud_video_processing_test.mjs && py -3.14 -m unittest discover -s services/cloud-worker -p \"test_*.py\" -v",
-    "learning-test": "node audit/learning_queue_contract_test.mjs",
+    "learning-test": "node audit/learning_content_contract_test.mjs && node audit/learning_queue_contract_test.mjs",
     "studio-test": "node audit/studio_client_contract_test.mjs && node audit/studio_v2_contract_test.mjs && node audit/media_player_contract_test.mjs && py -3.14 -m unittest discover -s services/local-studio -p \"test_*.py\" -v"
   },
   "description": "Eastudy Student Web + Chinese Admin Studio + sentence-aware learning analysis"

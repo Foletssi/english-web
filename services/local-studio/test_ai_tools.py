@@ -74,11 +74,15 @@ class AiTools(unittest.TestCase):
     def test_enrichment_reuses_validated_batches(self):
         rows = [{'id': 'v-1', 'english': 'Good morning', 'startTime': 0, 'endTime': 1}]
         learning = {'sentences': [{'id': 'v-1', 'chinese': '早上好',
-            'keyWords': ['Good morning'], 'grammar': '问候语'}],
+            'keyWords': ['Good morning'], 'expressions': [{'surface': 'Good morning',
+                'coreMeaningZh': '早上好', 'contextMeaningZh': '这里是清晨问候。',
+                'usageNoteZh': '用于上午见面问候。'}], 'grammar': '问候语'}],
             'batchSummary': {'summary': '日常问候', 'evidenceIds': ['v-1']}}
         metadata = {'titleZh': '我的清晨日常',
             'descriptionZh': '跟着视频积累真实自然的清晨问候表达，并练习日常英语听力和口语。',
             'level': 'A2', 'levelReason': '短句为主', 'topicIds': ['daily'],
+            'tags': [{'tagId': tag, 'sentenceIds': ['v-1'], 'reasonZh': '字幕证据'}
+                     for tag in ('vlog', 'daily-life', 'spoken-english')],
             'goalMappings': [{'goalId': 'daily', 'sentenceIds': ['v-1'], 'reason': '日常表达'}]}
         config = {'model': 'fixture', 'baseUrl': 'https://api.example.com', 'apiKey': 'secret'}
         info = {'title': 'Morning', 'creator': 'Alice', 'duration': 10, 'wordsPerMinute': 12}
@@ -102,11 +106,15 @@ class AiTools(unittest.TestCase):
         def fake_call(_config, prompt, payload):
             if prompt == LEARNING_PROMPT:
                 sentences = [{'id': item['id'], 'chinese': item['english'],
-                    'keyWords': [item['english']], 'grammar': '句子'} for item in payload['sentences']]
+                    'keyWords': [item['english']], 'expressions': [{'surface': item['english'],
+                        'coreMeaningZh': '本句表达', 'contextMeaningZh': '当前句中的表达。',
+                        'usageNoteZh': '结合上下文使用。'}], 'grammar': '句子'} for item in payload['sentences']]
                 return {'sentences': sentences, 'batchSummary': {
                     'summary': '分批摘要', 'evidenceIds': [sentences[0]['id']]}}, {'requestId': sentences[0]['id']}
             return {'titleZh': '我的日常', 'descriptionZh': '通过真实生活视频积累自然英语表达，同时练习听力、词汇和日常口语。',
                 'level': 'A2', 'levelReason': '短句为主', 'topicIds': ['daily'],
+                'tags': [{'tagId': tag, 'sentenceIds': ['v-0'], 'reasonZh': '字幕证据'}
+                         for tag in ('vlog', 'daily-life', 'spoken-english')],
                 'goalMappings': [{'goalId': 'daily', 'sentenceIds': ['v-0'], 'reason': '日常表达'}]}, {'requestId': 'metadata'}
 
         with tempfile.TemporaryDirectory() as folder, patch('ai_tools.call_json', side_effect=fake_call):

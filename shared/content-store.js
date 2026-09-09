@@ -6,7 +6,7 @@
   const scope=localOnly?'local':/^\/admin(?:\/|$)/.test(pathname)?'admin':'student';
   const KEY=localOnly?'zs:platform:content:local:v1':`zs:platform:content:${scope}:v3`;
   const contentStorage=scope==='admin'&&global.sessionStorage?global.sessionStorage:(global.localStorage||localStorage);
-  const SCHEMA_VERSION=2;
+  const SCHEMA_VERSION=3;
   const deep=x=>JSON.parse(JSON.stringify(x));
   const now=()=>new Date().toISOString();
   const normalizeToken=t=>String(t||'').toLowerCase().replace(/[^a-z'-]/g,'');
@@ -23,6 +23,11 @@
   function normalizeSentence(input,videoId,order){
     const row={...deep(input),videoId:Number(videoId),order:Number(input.order??order)};
     row.keyWords=Array.isArray(row.keyWords)?row.keyWords.map(normalizeKeyword).filter(Boolean):[];
+    row.expressions=Array.isArray(row.expressions)?row.expressions.map(item=>({
+      ...deep(item),surface:String(item?.surface||'').trim(),coreMeaningZh:String(item?.coreMeaningZh||'').trim(),
+      contextMeaningZh:String(item?.contextMeaningZh||'').trim(),usageNoteZh:String(item?.usageNoteZh||'').trim(),
+      reviewStatus:item?.reviewStatus||'REVIEW',source:item?.source||'ai'
+    })).filter(item=>item.surface):[];
     const suppliedTimings=Array.isArray(row.wordTimings)&&row.wordTimings.some(x=>Number.isFinite(Number(x?.start))&&Number.isFinite(Number(x?.end))&&Number(x.end)>Number(x.start));
     row.wordTimings=normalizeWordTimings(row.wordTimings,row.english,row.startTime,row.endTime);
     row.timingSource=suppliedTimings?(row.timingSource||'unknown'):'estimated';
@@ -69,14 +74,14 @@
     const seedVideos=new Map(seed.videos.map(v=>[String(v.id),v]));
     parsed.videos=(parsed.videos||[]).map(v=>{
       const base=seedVideos.get(String(v.id))||{};
-      return {...v,titleZh:v.titleZh||v.aiAnalysis?.titleZh||base.titleZh||'',goalIds:Array.isArray(v.goalIds)?v.goalIds:(base.goalIds||[]),goalMappings:Array.isArray(v.goalMappings)?v.goalMappings:[]};
+      return {...v,titleZh:v.titleZh||v.aiAnalysis?.titleZh||base.titleZh||'',topicIds:Array.isArray(v.topicIds)?v.topicIds:[],tagIds:Array.isArray(v.tagIds)?v.tagIds:[],tagAssignments:Array.isArray(v.tagAssignments)?v.tagAssignments:[],goalIds:Array.isArray(v.goalIds)?v.goalIds:(base.goalIds||[]),goalMappings:Array.isArray(v.goalMappings)?v.goalMappings:[]};
     });
     parsed.sentences=parsed.sentences||{};
     for(const [videoId,rows] of Object.entries(parsed.sentences)){
       const seedRows=new Map((seed.sentences[videoId]||[]).map(row=>[String(row.id),row]));
       parsed.sentences[videoId]=(rows||[]).map(row=>{
         const base=seedRows.get(String(row.id))||{};
-        return {...row,keyWords:Array.isArray(row.keyWords)&&row.keyWords.length?row.keyWords:(base.keyWords||[]),grammar:row.grammar||row.grammarNote||base.grammar||''};
+        return normalizeSentence({...row,keyWords:Array.isArray(row.keyWords)&&row.keyWords.length?row.keyWords:(base.keyWords||[]),expressions:Array.isArray(row.expressions)?row.expressions:(base.expressions||[]),grammar:row.grammar||row.grammarNote||base.grammar||''},videoId,row.order||0);
       });
     }
     parsed.jobs=(parsed.jobs||[]).map(job=>{
@@ -124,8 +129,8 @@
   }
   function listVideos(opts={}){const s=load();let rows=s.videos||[];if(opts.publishedOnly)rows=rows.filter(v=>v.status==='PUBLISHED');return deep(rows)}
   function getVideo(id){return deep((load().videos||[]).find(v=>String(v.id)===String(id))||null)}
-  function saveVideo(input){const s=load();if(s.tombstones?.[String(input.id)]?.deleted)throw new Error('VIDEO_IN_TRASH');const id=input.id??Date.now();const idx=s.videos.findIndex(v=>String(v.id)===String(id));const prev=idx>=0?s.videos[idx]:{};const next={...prev,...deep(input),id,updatedAt:now()};if(idx>=0)s.videos[idx]=next;else s.videos.unshift(next);save(s,{type:idx>=0?'video.update':'video.create',entityId:id,title:next.title});return deep(next)}
-  function setVideoStatus(id,status){const s=load();const v=s.videos.find(x=>String(x.id)===String(id));if(!v)throw new Error('VIDEO_NOT_FOUND');if(status==='PUBLISHED'){if(localOnly&&isPlaceholder(v))throw new Error('PLACEHOLDER_MEDIA_REMOVED');const rows=s.sentences[String(id)]||[];if(!v.mediaUrl)throw new Error('PUBLISHED_MEDIA_MISSING');if(!rows.length)throw new Error('PUBLISHED_SUBTITLES_MISSING');if(rows.some(row=>row.reviewStatus!=='APPROVED'))throw new Error('HUMAN_REVIEW_REQUIRED');if(v.pipelineStatus&&!['READY','SUCCESS'].includes(v.pipelineStatus))throw new Error('PIPELINE_NOT_READY')}v.status=status;v.publishedAt=status==='PUBLISHED'?(v.publishedAt||now()):v.publishedAt;v.updatedAt=now();save(s,{type:'video.status',entityId:id,status});return deep(v)}
+  function saveVideo(input){const s=load();if(s.tombstones?.[String(input.id)]?.deleted)throw new Error('VIDEO_IN_TRASH');const id=input.id??Date.now();const idx=s.videos.findIndex(v=>String(v.id)===String(id));const prev=idx>=0?s.videos[idx]:{},normalized=deep(input);if(typeof normalized.tagIds==='string')normalized.tagIds=[...new Set(normalized.tagIds.split(',').map(x=>x.trim()).filter(Boolean))];const next={...prev,...normalized,id,updatedAt:now()};if(idx>=0)s.videos[idx]=next;else s.videos.unshift(next);save(s,{type:idx>=0?'video.update':'video.create',entityId:id,title:next.title});return deep(next)}
+  function setVideoStatus(id,status){const s=load();const v=s.videos.find(x=>String(x.id)===String(id));if(!v)throw new Error('VIDEO_NOT_FOUND');if(status==='PUBLISHED'){if(localOnly&&isPlaceholder(v))throw new Error('PLACEHOLDER_MEDIA_REMOVED');const rows=s.sentences[String(id)]||[];if(!v.mediaUrl)throw new Error('PUBLISHED_MEDIA_MISSING');if(!rows.length)throw new Error('PUBLISHED_SUBTITLES_MISSING');if(rows.some(row=>row.reviewStatus!=='APPROVED'))throw new Error('HUMAN_REVIEW_REQUIRED');if(new Set(v.tagIds||[]).size<3)throw new Error('PUBLISHED_TAGS_MISSING');if(v.pipelineStatus&&!['READY','SUCCESS'].includes(v.pipelineStatus))throw new Error('PIPELINE_NOT_READY')}v.status=status;v.publishedAt=status==='PUBLISHED'?(v.publishedAt||now()):v.publishedAt;v.updatedAt=now();save(s,{type:'video.status',entityId:id,status});return deep(v)}
   function isPlaceholder(video){
     const path=String(video.mediaUrl||'').replace(/^(\.\/|\.\.\/|\/)/,'').split(/[?#]/)[0];
     return Number.isInteger(Number(video.id))&&Number(video.id)>=2805&&Number(video.id)<=2813&&path==='assets/video/sample_lesson.mp4'
