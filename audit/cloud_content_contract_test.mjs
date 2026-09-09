@@ -12,6 +12,7 @@ const trashSql = read('../supabase/migrations/20260908_content_video_trash.sql')
 const processingSql = read('../supabase/migrations/20260908_cloud_video_processing.sql');
 const processingSource = read('../functions/api/processing/source.js');
 const localWorkerSql = read('../supabase/migrations/20260908_local_cloud_worker.sql');
+const recoverySql = read('../supabase/migrations/20260909_processing_recovery_v2.sql');
 const processingOutput = read('../functions/api/processing/output.js');
 const processingMedia = read('../functions/api/processing/media/[[path]].js');
 const edgeWorker = read('../supabase/functions/video-processing/index.ts');
@@ -55,11 +56,26 @@ for (const rpc of ['processing_worker_heartbeat', 'processing_claim_local_job', 
 assert.ok(localWorkerSql.includes('for update skip locked'), 'desktop workers must atomically lease jobs');
 assert.ok(localWorkerSql.includes('cancel_requested_at is null'), 'worker leases and tokens must reject logically deleted jobs');
 assert.ok(!localWorkerSql.includes('delete from') && !localWorkerSql.includes('VIDEO_BUCKET'), 'local migration must not delete R2 data');
+for (const rpc of ['processing_heartbeat_job_v2', 'processing_report_job_v2', 'processing_record_output_v2',
+  'processing_fail_job_v2', 'processing_commit_leased_result_v2', 'resolve_processing_output_v2']) {
+  assert.ok(recoverySql.includes(`public.${rpc}`), `recovery migration must define ${rpc}`);
+}
+assert.ok(recoverySql.includes('private.processing_job_events'), 'failure history must survive retries');
+assert.ok(recoverySql.includes("'LEASE_LOST'"), 'expired runs must retain lease-loss evidence');
+assert.ok(recoverySql.includes('last_progress_at=case when v_made_progress'),
+  'last real progress must not move on duplicate telemetry');
+assert.ok(recoverySql.includes('output_run_id'), 'published media must resolve an immutable output run');
+assert.ok(!recoverySql.toLowerCase().includes('delete from'), 'recovery migration must retain R2 and task history');
 assert.ok(processingOutput.includes('resolve_processing_output'), 'R2 output writes must use a scoped database token');
 assert.ok(processingOutput.includes('MAX_ASSET_BYTES'), 'R2 output writes must be bounded');
+assert.ok(processingOutput.includes("crypto.subtle.digest('SHA-256'"), 'R2 output writes must hash actual bytes');
 assert.ok(processingMedia.includes('authenticate(request, env)'), 'processed media must require an authenticated session');
 assert.ok(processingMedia.includes("request.headers.get('Range')"), 'processed media must support byte ranges');
 for (const action of ['worker-heartbeat', 'worker-claim', 'worker-job-heartbeat', 'worker-progress', 'worker-fail', 'worker-complete']) {
+  assert.ok(edgeWorker.includes(`'${action}'`), `Edge worker must expose ${action}`);
+}
+for (const action of ['worker-job-heartbeat-v2', 'worker-telemetry-v2', 'worker-output-receipt-v2',
+  'worker-fail-v2', 'worker-complete-v2']) {
   assert.ok(edgeWorker.includes(`'${action}'`), `Edge worker must expose ${action}`);
 }
 assert.ok(edgeWorker.includes("env('WORKER_SECRET')"), 'desktop worker actions must require a server-side secret');

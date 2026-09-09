@@ -13,6 +13,20 @@ SPEC.loader.exec_module(worker)
 
 
 class WorkerTests(unittest.TestCase):
+    def test_v2_progress_carries_run_and_monotonic_sequence(self):
+        calls = []
+        class Client:
+            def call(self, action, **values):
+                calls.append((action, values))
+                return {'ok': True}
+        lease = {'job': {'id': '00000000-0000-0000-0000-000000000001',
+                         'run_id': '00000000-0000-0000-0000-000000000002'}, 'token': 'x' * 32}
+        worker.report_progress(Client(), lease, 'ASR', 55, '识别', {'current': 1, 'total': 10})
+        worker.report_progress(Client(), lease, 'ASR', 56, '识别', {'current': 2, 'total': 10})
+        self.assertEqual([row[0] for row in calls], ['worker-telemetry-v2', 'worker-telemetry-v2'])
+        self.assertEqual([row[1]['sequence'] for row in calls], [1, 2])
+        self.assertEqual(calls[0][1]['runId'], lease['job']['run_id'])
+
     def test_worker_id_is_ascii_safe_for_non_ascii_hostname(self):
         value = worker.default_worker_id('学习电脑')
         self.assertRegex(value, r'^[A-Za-z0-9._-]{3,80}$')

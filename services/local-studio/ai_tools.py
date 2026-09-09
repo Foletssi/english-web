@@ -60,9 +60,9 @@ def prepare_asr_model(model_name=None, verify_inference=False, model_factory=Non
 
 
 def transcribe(audio_path, video_id, duration, model_name=None, progress=None, model=None):
-    progress = progress or (lambda *_: None)
+    progress = progress or (lambda *_, **__: None)
     profile = asr_profile(model_name)
-    progress('asr', 55, f"正在加载英文语音识别模型 {profile['model']}")
+    progress('asr', 55, f"正在加载英文语音识别模型 {profile['model']}", substage='model_prepare')
     try:
         model = model or prepare_asr_model(model_name)[0]
         segments, info = model.transcribe(str(audio_path), language='en', vad_filter=True,
@@ -81,7 +81,9 @@ def transcribe(audio_path, video_id, duration, model_name=None, progress=None, m
                          'english': english, 'wordTimings': words, 'timingSource': 'faster-whisper'})
             ratio = min(1, max(0, float(segment.end) / max(audio_duration, .001)))
             progress('asr', min(69, 55 + round(14 * ratio)),
-                     f'已识别至 {float(segment.end):.0f}/{audio_duration:.0f} 秒，共 {len(rows)} 句英文')
+                     f'已识别至 {float(segment.end):.0f}/{audio_duration:.0f} 秒，共 {len(rows)} 句英文',
+                     substage='recognize', current=float(segment.end), total=audio_duration,
+                     unit='media_seconds')
     except StudioError:
         raise
     except Exception as error:
@@ -156,11 +158,15 @@ def _cached_ai(cache_dir, name, key, request, validator):
 
 
 def enrich(rows, info, config, progress=None, cache_dir=None):
-    progress = progress or (lambda *_: None)
+    progress = progress or (lambda *_, **__: None)
     merged, summaries, provenance = [], [], []
+    total_batches = max(1, (len(rows) + 19) // 20) + 1
     for offset in range(0, len(rows), 20):
         batch = rows[offset:offset + 20]
-        progress('enrich', 72 + int(10 * offset / max(1, len(rows))), '正在翻译并生成逐句学习内容')
+        batch_index = offset // 20
+        progress('enrich', 72 + int(10 * offset / max(1, len(rows))),
+                 f'正在翻译并生成逐句学习内容（第 {batch_index + 1}/{total_batches - 1} 批）',
+                 substage='learning', current=batch_index, total=total_batches, unit='batches')
         request_payload = {'sentences': [{'id': x['id'], 'english': x['english']} for x in batch]}
         cache_key = canonical_hash({'kind': 'learning-v1', 'payload': request_payload,
             'prompt': LEARNING_PROMPT, 'model': str(config.get('model') or os.getenv('ZOSPEAK_AI_MODEL', '')),
@@ -179,7 +185,8 @@ def enrich(rows, info, config, progress=None, cache_dir=None):
         summary = checked['summary']
         summaries.append(summary)
         provenance.append({**meta, 'cacheReused': reused})
-    progress('enrich', 86, '正在判断难度、分类和学习目标')
+    progress('enrich', 86, '正在判断难度、分类和学习目标', substage='metadata',
+             current=total_batches - 1, total=total_batches, unit='batches')
     metadata_payload = {'title': info.get('title'),
         'creator': info.get('creator'), 'duration': info.get('duration'),
         'wordsPerMinute': info.get('wordsPerMinute'), 'summaries': summaries,

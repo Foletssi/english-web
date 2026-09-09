@@ -22,7 +22,7 @@ from ai_tools import prepare_asr_model  # noqa: E402
 from checkpoint import atomic_json  # noqa: E402
 
 
-VERSION = '1.0.0'
+VERSION = '2.0.0'
 DEFAULT_ENDPOINT = 'https://ehxqtgakjgqgmghhdmjg.supabase.co/functions/v1/video-processing'
 STAGE_MAP = {'probe': 'PROBE', 'transcode': 'TRANSCODE', 'asr': 'ASR', 'enrich': 'ENRICH'}
 
@@ -78,6 +78,9 @@ class RemoteProgressStore:
         job = lease['job']
         self.client = client
         self.lease = lease
+        self._last_metric = None
+        self._rate = None
+        self._samples = 0
         self.job = {'id': job['id'], 'status': 'PROCESSING', 'currentStep': 'upload', 'progress': 1,
                     'message': '正在下载云端原片', 'error': None, 'result': None,
                     'sourceName': Path(job['source_key']).name, 'metadata': job.get('input') or {}}
@@ -93,10 +96,57 @@ class RemoteProgressStore:
         self.job.update(changes)
         if changes.get('status') == 'PROCESSING':
             step = str(changes.get('currentStep') or self.job.get('currentStep') or 'probe')
-            self.client.call('worker-progress', jobId=job_id, token=self.lease['token'],
-                             stage=STAGE_MAP.get(step, 'PROBE'), progress=min(99, int(changes.get('progress') or 0)),
-                             message=str(changes.get('message') or ''))
+            metrics = dict(changes.get('telemetry') or {})
+            current, total = metrics.get('current'), metrics.get('total')
+            now = time.monotonic()
+            work_key = (step, metrics.get('substage'), metrics.get('unit'))
+            if isinstance(current, (int, float)) and self._last_metric and self._last_metric[0] == work_key:
+                elapsed = now - self._last_metric[2]
+                delta = current - self._last_metric[1]
+                if elapsed > 0 and delta >= 0:
+                    instant = delta / elapsed
+                    self._rate = instant if self._rate is None else .3 * instant + .7 * self._rate
+                    self._samples += 1
+            else:
+                self._rate, self._samples = None, 0
+            if isinstance(current, (int, float)):
+                self._last_metric = (work_key, current, now)
+            metrics.update({'rate': self._rate, 'etaSampleCount': self._samples,
+                'stageEtaSeconds': ((total - current) / self._rate if isinstance(total, (int, float))
+                    and isinstance(current, (int, float)) and self._rate and self._rate > 0 and self._samples >= 3 else None)})
+            report_progress(self.client, self.lease, STAGE_MAP.get(step, 'PROBE'),
+                            min(99, int(changes.get('progress') or 0)),
+                            str(changes.get('message') or ''), metrics)
         return dict(self.job)
+
+
+def run_id(lease):
+    return str(lease.get('job', {}).get('run_id') or '')
+
+
+def sequence(lease):
+    lease['_sequence'] = int(lease.get('_sequence') or 0) + 1
+    return lease['_sequence']
+
+
+def report_progress(client, lease, stage, progress, message, metrics=None):
+    current_run = run_id(lease)
+    if current_run:
+        return client.call('worker-telemetry-v2', jobId=lease['job']['id'], token=lease['token'],
+                           runId=current_run, sequence=sequence(lease), stage=stage,
+                           progress=progress, message=message, metrics=metrics or {})
+    return client.call('worker-progress', jobId=lease['job']['id'], token=lease['token'],
+                       stage=stage, progress=progress, message=message)
+
+
+def report_failure(client, lease, error, retryable=True):
+    current_run = run_id(lease)
+    action = 'worker-fail-v2' if current_run else 'worker-fail'
+    values = {'jobId': lease['job']['id'], 'token': lease['token'], 'error': error,
+              'retryable': retryable}
+    if current_run:
+        values['runId'] = current_run
+    return client.call(action, **values)
 
 
 def content_type(path):
@@ -230,9 +280,11 @@ def rewrite_result(result, job_id):
 
 
 def heartbeat_loop(client, lease, stop):
-    while not stop.wait(60):
+    while not stop.wait(30):
         try:
-            client.call('worker-job-heartbeat', jobId=lease['job']['id'], token=lease['token'])
+            current_run = run_id(lease)
+            client.call('worker-job-heartbeat-v2' if current_run else 'worker-job-heartbeat',
+                        jobId=lease['job']['id'], token=lease['token'], **({'runId': current_run} if current_run else {}))
         except Exception as error:
             print(f'[heartbeat] {error}', flush=True)
 
@@ -250,8 +302,7 @@ def process_lease(client, lease):
         if not work.resolve().is_relative_to(worker_root()):
             raise ApiError('WORK_PATH_INVALID')
         source = work / Path(lease['job']['source_key']).name
-        client.call('worker-progress', jobId=job_id, token=lease['token'], stage='LOCAL_DOWNLOAD',
-                    progress=2, message='正在从 R2 下载原片')
+        report_progress(client, lease, 'LOCAL_DOWNLOAD', 2, '正在从 R2 下载原片')
         last_reported = [0.0]
         def report_download(current, total):
             now = time.monotonic()
@@ -259,36 +310,47 @@ def process_lease(client, lease):
                 return
             last_reported[0] = now
             percent = min(8, 2 + int(6 * current / max(total, 1)))
-            client.call('worker-progress', jobId=job_id, token=lease['token'], stage='LOCAL_DOWNLOAD',
-                        progress=percent, message=f'正在下载原片 {current}/{total} 字节')
+            report_progress(client, lease, 'LOCAL_DOWNLOAD', percent,
+                            f'正在下载原片 {current}/{total} 字节',
+                            {'substage': 'source', 'current': current, 'total': total, 'unit': 'bytes'})
         download(lease['downloadUrl'], source, report_download)
         store = RemoteProgressStore(client, lease)
         result_job = process_job(store, job_id, source, None, {}, work / 'output', base_url='')
         if result_job.get('status') != 'REVIEW':
             error = result_job.get('error') or {'code': 'PIPELINE_FAILED', 'message': result_job.get('message', '处理失败')}
-            client.call('worker-fail', jobId=job_id, token=lease['token'], error=error,
-                        retryable=bool(error.get('retryable', True)))
+            report_failure(client, lease, error, bool(error.get('retryable', True)))
             return
-        client.call('worker-progress', jobId=job_id, token=lease['token'], stage='LOCAL_UPLOAD',
-                    progress=96, message='正在把 HLS 与封面上传回 R2')
+        report_progress(client, lease, 'LOCAL_UPLOAD', 96, '正在把 HLS 与封面上传回 R2')
         output = work / 'output' / job_id
         assets = [path for path in output.rglob('*') if path.is_file() and path.suffix.lower() in {'.m3u8', '.ts', '.webp'}]
         if not assets or not (output / 'master.m3u8').is_file():
             raise ApiError('OUTPUT_ASSETS_EMPTY')
+        manifest = []
         for index, path in enumerate(sorted(assets)):
             relative = path.relative_to(output).as_posix()
-            client.upload(lease['outputUrl'], lease['token'], job_id, relative, path)
+            receipt = client.upload(lease['outputUrl'], lease['token'], job_id, relative, path)
+            item = {'path': relative, 'size': int(receipt['size']), 'sha256': str(receipt['sha256'])}
+            manifest.append(item)
+            if run_id(lease):
+                client.call('worker-output-receipt-v2', jobId=job_id, token=lease['token'],
+                            runId=run_id(lease), path=relative, size=item['size'],
+                            sha256=item['sha256'], etag=str(receipt['etag']))
             progress = 96 + int(3 * (index + 1) / len(assets))
-            client.call('worker-progress', jobId=job_id, token=lease['token'], stage='LOCAL_UPLOAD',
-                        progress=min(99, progress), message=f'正在上传成品 {index + 1}/{len(assets)}')
+            report_progress(client, lease, 'LOCAL_UPLOAD', min(99, progress),
+                            f'正在上传成品 {index + 1}/{len(assets)}',
+                            {'substage': relative, 'current': index + 1, 'total': len(assets), 'unit': 'files'})
         final = rewrite_result(result_job['result'], job_id)
-        client.call('worker-complete', jobId=job_id, token=lease['token'], result=final)
+        if run_id(lease):
+            client.call('worker-complete-v2', jobId=job_id, token=lease['token'], runId=run_id(lease),
+                        result=final, manifest=manifest)
+        else:
+            client.call('worker-complete', jobId=job_id, token=lease['token'], result=final)
         print(f'[complete] {job_id}', flush=True)
     except Exception as error:
         print(f'[error] {job_id}: {error}', flush=True)
         try:
-            client.call('worker-fail', jobId=job_id, token=lease['token'],
-                        error={'code': type(error).__name__[:80], 'message': str(error)[:500]}, retryable=True)
+            report_failure(client, lease,
+                           {'code': type(error).__name__[:80], 'message': str(error)[:500]}, True)
         except Exception as report_error:
             print(f'[error-report] {report_error}', flush=True)
     finally:

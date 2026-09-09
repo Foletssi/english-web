@@ -33,7 +33,7 @@ def run_progress(args, duration, progress=None, timeout=7200):
     require_tools()
     progress = progress or (lambda *_: None)
     command = list(args[:-1]) + ['-progress', 'pipe:1', '-stats_period', '1', '-nostats', args[-1]]
-    errors, reader_errors = deque(maxlen=80), []
+    errors, reader_errors, latest = deque(maxlen=80), [], [None]
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                text=True, encoding='utf-8', errors='replace')
 
@@ -49,7 +49,7 @@ def run_progress(args, duration, progress=None, timeout=7200):
                     raw = record.get('out_time_us')
                     if raw not in (None, 'N/A') and duration > 0:
                         current = min(duration, max(0.0, int(raw) / 1_000_000))
-                        progress(current, duration)
+                        latest[0] = (current, duration)
                     record = {}
         except Exception as error:
             reader_errors.append(error)
@@ -66,12 +66,17 @@ def run_progress(args, duration, progress=None, timeout=7200):
     for reader in readers:
         reader.start()
     deadline = time.monotonic() + timeout
+    last_report = 0.0
     try:
         while process.poll() is None:
             if time.monotonic() >= deadline:
                 raise StudioError('MEDIA_TIMEOUT', '视频处理超时。', True)
             if reader_errors:
                 raise StudioError('MEDIA_PROGRESS_FAILED', '无法读取视频处理进度。', True)
+            now = time.monotonic()
+            if latest[0] is not None and now - last_report >= 1:
+                progress(*latest[0])
+                last_report = now
             time.sleep(.1)
         for reader in readers:
             reader.join(timeout=2)
@@ -79,6 +84,8 @@ def run_progress(args, duration, progress=None, timeout=7200):
             raise StudioError('MEDIA_PROGRESS_FAILED', '无法读取视频处理进度。', True)
         if process.returncode:
             raise StudioError('MEDIA_COMMAND_FAILED', '\n'.join(errors)[-1200:] or 'FFmpeg 处理失败。')
+        if latest[0] is not None:
+            progress(*latest[0])
     finally:
         if process.poll() is None:
             process.terminate()

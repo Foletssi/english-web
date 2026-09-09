@@ -113,7 +113,8 @@
       const currentStep = stageStep[job.stage] || 'upload';
       const current = order.indexOf(currentStep);
       const status = ['QUEUED', 'RUNNING', 'WAITING'].includes(job.status) ? 'PROCESSING' : job.status;
-      return { ...job, videoId: Number(job.videoId), rawStatus: job.status, status, currentStep,
+      const telemetry = job.telemetry && typeof job.telemetry === 'object' ? job.telemetry : {};
+      return { ...job, ...telemetry, telemetry, videoId: Number(job.videoId), rawStatus: job.status, status, currentStep,
         steps: order.map((step, index) => [step, index < current ? 'SUCCESS' : index === current ? (status === 'ERROR' ? 'ERROR' : status === 'REVIEW' ? 'WAITING' : 'PROCESSING') : 'WAITING']) };
     });
     return { rows, error: error || null };

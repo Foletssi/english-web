@@ -66,14 +66,50 @@ async function handleWorker(action: string, body: any) {
     if (!job) return { job: null };
     const base = required('PUBLIC_SOURCE_BASE_URL').replace(/\/$/, '');
     return {
-      job, token,
+      job, token, protocolVersion: job.run_id ? 2 : 1,
       downloadUrl: `${base}/api/processing/source?job=${encodeURIComponent(job.id)}&token=${encodeURIComponent(token)}`,
-      outputUrl: `${base}/api/processing/output?job=${encodeURIComponent(job.id)}&token=${encodeURIComponent(token)}`
+      outputUrl: `${base}/api/processing/output?job=${encodeURIComponent(job.id)}&token=${encodeURIComponent(token)}${job.run_id ? `&run=${encodeURIComponent(job.run_id)}` : ''}`
     };
   }
   const jobId = String(body.jobId || '');
   const token = String(body.token || '');
   if (!/^[0-9a-f-]{36}$/i.test(jobId) || token.length < 32 || token.length > 256) throw new Error('JOB_TOKEN_INVALID');
+  const runId = String(body.runId || '');
+  const v2 = action.endsWith('-v2');
+  if (v2 && !/^[0-9a-f-]{36}$/i.test(runId)) throw new Error('RUN_ID_INVALID');
+  if (action === 'worker-job-heartbeat-v2') {
+    return { job: await rpc('processing_heartbeat_job_v2', {
+      p_job_id: jobId, p_run_id: runId, p_token: token, p_worker_id: workerId,
+      p_capabilities: capabilities, p_lease_seconds: 240
+    }) };
+  }
+  if (action === 'worker-telemetry-v2') {
+    return { job: await rpc('processing_report_job_v2', {
+      p_job_id: jobId, p_run_id: runId, p_token: token, p_worker_id: workerId,
+      p_sequence: Number(body.sequence), p_stage: body.stage,
+      p_progress: Number(body.progress), p_message: String(body.message || '').slice(0, 300),
+      p_metrics: body.metrics && typeof body.metrics === 'object' ? body.metrics : {}
+    }) };
+  }
+  if (action === 'worker-output-receipt-v2') {
+    return { receipt: await rpc('processing_record_output_v2', {
+      p_job_id: jobId, p_run_id: runId, p_token: token, p_worker_id: workerId,
+      p_path: String(body.path || ''), p_size: Number(body.size),
+      p_sha256: String(body.sha256 || ''), p_etag: String(body.etag || '')
+    }) };
+  }
+  if (action === 'worker-fail-v2') {
+    return { job: await rpc('processing_fail_job_v2', {
+      p_job_id: jobId, p_run_id: runId, p_token: token, p_worker_id: workerId,
+      p_error: body.error || {}, p_retryable: body.retryable !== false
+    }) };
+  }
+  if (action === 'worker-complete-v2') {
+    return { result: await rpc('processing_commit_leased_result_v2', {
+      p_job_id: jobId, p_run_id: runId, p_token: token, p_worker_id: workerId,
+      p_result: body.result, p_manifest: Array.isArray(body.manifest) ? body.manifest : []
+    }) };
+  }
   if (action === 'worker-job-heartbeat') {
     return { job: await rpc('processing_heartbeat_job', {
       p_job_id: jobId, p_token: token, p_worker_id: workerId, p_capabilities: capabilities, p_lease_seconds: 240
