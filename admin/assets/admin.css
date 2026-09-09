@@ -48,7 +48,7 @@ body{font-size:14px;line-height:1.45}
 /* Beta2 — key-word cloze authoring */
 .keyword-editor{display:grid;grid-template-columns:minmax(160px,.42fr) minmax(260px,1fr);gap:14px;align-items:center;padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:var(--panel2)}
 .keyword-editor>span{display:flex;flex-direction:column;gap:4px}.keyword-editor b{font-size:13px;color:var(--text)}.keyword-editor small{font-size:11px;line-height:1.45;color:var(--muted)}
-.keyword-editor input{width:100%;height:42px;padding:0 12px;border:1px solid var(--line);border-radius:11px;background:var(--panel);color:var(--text);font-size:13px;outline:none}.keyword-editor input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(124,92,255,.12)}
+.keyword-editor input,.keyword-editor textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:11px;background:var(--panel);color:var(--text);font-size:13px;line-height:1.5;outline:none}.keyword-editor input{height:42px;padding-block:0}.keyword-editor textarea{resize:vertical;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}.keyword-editor input:focus,.keyword-editor textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(124,92,255,.12)}
 @media(max-width:820px){.keyword-editor{grid-template-columns:1fr}}
 
 /* Beta4: independent control-center preference and human-first subtitle review. */
@@ -86,7 +86,7 @@ html[data-admin-auth="signed-in"] .admin-auth-gate{display:none!important}
 .analysis-origin small{font-size:13px;line-height:1.5;color:var(--text2)}
 .keyword-editor b{font-size:15px!important;line-height:1.4}
 .keyword-editor small{font-size:14px!important;line-height:1.55!important}
-.keyword-editor input,.grammar-editor textarea{font-size:15px!important;line-height:1.55!important}
+.keyword-editor input,.keyword-editor textarea{font-size:15px!important;line-height:1.55!important}
 .grammar-editor textarea{min-height:76px!important}
 .sentence-row{padding:15px!important}
 .sentence-actions button{min-height:40px!important;height:40px!important;font-size:13px!important}

@@ -1,11 +1,11 @@
 {
   "name": "zospeak-composite-v1-beta6",
   "private": true,
-  "version": "1.0.0-beta.6.27.2",
+  "version": "1.0.0-beta.6.28.0",
   "scripts": {
     "serve": "python -m http.server 8080",
     "audit": "python audit/static_audit.py",
-    "contract-test": "node audit/runtime_contract_test.mjs",
+    "contract-test": "node audit/runtime_contract_test.mjs && node audit/content_integrity_test.mjs",
     "deletion-test": "node audit/content_deletion_test.mjs && node audit/studio_deletion_test.mjs",
     "deletion-browser-test": "node audit/content_deletion_browser_test.cjs",
     "cloud-deletion-browser-test": "node audit/cloud_video_trash_browser_test.cjs",

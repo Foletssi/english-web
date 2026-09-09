@@ -7,12 +7,14 @@ const auth = read('../functions/_lib/auth.js');
 const media = read('../functions/api/media.js');
 const init = read('../functions/api/admin/uploads/init.js');
 const complete = read('../functions/api/admin/uploads/complete.js');
-const sql = read('../supabase/migrations/20260908_cloud_content_and_admin.sql');
-const trashSql = read('../supabase/migrations/20260908_content_video_trash.sql');
-const processingSql = read('../supabase/migrations/20260908_cloud_video_processing.sql');
+const sql = read('../supabase/migrations/20260908101008_cloud_content_and_admin.sql');
+const trashSql = read('../supabase/migrations/20260908183106_content_video_trash.sql');
+const processingSql = read('../supabase/migrations/20260908224149_cloud_video_processing.sql');
 const processingSource = read('../functions/api/processing/source.js');
-const localWorkerSql = read('../supabase/migrations/20260908_local_cloud_worker.sql');
-const recoverySql = read('../supabase/migrations/20260909_processing_recovery_v2.sql');
+const localWorkerSql = read('../supabase/migrations/20260909000631_local_cloud_worker.sql');
+const recoverySql = read('../supabase/migrations/20260909131802_processing_recovery_v2.sql');
+const integritySql = read('../supabase/migrations/20260909150000_content_integrity_and_job_views.sql');
+const jobTitleSql = read('../supabase/migrations/20260909151000_processing_job_trash_titles.sql');
 const processingOutput = read('../functions/api/processing/output.js');
 const processingMedia = read('../functions/api/processing/media/[[path]].js');
 const edgeWorker = read('../supabase/functions/video-processing/index.ts');
@@ -68,6 +70,12 @@ assert.ok(recoverySql.includes('last_progress_at=case when v_made_progress'),
   'last real progress must not move on duplicate telemetry');
 assert.ok(recoverySql.includes('output_run_id'), 'published media must resolve an immutable output run');
 assert.ok(!recoverySql.toLowerCase().includes('delete from'), 'recovery migration must retain R2 and task history');
+assert.ok(integritySql.includes('VIDEO_REMOVAL_REQUIRES_EXPLICIT_TRASH'), 'ordinary snapshot saves must reject implicit video deletion');
+assert.ok(integritySql.includes('CONTENT_EXPECTED_REVISION_REQUIRED'), 'legacy unversioned snapshot writes must be disabled');
+assert.ok(integritySql.includes("'videoState'"), 'job list must expose the video relationship state');
+assert.ok(integritySql.includes("video_id in ('1788926081632', '1788957611645')"), 'repair must refuse to bypass an active trash record');
+assert.ok(!integritySql.toLowerCase().includes('delete from') && !integritySql.includes('VIDEO_BUCKET'), 'integrity repair must not physically delete media');
+assert.ok(jobTitleSql.includes("trash.payload->'draft'->'video'"), 'deleted job titles must come from the retained trash payload');
 assert.ok(processingOutput.includes('resolve_processing_output'), 'R2 output writes must use a scoped database token');
 assert.ok(processingOutput.includes('MAX_ASSET_BYTES'), 'R2 output writes must be bounded');
 assert.ok(processingOutput.includes("crypto.subtle.digest('SHA-256'"), 'R2 output writes must hash actual bytes');
@@ -91,4 +99,4 @@ assert.ok(avatarUpload.includes("'RIFF'")&&avatarUpload.includes("'WEBP'"),'crea
 assert.ok(avatarRead.includes('authenticate(request, env)'),'creator avatar delivery must require an authenticated session');
 assert.ok(!avatarUpload.toLowerCase().includes('.delete('),'creator avatar changes must not physically delete R2 objects');
 
-console.log(JSON.stringify({ ok: true, tests: 58 }, null, 2));
+console.log(JSON.stringify({ ok: true, tests: 64 }, null, 2));

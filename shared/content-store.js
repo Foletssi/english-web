@@ -2,7 +2,10 @@
   'use strict';
   const LEGACY_KEY='zs:platform:content:v1';
   const localOnly=['localhost','127.0.0.1','[::1]'].includes(global.location?.hostname);
-  const KEY=localOnly?'zs:platform:content:local:v1':LEGACY_KEY;
+  const pathname=String(global.location?.pathname||'/');
+  const scope=localOnly?'local':/^\/admin(?:\/|$)/.test(pathname)?'admin':'student';
+  const KEY=localOnly?'zs:platform:content:local:v1':`zs:platform:content:${scope}:v3`;
+  const contentStorage=scope==='admin'&&global.sessionStorage?global.sessionStorage:(global.localStorage||localStorage);
   const SCHEMA_VERSION=2;
   const deep=x=>JSON.parse(JSON.stringify(x));
   const now=()=>new Date().toISOString();
@@ -88,7 +91,7 @@
     return parsed;
   }
   function load(){
-    const own=localStorage.getItem(KEY),raw=own||(localOnly?localStorage.getItem(LEGACY_KEY):null);
+    const own=contentStorage.getItem(KEY),raw=own||(localOnly?contentStorage.getItem(LEGACY_KEY):null);
     if(!raw)return deep(seed);
     const parsed=JSON.parse(raw);
     if(!parsed||!Array.isArray(parsed.videos))throw new Error('CONTENT_STORAGE_INVALID');
@@ -102,13 +105,13 @@
     }
     // One atomic write contains both the retained records and the recoverable originals.
     // Never overwrite a broken/full browser store with empty defaults.
-    if(!own||cleaned||fromVersion!==SCHEMA_VERSION)localStorage.setItem(KEY,JSON.stringify(migrated));
+    if(!own||cleaned||fromVersion!==SCHEMA_VERSION)contentStorage.setItem(KEY,JSON.stringify(migrated));
     return migrated;
   }
   function save(state,event){
     state.schemaVersion=SCHEMA_VERSION;
     if(event){state.auditLog=state.auditLog||[];state.auditLog.unshift({id:'audit-'+Date.now(),at:now(),...event});state.auditLog=state.auditLog.slice(0,200)}
-    localStorage.setItem(KEY,JSON.stringify(state));
+    contentStorage.setItem(KEY,JSON.stringify(state));
     global.dispatchEvent(new CustomEvent('zospeak:content-changed',{detail:event||{type:'save'}}));
     return deep(state);
   }
@@ -193,5 +196,5 @@
     return {ok:issues.every(x=>x.severity!=='ERROR'),schemaVersion:s.schemaVersion,videoCount:s.videos.length,publishedCount:published.length,creatorCount:s.creators.length,collectionCount:s.collections.length,jobCount:s.jobs.length,issues};
   }
   function reset(){if(localOnly){deleteVideos(listVideos().map(v=>v.id));return snapshot()}return save(deep(seed),{type:'content.reset'})}
-  global.ZoContent={KEY,SCHEMA_VERSION,localOnly,allowJobRetry,isPlaceholder,deleteVideos,listTrash,restoreVideo,acceptsJob,snapshot,importSnapshot,listVideos,getVideo,saveVideo,setVideoStatus,deleteVideo,listSentences,saveSentence,replaceSentences,listCreators,saveCreator,deleteCreator,restoreCreator,listCollections,saveCollection,listJobs,startPipeline,updatePipeline,completePipeline,failPipeline,advancePipeline,audit,reset};
+  global.ZoContent={KEY,SCOPE:scope,SCHEMA_VERSION,localOnly,allowJobRetry,isPlaceholder,deleteVideos,listTrash,restoreVideo,acceptsJob,snapshot,importSnapshot,listVideos,getVideo,saveVideo,setVideoStatus,deleteVideo,listSentences,saveSentence,replaceSentences,listCreators,saveCreator,deleteCreator,restoreCreator,listCollections,saveCollection,listJobs,startPipeline,updatePipeline,completePipeline,failPipeline,advancePipeline,audit,reset};
 })(window);
