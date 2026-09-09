@@ -15,6 +15,7 @@ const localWorkerSql = read('../supabase/migrations/20260909000631_local_cloud_w
 const recoverySql = read('../supabase/migrations/20260909131802_processing_recovery_v2.sql');
 const integritySql = read('../supabase/migrations/20260909150000_content_integrity_and_job_views.sql');
 const jobTitleSql = read('../supabase/migrations/20260909151000_processing_job_trash_titles.sql');
+const requeueSql = read('../supabase/migrations/20260909221000_requeue_repaired_video_job.sql');
 const processingOutput = read('../functions/api/processing/output.js');
 const processingMedia = read('../functions/api/processing/media/[[path]].js');
 const edgeWorker = read('../supabase/functions/video-processing/index.ts');
@@ -76,6 +77,9 @@ assert.ok(integritySql.includes("'videoState'"), 'job list must expose the video
 assert.ok(integritySql.includes("video_id in ('1788926081632', '1788957611645')"), 'repair must refuse to bypass an active trash record');
 assert.ok(!integritySql.toLowerCase().includes('delete from') && !integritySql.includes('VIDEO_BUCKET'), 'integrity repair must not physically delete media');
 assert.ok(jobTitleSql.includes("trash.payload->'draft'->'video'"), 'deleted job titles must come from the retained trash payload');
+assert.ok(requeueSql.includes("not like '%VIDEO_NOT_FOUND%'"), 'only the catalog-loss failure may be automatically requeued');
+assert.ok(requeueSql.includes('REPAIRED_VIDEO_NOT_ACTIVE') && requeueSql.includes('REPAIRED_VIDEO_IN_TRASH'), 'requeue must require an active restored catalog row');
+assert.ok(!requeueSql.toLowerCase().includes('delete from') && !requeueSql.includes('VIDEO_BUCKET'), 'requeue must retain media and task history');
 assert.ok(processingOutput.includes('resolve_processing_output'), 'R2 output writes must use a scoped database token');
 assert.ok(processingOutput.includes('MAX_ASSET_BYTES'), 'R2 output writes must be bounded');
 assert.ok(processingOutput.includes("crypto.subtle.digest('SHA-256'"), 'R2 output writes must hash actual bytes');
@@ -99,4 +103,4 @@ assert.ok(avatarUpload.includes("'RIFF'")&&avatarUpload.includes("'WEBP'"),'crea
 assert.ok(avatarRead.includes('authenticate(request, env)'),'creator avatar delivery must require an authenticated session');
 assert.ok(!avatarUpload.toLowerCase().includes('.delete('),'creator avatar changes must not physically delete R2 objects');
 
-console.log(JSON.stringify({ ok: true, tests: 64 }, null, 2));
+console.log(JSON.stringify({ ok: true, tests: 67 }, null, 2));
