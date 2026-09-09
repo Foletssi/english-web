@@ -3,8 +3,8 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
-from ai_tools import LEARNING_PROMPT, ai_concurrency, asr_profile, call_json, endpoint, enrich, prepare_asr_model
+from unittest.mock import Mock, patch
+from ai_tools import LEARNING_PROMPT, ai_concurrency, asr_profile, call_json, endpoint, enrich, prepare_asr_model, retry_ai
 from contracts import StudioError
 
 
@@ -62,6 +62,14 @@ class AiTools(unittest.TestCase):
             self.assertEqual(ai_concurrency(), 4)
         with patch.dict('os.environ', {'EASTUDY_AI_CONCURRENCY': 'invalid'}):
             self.assertEqual(ai_concurrency(), 3)
+
+    def test_retry_ai_only_retries_retryable_errors(self):
+        operation = Mock(side_effect=[
+            StudioError('AI_NETWORK_ERROR', 'temporary', True), {'ok': True}])
+        with patch('ai_tools.time.sleep') as sleep:
+            self.assertEqual(retry_ai(operation), {'ok': True})
+        self.assertEqual(operation.call_count, 2)
+        sleep.assert_called_once_with(1)
 
     def test_enrichment_reuses_validated_batches(self):
         rows = [{'id': 'v-1', 'english': 'Good morning', 'startTime': 0, 'endTime': 1}]

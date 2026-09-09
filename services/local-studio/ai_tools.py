@@ -1,6 +1,7 @@
 import json
 import os
 import ssl
+import time
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -28,6 +29,21 @@ def ai_concurrency():
     except ValueError:
         value = 3
     return min(4, max(1, value))
+
+
+def retry_ai(operation):
+    try:
+        attempts = int(os.getenv('EASTUDY_AI_ATTEMPTS', '3'))
+    except ValueError:
+        attempts = 3
+    attempts = min(5, max(1, attempts))
+    for attempt in range(attempts):
+        try:
+            return operation()
+        except StudioError as error:
+            if not error.retryable or attempt + 1 >= attempts:
+                raise
+            time.sleep(min(8, 2 ** attempt))
 
 
 def asr_profile(model_name=None):
@@ -186,8 +202,9 @@ def enrich(rows, info, config, progress=None, cache_dir=None):
                     any(x not in {r['id'] for r in batch} for x in evidence):
                 raise StudioError('AI_SUMMARY_INVALID', 'AI 分段摘要缺少有效证据。', True)
             return {'learned': learned, 'summary': summary}
-        checked, meta, reused = _cached_ai(cache_dir, f'learning-{batch_index:04d}', cache_key,
-            lambda: call_json(config, LEARNING_PROMPT, request_payload), validate_batch)
+        checked, meta, reused = retry_ai(lambda: _cached_ai(
+            cache_dir, f'learning-{batch_index:04d}', cache_key,
+            lambda: call_json(config, LEARNING_PROMPT, request_payload), validate_batch))
         return checked, meta, reused
 
     completed = 0
@@ -215,8 +232,9 @@ def enrich(rows, info, config, progress=None, cache_dir=None):
     metadata_key = canonical_hash({'kind': 'metadata-v1', 'payload': metadata_payload,
         'prompt': METADATA_PROMPT, 'model': str(config.get('model') or os.getenv('ZOSPEAK_AI_MODEL', '')),
         'baseUrl': str(config.get('baseUrl') or os.getenv('ZOSPEAK_AI_BASE_URL', ''))})
-    metadata, meta, reused = _cached_ai(cache_dir, 'metadata', metadata_key,
+    metadata, meta, reused = retry_ai(lambda: _cached_ai(
+        cache_dir, 'metadata', metadata_key,
         lambda: call_json(config, METADATA_PROMPT, metadata_payload),
-        lambda payload: validate_metadata(payload, set(TOPICS), set(GOALS), {x['id'] for x in merged}))
+        lambda payload: validate_metadata(payload, set(TOPICS), set(GOALS), {x['id'] for x in merged})))
     provenance.append({**meta, 'cacheReused': reused})
     return merged, metadata, provenance
