@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-from ai_tools import asr_profile, call_json, endpoint, enrich, prepare_asr_model
+from ai_tools import LEARNING_PROMPT, ai_concurrency, asr_profile, call_json, endpoint, enrich, prepare_asr_model
 from contracts import StudioError
 
 
@@ -57,6 +57,12 @@ class AiTools(unittest.TestCase):
         with self.assertRaisesRegex(StudioError, 'AI_NOT_CONFIGURED'):
             call_json({}, 'x', {})
 
+    def test_ai_concurrency_is_bounded(self):
+        with patch.dict('os.environ', {'EASTUDY_AI_CONCURRENCY': '99'}):
+            self.assertEqual(ai_concurrency(), 4)
+        with patch.dict('os.environ', {'EASTUDY_AI_CONCURRENCY': 'invalid'}):
+            self.assertEqual(ai_concurrency(), 3)
+
     def test_enrichment_reuses_validated_batches(self):
         rows = [{'id': 'v-1', 'english': 'Good morning', 'startTime': 0, 'endTime': 1}]
         learning = {'sentences': [{'id': 'v-1', 'chinese': '早上好',
@@ -78,6 +84,26 @@ class AiTools(unittest.TestCase):
             self.assertEqual(mocked.call_count, 0)
             self.assertEqual(first[0], second[0])
             self.assertTrue(all(item['cacheReused'] for item in second[2]))
+
+    def test_parallel_enrichment_preserves_subtitle_order(self):
+        rows = [{'id': f'v-{index}', 'english': f'Line {index}',
+                 'startTime': index, 'endTime': index + 1} for index in range(45)]
+        config = {'model': 'fixture', 'baseUrl': 'https://api.example.com', 'apiKey': 'secret'}
+        info = {'title': 'Morning', 'creator': 'Alice', 'duration': 45, 'wordsPerMinute': 60}
+
+        def fake_call(_config, prompt, payload):
+            if prompt == LEARNING_PROMPT:
+                sentences = [{'id': item['id'], 'chinese': item['english'],
+                    'keyWords': [item['english']], 'grammar': '句子'} for item in payload['sentences']]
+                return {'sentences': sentences, 'batchSummary': {
+                    'summary': '分批摘要', 'evidenceIds': [sentences[0]['id']]}}, {'requestId': sentences[0]['id']}
+            return {'titleZh': '我的日常', 'descriptionZh': '通过真实生活视频积累自然英语表达，同时练习听力、词汇和日常口语。',
+                'level': 'A2', 'levelReason': '短句为主', 'topicIds': ['daily'],
+                'goalMappings': [{'goalId': 'daily', 'sentenceIds': ['v-0'], 'reason': '日常表达'}]}, {'requestId': 'metadata'}
+
+        with tempfile.TemporaryDirectory() as folder, patch('ai_tools.call_json', side_effect=fake_call):
+            learned, _, _ = enrich(rows, info, config, cache_dir=Path(folder))
+        self.assertEqual([item['id'] for item in learned], [item['id'] for item in rows])
 
 
 if __name__ == '__main__':

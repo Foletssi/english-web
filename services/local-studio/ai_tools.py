@@ -3,6 +3,7 @@ import os
 import ssl
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from urllib.parse import urlparse
 from checkpoint import canonical_hash, read_valid_json, save_json_checkpoint
@@ -19,6 +20,14 @@ GOALS = {'general': '综合英语提升', 'k12': '中考/高考', 'cet4': '大�
          'toeic': '托业', 'cambridge': '剑桥英语', 'career': '职场商务',
          'daily': '旅行/日常口语', 'custom': '自定义目标'}
 _models = {}
+
+
+def ai_concurrency():
+    try:
+        value = int(os.getenv('EASTUDY_AI_CONCURRENCY', '3'))
+    except ValueError:
+        value = 3
+    return min(4, max(1, value))
 
 
 def asr_profile(model_name=None):
@@ -160,13 +169,11 @@ def _cached_ai(cache_dir, name, key, request, validator):
 def enrich(rows, info, config, progress=None, cache_dir=None):
     progress = progress or (lambda *_, **__: None)
     merged, summaries, provenance = [], [], []
-    total_batches = max(1, (len(rows) + 19) // 20) + 1
-    for offset in range(0, len(rows), 20):
-        batch = rows[offset:offset + 20]
-        batch_index = offset // 20
-        progress('enrich', 72 + int(10 * offset / max(1, len(rows))),
-                 f'正在翻译并生成逐句学习内容（第 {batch_index + 1}/{total_batches - 1} 批）',
-                 substage='learning', current=batch_index, total=total_batches, unit='batches')
+    batches = [(offset // 20, rows[offset:offset + 20]) for offset in range(0, len(rows), 20)]
+    learning_count = len(batches)
+    total_batches = max(1, learning_count) + 1
+
+    def process_batch(batch_index, batch):
         request_payload = {'sentences': [{'id': x['id'], 'english': x['english']} for x in batch]}
         cache_key = canonical_hash({'kind': 'learning-v1', 'payload': request_payload,
             'prompt': LEARNING_PROMPT, 'model': str(config.get('model') or os.getenv('ZOSPEAK_AI_MODEL', '')),
@@ -179,11 +186,25 @@ def enrich(rows, info, config, progress=None, cache_dir=None):
                     any(x not in {r['id'] for r in batch} for x in evidence):
                 raise StudioError('AI_SUMMARY_INVALID', 'AI 分段摘要缺少有效证据。', True)
             return {'learned': learned, 'summary': summary}
-        checked, meta, reused = _cached_ai(cache_dir, f'learning-{offset // 20:04d}', cache_key,
+        checked, meta, reused = _cached_ai(cache_dir, f'learning-{batch_index:04d}', cache_key,
             lambda: call_json(config, LEARNING_PROMPT, request_payload), validate_batch)
+        return checked, meta, reused
+
+    completed = 0
+    ordered = {}
+    with ThreadPoolExecutor(max_workers=min(ai_concurrency(), max(1, learning_count))) as executor:
+        futures = {executor.submit(process_batch, index, batch): index for index, batch in batches}
+        for future in as_completed(futures):
+            index = futures[future]
+            ordered[index] = future.result()
+            completed += 1
+            progress('enrich', 72 + int(10 * completed / max(1, learning_count)),
+                     f'已完成逐句学习内容 {completed}/{learning_count} 批',
+                     substage='learning', current=completed, total=total_batches, unit='batches')
+    for index in range(learning_count):
+        checked, meta, reused = ordered[index]
         merged.extend(checked['learned'])
-        summary = checked['summary']
-        summaries.append(summary)
+        summaries.append(checked['summary'])
         provenance.append({**meta, 'cacheReused': reused})
     progress('enrich', 86, '正在判断难度、分类和学习目标', substage='metadata',
              current=total_batches - 1, total=total_batches, unit='batches')
