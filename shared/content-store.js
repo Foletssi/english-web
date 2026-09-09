@@ -20,7 +20,10 @@
   function normalizeSentence(input,videoId,order){
     const row={...deep(input),videoId:Number(videoId),order:Number(input.order??order)};
     row.keyWords=Array.isArray(row.keyWords)?row.keyWords.map(normalizeKeyword).filter(Boolean):[];
+    const suppliedTimings=Array.isArray(row.wordTimings)&&row.wordTimings.some(x=>Number.isFinite(Number(x?.start))&&Number.isFinite(Number(x?.end))&&Number(x.end)>Number(x.start));
     row.wordTimings=normalizeWordTimings(row.wordTimings,row.english,row.startTime,row.endTime);
+    row.timingSource=suppliedTimings?(row.timingSource||'unknown'):'estimated';
+    row.alignmentBasis=row.alignmentBasis||{english:String(row.english||''),startTime:Number(row.startTime)||0,endTime:Number(row.endTime)||0};
     return row;
   }
   const seed={
@@ -156,8 +159,12 @@
   function listSentences(videoId){return deep(((load().sentences||{})[String(videoId)]||[]).map((x,i)=>normalizeSentence(x,videoId,i)))}
   function saveSentence(videoId,input){const s=load();if(!s.videos.some(v=>String(v.id)===String(videoId)))throw new Error('VIDEO_NOT_FOUND');const key=String(videoId);s.sentences[key]=s.sentences[key]||[];const id=input.id||`${key}-${Date.now()}`;const idx=s.sentences[key].findIndex(x=>x.id===id);const prev=idx>=0?s.sentences[key][idx]:{};const next=normalizeSentence({...prev,...deep(input),id},videoId,idx>=0?prev.order:s.sentences[key].length);if(idx>=0)s.sentences[key][idx]=next;else s.sentences[key].push(next);s.sentences[key].sort((a,b)=>a.order-b.order||a.startTime-b.startTime);save(s,{type:'sentence.save',entityId:id,videoId:Number(videoId)});return deep(next)}
   function replaceSentences(videoId,rows){const s=load();if(!s.videos.some(v=>String(v.id)===String(videoId)))throw new Error('VIDEO_NOT_FOUND');s.sentences[String(videoId)]=deep(rows).map((x,i)=>normalizeSentence({...x,id:x.id||`${videoId}-${i+1}`},videoId,i));save(s,{type:'sentences.replace',videoId:Number(videoId),count:rows.length});}
-  function listCreators(){return deep(load().creators||[])}
-  function saveCreator(input){const s=load();const id=input.id||'creator-'+Date.now();const idx=s.creators.findIndex(x=>x.id===id);const next={...(idx>=0?s.creators[idx]:{}),...deep(input),id};if(idx>=0)s.creators[idx]=next;else s.creators.unshift(next);save(s,{type:'creator.save',entityId:id,name:next.name});return deep(next)}
+  function validCreatorName(value){const name=String(value??'').trim();if(!name||/^(null|undefined)$/i.test(name)||name.length>80)throw new Error('CREATOR_NAME_INVALID');return name}
+  function listCreators(options={}){const rows=load().creators||[];return deep(options.includeDeleted?rows:rows.filter(x=>x.status!=='DELETED'))}
+  function saveCreator(input){const s=load(),id=input.id||'creator-'+Date.now(),idx=s.creators.findIndex(x=>x.id===id),previous=idx>=0?s.creators[idx]:{};const next={...previous,...deep(input),id,name:validCreatorName(input.name??previous.name),status:input.status||previous.status||'ACTIVE',deletedAt:input.status==='ACTIVE'?null:(input.deletedAt??previous.deletedAt)};if(idx>=0)s.creators[idx]=next;else s.creators.unshift(next);save(s,{type:'creator.save',entityId:id,name:next.name});return deep(next)}
+  function deleteCreator(id,replacementId=null){const s=load(),idx=s.creators.findIndex(x=>String(x.id)===String(id));if(idx<0)throw new Error('CREATOR_NOT_FOUND');const linked=[...(s.videos||[]),...(s.trash||[]).map(x=>x.video)].filter(v=>v&&String(v.creatorId)===String(id));let replacement=null;if(linked.length){replacement=s.creators.find(x=>String(x.id)===String(replacementId)&&x.status!=='DELETED');if(!replacement||String(replacement.id)===String(id))throw new Error('CREATOR_REPLACEMENT_REQUIRED');for(const video of s.videos||[])if(String(video.creatorId)===String(id)){video.creatorId=replacement.id;video.creator=replacement.name}for(const entry of s.trash||[])if(String(entry.video?.creatorId)===String(id)){entry.video.creatorId=replacement.id;entry.video.creator=replacement.name}}
+    const creator=s.creators[idx];creator.status='DELETED';creator.deletedAt=now();save(s,{type:'creator.delete',entityId:id,replacementId:replacement?.id||null,linkedCount:linked.length});return deep(creator)}
+  function restoreCreator(id){const s=load(),creator=s.creators.find(x=>String(x.id)===String(id));if(!creator)throw new Error('CREATOR_NOT_FOUND');creator.status='ACTIVE';creator.deletedAt=null;save(s,{type:'creator.restore',entityId:id});return deep(creator)}
   function listCollections(){return deep(load().collections||[])}
   function saveCollection(input){const s=load();const id=input.id||Date.now();const idx=s.collections.findIndex(x=>String(x.id)===String(id));const next={...(idx>=0?s.collections[idx]:{}),...deep(input),id};if(idx>=0)s.collections[idx]=next;else s.collections.unshift(next);save(s,{type:'collection.save',entityId:id,title:next.title});return deep(next)}
   function listJobs(){return deep(load().jobs||[])}
@@ -186,5 +193,5 @@
     return {ok:issues.every(x=>x.severity!=='ERROR'),schemaVersion:s.schemaVersion,videoCount:s.videos.length,publishedCount:published.length,creatorCount:s.creators.length,collectionCount:s.collections.length,jobCount:s.jobs.length,issues};
   }
   function reset(){if(localOnly){deleteVideos(listVideos().map(v=>v.id));return snapshot()}return save(deep(seed),{type:'content.reset'})}
-  global.ZoContent={KEY,SCHEMA_VERSION,localOnly,allowJobRetry,isPlaceholder,deleteVideos,listTrash,restoreVideo,acceptsJob,snapshot,importSnapshot,listVideos,getVideo,saveVideo,setVideoStatus,deleteVideo,listSentences,saveSentence,replaceSentences,listCreators,saveCreator,listCollections,saveCollection,listJobs,startPipeline,updatePipeline,completePipeline,failPipeline,advancePipeline,audit,reset};
+  global.ZoContent={KEY,SCHEMA_VERSION,localOnly,allowJobRetry,isPlaceholder,deleteVideos,listTrash,restoreVideo,acceptsJob,snapshot,importSnapshot,listVideos,getVideo,saveVideo,setVideoStatus,deleteVideo,listSentences,saveSentence,replaceSentences,listCreators,saveCreator,deleteCreator,restoreCreator,listCollections,saveCollection,listJobs,startPipeline,updatePipeline,completePipeline,failPipeline,advancePipeline,audit,reset};
 })(window);

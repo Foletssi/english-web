@@ -16,6 +16,8 @@ const recoverySql = read('../supabase/migrations/20260909_processing_recovery_v2
 const processingOutput = read('../functions/api/processing/output.js');
 const processingMedia = read('../functions/api/processing/media/[[path]].js');
 const edgeWorker = read('../supabase/functions/video-processing/index.ts');
+const avatarUpload = read('../functions/api/admin/creator-avatars.js');
+const avatarRead = read('../functions/api/creator-avatars/[[path]].js');
 
 for (const route of ['/api/session', '/api/admin/uploads/init', '/api/admin/uploads/part', '/api/admin/uploads/complete', '/api/admin/uploads/abort', '/api/media?key=']) {
   assert.ok(client.includes(route), `client must use ${route}`);
@@ -82,5 +84,11 @@ assert.ok(edgeWorker.includes("env('WORKER_SECRET')"), 'desktop worker actions m
 for (const method of ['processingHealth', 'createProcessingJob', 'listProcessingJobs', 'retryProcessingJob']) {
   assert.ok(client.includes(method), `cloud client must expose ${method}`);
 }
+assert.ok(client.includes("'/api/admin/creator-avatars'"),'cloud client must upload compressed creator avatars through the admin route');
+assert.ok(client.includes('uploadCreatorAvatar'),'cloud client must expose creator avatar upload');
+assert.ok(avatarUpload.includes("requireAdmin(request, env)"),'creator avatar upload must require administrator authorization');
+assert.ok(avatarUpload.includes("'RIFF'")&&avatarUpload.includes("'WEBP'"),'creator avatar upload must validate actual WebP signatures');
+assert.ok(avatarRead.includes('authenticate(request, env)'),'creator avatar delivery must require an authenticated session');
+assert.ok(!avatarUpload.toLowerCase().includes('.delete('),'creator avatar changes must not physically delete R2 objects');
 
-console.log(JSON.stringify({ ok: true, tests: 52 }, null, 2));
+console.log(JSON.stringify({ ok: true, tests: 58 }, null, 2));

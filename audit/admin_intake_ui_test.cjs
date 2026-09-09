@@ -58,15 +58,15 @@ const types={'.js':'text/javascript','.css':'text/css','.html':'text/html','.png
    await page.waitForSelector('#studioV2Modal.show');
    assert.equal(await page.locator('#studioV2Creator').inputValue(),'');
    if(mode==='cloud'){
-    await page.waitForSelector('#studioV2Health[data-state="error"]');
-    assert.ok(await page.locator('#studioV2Submit').isDisabled());
+    await page.waitForSelector('#studioV2Health[data-state="unavailable"]');
+    assert.ok(await page.locator('#studioV2Submit').isEnabled());
     assert.equal(localRequests.length,0,'cloud UI must not poll localhost');
     assert.equal((await page.locator('#studioV2Modal').innerText()).includes('START_EASTUDY'),false);
     await page.locator('#studioV2Creator').fill('Alice');
     await page.locator('#studioV2Videos').setInputFiles({name:'a week in my life.mp4',mimeType:'video/mp4',buffer:Buffer.from('fixture')});
     await page.locator('#studioV2Form').evaluate(form=>form.requestSubmit());
     assert.equal(localRequests.length,0);
-    assert.equal(await page.evaluate(()=>ZoContent.listVideos().length),1,'blocked submit must not create records');
+    assert.equal(await page.evaluate(()=>ZoContent.listVideos().length),1,'failed cloud upload must not create video records');
     for(const width of [320,768,1024,1440,1920]){
      await page.setViewportSize({width,height:900});
      const modal=page.locator('.studio-v2-modal');

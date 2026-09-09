@@ -183,7 +183,16 @@
     }
   }
 
+  async function uploadCreatorAvatar(file) {
+    if (!(file instanceof Blob) || !file.size) throw new Error('CREATOR_AVATAR_REQUIRED');
+    if (file.size > 512 * 1024 || file.type !== 'image/webp') throw new Error('CREATOR_AVATAR_INVALID');
+    const payload = await apiRequest('/api/admin/creator-avatars', {
+      method: 'POST', body: file, headers: { 'Content-Type': 'image/webp' }
+    });
+    return { key: payload.key, url: payload.url, size: Number(payload.size) || file.size, type: 'image/webp' };
+  }
+
   global.EastudyCloudContent = Object.freeze({ pullPublished, pullAdmin, saveDraft, publish, listTrash, trashVideos, restoreVideo,
     processingHealth, createProcessingJob, listProcessingJobs, retryProcessingJob,
-    syncMediaSession, clearMediaSession, uploadVideo });
+    syncMediaSession, clearMediaSession, uploadVideo, uploadCreatorAvatar });
 })(window);

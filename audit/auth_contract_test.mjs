@@ -62,4 +62,12 @@ assert.equal(shortPassword.error.message, 'PASSWORD_TOO_SHORT');
 const invalid = await auth.verifyPhoneOtp({ phone: '13800138000', token: '123' }, 'student');
 assert.equal(invalid.error.message, 'INVALID_OTP');
 
-console.log(JSON.stringify({ ok: true, tests: 15 }, null, 2));
+const studentHtml=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
+const studentApp=fs.readFileSync(new URL('../assets/js/app.js',import.meta.url),'utf8');
+const adminHtml=fs.readFileSync(new URL('../admin/index.html',import.meta.url),'utf8');
+assert.ok(studentHtml.includes('id="authPasswordEye"')&&studentHtml.includes('aria-pressed="false"'),'student login must expose an accessible password visibility control');
+assert.ok(studentApp.includes('function setPasswordVisible('),'student password visibility must update input and accessible state together');
+assert.ok(studentApp.includes("visible?'eye-off':'eye'"),'student password control must show distinct visible and hidden icons');
+assert.ok(adminHtml.includes('data-password-target="adminAuthPass"'),'administrator login must expose the same password visibility control');
+
+console.log(JSON.stringify({ ok: true, tests: 19 }, null, 2));

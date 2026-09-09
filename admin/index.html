@@ -10,7 +10,7 @@
 <script>
 try{const raw=localStorage.getItem('zs:admin:theme');const t=raw?JSON.parse(raw):'dark';document.documentElement.dataset.theme=(t==='light'?'light':'dark');document.documentElement.dataset.adminAuth='signed-out'}catch(e){document.documentElement.dataset.adminAuth='signed-out'}
 </script>
-<link rel="stylesheet" href="assets/admin.css?v=beta6.26.0">
+<link rel="stylesheet" href="assets/admin.css?v=beta6.27.0">
 </head>
 <body>
 <div class="admin-shell">
@@ -60,12 +60,44 @@ try{const raw=localStorage.getItem('zs:admin:theme');const t=raw?JSON.parse(raw)
     <p class="admin-auth-lead">学生端与内容控制台使用独立账号和独立会话。</p>
     <form id="adminAuthForm" novalidate>
       <label><span>管理员手机号</span><input id="adminAuthUser" type="tel" autocomplete="username" inputmode="tel" placeholder="+8613812345678" required></label>
-      <label><span>管理密码</span><input id="adminAuthPass" type="password" autocomplete="current-password" placeholder="请输入管理密码" required></label>
+      <label><span>管理密码</span><span class="admin-password-field"><input id="adminAuthPass" type="password" autocomplete="current-password" placeholder="请输入管理密码" required><button type="button" class="password-toggle" data-password-target="adminAuthPass" aria-controls="adminAuthPass" aria-label="显示密码" aria-pressed="false"><i data-icon="eye"></i></button></span></label>
       <p class="admin-auth-error" id="adminAuthError" role="alert"></p>
       <button class="primary admin-auth-submit" type="submit">进入管理端</button>
     </form>
     <small class="admin-auth-hint">仅限 Supabase 中 role 为 admin 的账号。</small>
     <a class="admin-auth-student-link" href="../index.html#/home">返回学员端</a>
+  </section>
+</div>
+
+<div class="modal-backdrop" id="creatorModal">
+  <section class="modal">
+    <header><div><span class="eyebrow">CREATOR PROFILE</span><h2 id="creatorModalTitle">新增创作者</h2><p>名称、简介和头像会统一提供给视频与学员端。</p></div><button class="modal-close" data-close="creatorModal" aria-label="关闭创作者编辑">×</button></header>
+    <form id="creatorForm" class="form-grid">
+      <input type="hidden" name="id">
+      <input type="hidden" name="avatar">
+      <input type="hidden" name="avatarKey">
+      <label><span>创作者名称 *</span><input name="name" maxlength="80" required placeholder="例如：Jojo English"></label>
+      <label><span>频道链接</span><input name="channelUrl" type="url" placeholder="https://..."></label>
+      <label class="span-2"><span>简介</span><textarea name="bio" rows="3" maxlength="240" placeholder="内容方向、英语风格或频道说明"></textarea></label>
+      <section class="creator-avatar-editor span-2">
+        <div class="creator-avatar-preview" id="creatorAvatarPreview" aria-label="头像预览">C</div>
+        <div><b>创作者头像</b><p>选择图片后自动裁切并压缩为 256×256 WebP。</p><label class="secondary creator-avatar-file"><span>上传或更换头像</span><input id="creatorAvatarFile" type="file" accept="image/jpeg,image/png,image/webp"></label><button type="button" class="ghost" id="removeCreatorAvatar">移除头像</button></div>
+      </section>
+      <p class="form-message span-2" id="creatorFormMessage" role="alert"></p>
+      <footer class="form-actions span-2"><button type="button" class="secondary" data-close="creatorModal">取消</button><button type="submit" class="primary">保存创作者</button></footer>
+    </form>
+  </section>
+</div>
+
+<div class="modal-backdrop" id="creatorDeleteModal">
+  <section class="modal">
+    <header><div><span class="eyebrow">CREATOR ARCHIVE</span><h2>删除创作者</h2><p id="creatorDeleteCopy">创作者将从可用列表隐藏，历史记录仍可恢复。</p></div><button class="modal-close" data-close="creatorDeleteModal" aria-label="关闭删除创作者">×</button></header>
+    <form id="creatorDeleteForm" class="form-grid">
+      <input type="hidden" name="creatorId">
+      <label class="span-2" id="creatorReplacementField"><span>关联视频转移给</span><select name="replacementCreatorId"></select></label>
+      <p class="form-message span-2" id="creatorDeleteMessage" role="alert"></p>
+      <footer class="form-actions span-2"><button type="button" class="secondary" data-close="creatorDeleteModal">取消</button><button type="submit" class="danger">确认删除</button></footer>
+    </form>
   </section>
 </div>
 
@@ -122,10 +154,10 @@ try{const raw=localStorage.getItem('zs:admin:theme');const t=raw?JSON.parse(raw)
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../shared/supabase-config.js?v=beta6.24.0"></script>
 <script src="../shared/supabase-client.js?v=beta6.24.0"></script>
-<script src="../shared/content-store.js?v=beta6.26.0"></script>
-<script src="../shared/cloud-content.js?v=beta6.26.0"></script>
+<script src="../shared/content-store.js?v=beta6.27.0"></script>
+<script src="../shared/cloud-content.js?v=beta6.27.0"></script>
 <script src="../shared/studio-client.js?v=beta6.26.0"></script>
-<script src="assets/studio-v2.js?v=beta6.26.0"></script>
-<script src="assets/admin.js?v=beta6.26.0"></script>
+<script src="assets/studio-v2.js?v=beta6.27.0"></script>
+<script src="assets/admin.js?v=beta6.27.0"></script>
 </body>
 </html>

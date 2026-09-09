@@ -30,8 +30,19 @@ assert.ok(S.listVideos({publishedOnly:true}).some(v=>v.id===created.id),'publish
 assert.equal(S.listSentences(created.id).length,1,'sentence must round-trip via shared contract');
 assert.equal(Array.from(S.listSentences(created.id)[0].keyWords).join(','),'shared','keyWords must round-trip for cloze authoring');
 assert.equal(S.listSentences(created.id)[0].wordTimings.length,5,'word timings must be generated for legacy/plain sentence input');
-S.saveSentence(created.id,{...S.listSentences(created.id)[0],wordTimings:[{text:'Hello',start:0,end:.45},{text:'from',start:.45,end:.9},{text:'the',start:.9,end:1.22},{text:'shared',start:1.22,end:1.8},{text:'contract',start:1.8,end:2.4}]});
+assert.equal(S.listSentences(created.id)[0].timingSource,'estimated','generated timings must be clearly marked as estimated');
+S.saveSentence(created.id,{...S.listSentences(created.id)[0],timingSource:'faster-whisper',wordTimings:[{text:'Hello',start:0,end:.45},{text:'from',start:.45,end:.9},{text:'the',start:.9,end:1.22},{text:'shared',start:1.22,end:1.8},{text:'contract',start:1.8,end:2.4}]});
 assert.equal(S.listSentences(created.id)[0].wordTimings[3].word,'shared','authored word timing must round-trip through the shared contract');
+assert.equal(S.listSentences(created.id)[0].timingSource,'faster-whisper','precise faster-whisper timing provenance must survive normalization');
+assert.throws(()=>S.saveCreator({name:'null'}),/CREATOR_NAME_INVALID/,'placeholder creator names must be rejected');
+const temporaryCreator=S.saveCreator({id:'creator-contract-test',name:'Contract Creator',bio:'temporary'});
+S.saveVideo({...S.getVideo(created.id),creatorId:temporaryCreator.id,creator:temporaryCreator.name});
+assert.throws(()=>S.deleteCreator(temporaryCreator.id),/CREATOR_REPLACEMENT_REQUIRED/,'linked creators require an explicit replacement');
+S.deleteCreator(temporaryCreator.id,'creator-jojo');
+assert.equal(S.listCreators().some(row=>row.id===temporaryCreator.id),false,'logical deletion must hide creators from active lists');
+assert.equal(S.getVideo(created.id).creatorId,'creator-jojo','creator deletion must atomically reassign linked videos');
+S.restoreCreator(temporaryCreator.id);
+assert.equal(S.listCreators().some(row=>row.id===temporaryCreator.id),true,'logically deleted creators must be restorable');
 S.startPipeline(created.id);
 let job=S.listJobs().find(j=>j.videoId===created.id);
 assert.equal(job.status,'PROCESSING','pipeline must start in isolated job state');
@@ -45,4 +56,4 @@ S.completePipeline(created.id,{id:job.id,video:{mediaUrl:'assets/video/sample_le
 assert.equal(S.getVideo(created.id).status,'REVIEW','real output must wait for human review');
 a=S.audit();
 assert.equal(a.ok,true,'post-mutation contract audit must still pass');
-console.log(JSON.stringify({ok:true,tests:20,videoCount:a.videoCount,publishedCount:a.publishedCount,jobCount:a.jobCount},null,2));
+console.log(JSON.stringify({ok:true,tests:30,videoCount:a.videoCount,publishedCount:a.publishedCount,jobCount:a.jobCount},null,2));
