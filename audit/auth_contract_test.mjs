@@ -68,6 +68,9 @@ const adminHtml=fs.readFileSync(new URL('../admin/index.html',import.meta.url),'
 assert.ok(studentHtml.includes('id="authPasswordEye"')&&studentHtml.includes('aria-pressed="false"'),'student login must expose an accessible password visibility control');
 assert.ok(studentApp.includes('function setPasswordVisible('),'student password visibility must update input and accessible state together');
 assert.ok(studentApp.includes("visible?'eye-off':'eye'"),'student password control must show distinct visible and hidden icons');
+assert.ok(studentApp.includes("input.type!=='text'"),'student password control must toggle from the live input type');
+assert.ok(studentApp.includes("name:'雅思学术类 IELTS Academic'")&&studentApp.includes("name:'托福网考 TOEFL iBT'"),'student learning goals must present Chinese names before English exam abbreviations');
+assert.ok(studentHtml.includes('assets/js/app.js?v=beta6.27.1'),'student app must use the current cache key');
 assert.ok(adminHtml.includes('data-password-target="adminAuthPass"'),'administrator login must expose the same password visibility control');
 
-console.log(JSON.stringify({ ok: true, tests: 19 }, null, 2));
+console.log(JSON.stringify({ ok: true, tests: 22 }, null, 2));
