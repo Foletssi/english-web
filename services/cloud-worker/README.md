@@ -5,3 +5,5 @@
 环境变量：`EASTUDY_WORKER_SECRET`（必需）、`DEEPSEEK_API_KEY`、`DEEPSEEK_BASE_URL`、`AI_DEEPSEEK_TRANSLATE_MODEL`。可选：`EASTUDY_ASR_DEVICE`、`EASTUDY_ASR_COMPUTE`、`EASTUDY_WORKER_ID`。
 
 运行 `START_EASTUDY_CLOUD_WORKER.bat`。首次识别会下载 Whisper 模型；任务和原片不保存在仓库，临时文件会在每个任务结束后清理。
+
+Windows 自动启动使用 `services/cloud-worker/start-worker.ps1`：将它注册为用户登录计划任务后，Worker 会在后台自动领取任务。
