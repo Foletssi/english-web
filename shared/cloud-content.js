@@ -118,15 +118,15 @@
     const api = auth('admin');
     if (!api) return { rows: [], error: new Error('SUPABASE_NOT_CONFIGURED') };
     const { data, error } = await api.rpc('admin_list_processing_jobs', { p_limit: Number(limit) || 50 });
-    const stageStep = { LOCAL_DOWNLOAD: 'upload', PROBE: 'transcode', TRANSCODE: 'transcode', ASR: 'asr', ENRICH: 'enrich', LOCAL_UPLOAD: 'enrich', REVIEW: 'review' };
-    const order = ['upload', 'transcode', 'asr', 'enrich', 'review'];
+    const stageStep = { LOCAL_DOWNLOAD: 'download', PROBE: 'probe', TRANSCODE: 'transcode', ASR: 'asr', ENRICH: 'enrich', LOCAL_UPLOAD: 'output', REVIEW: 'review' };
+    const order = ['download', 'probe', 'transcode', 'asr', 'enrich', 'output', 'review'];
     const rows = (Array.isArray(data) ? data : []).map((row) => row.job || row).map((job) => {
-      const currentStep = stageStep[job.stage] || 'upload';
+      const currentStep = stageStep[job.stage] || 'download';
       const current = order.indexOf(currentStep);
-      const status = ['QUEUED', 'RUNNING', 'WAITING'].includes(job.status) ? 'PROCESSING' : job.status;
+      const status = String(job.status || 'WAITING').toUpperCase();
       const telemetry = job.telemetry && typeof job.telemetry === 'object' ? job.telemetry : {};
-      return { ...job, ...telemetry, telemetry, videoId: Number(job.videoId), rawStatus: job.status, status, currentStep,
-        steps: order.map((step, index) => [step, index < current ? 'SUCCESS' : index === current ? (status === 'ERROR' ? 'ERROR' : status === 'REVIEW' ? 'WAITING' : 'PROCESSING') : 'WAITING']) };
+      return { ...job, ...telemetry, telemetry, videoId: Number(job.videoId), rawStatus: status, status, currentStep,
+        steps: order.map((step, index) => [step, index < current ? 'SUCCESS' : index === current ? (status === 'ERROR' ? 'ERROR' : status === 'REVIEW' || status === 'QUEUED' || status === 'WAITING' ? 'WAITING' : 'RUNNING') : 'WAITING']) };
     });
     return { rows, error: error || null };
   }

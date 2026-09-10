@@ -23,13 +23,34 @@ from ai_tools import prepare_asr_model  # noqa: E402
 from checkpoint import atomic_json  # noqa: E402
 
 
-VERSION = '2.0.0'
+VERSION = '2.1.0'
 DEFAULT_ENDPOINT = 'https://ehxqtgakjgqgmghhdmjg.supabase.co/functions/v1/video-processing'
 STAGE_MAP = {'probe': 'PROBE', 'transcode': 'TRANSCODE', 'asr': 'ASR', 'enrich': 'ENRICH'}
 
 
 class ApiError(RuntimeError):
-    pass
+    def __init__(self, code, message=None, status=None, detail=None):
+        self.code = str(code or 'EDGE_REQUEST_FAILED')[:120]
+        self.status = status
+        self.detail = detail
+        super().__init__(str(message or self.code))
+
+
+def api_error_from_http(error, prefix='EDGE'):
+    raw = error.read().decode('utf-8', 'replace')[:2000]
+    try:
+        detail = json.loads(raw)
+    except ValueError:
+        detail = {'message': raw}
+    code = str(detail.get('error') or detail.get('code') or f'{prefix}_HTTP_{error.code}')
+    message = str(detail.get('message') or code)
+    return ApiError(code, message, error.code, detail)
+
+
+def lease_cancelled(error):
+    return isinstance(error, ApiError) and error.code in {
+        'JOB_LEASE_LOST_OR_CANCELLED', 'VIDEO_IN_TRASH', 'JOB_NOT_FOUND', 'RUN_ID_MISMATCH'
+    }
 
 
 class EdgeClient:
@@ -45,16 +66,16 @@ class EdgeClient:
         request = urllib.request.Request(self.endpoint, data=json.dumps(payload).encode('utf-8'), method='POST', headers={
             'Content-Type': 'application/json', 'x-worker-secret': self.secret,
             'User-Agent': f'EastudyCloudWorker/{VERSION}'})
+        timeout = 15 if 'heartbeat' in action else 45
         try:
-            with urllib.request.urlopen(request, timeout=90) as response:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
                 result = json.loads(response.read().decode('utf-8'))
         except urllib.error.HTTPError as error:
-            detail = error.read().decode('utf-8', 'replace')[:500]
-            raise ApiError(f'EDGE_HTTP_{error.code}:{detail}') from error
+            raise api_error_from_http(error) from error
         except (urllib.error.URLError, TimeoutError, ValueError) as error:
-            raise ApiError(f'EDGE_UNAVAILABLE:{error}') from error
+            raise ApiError('EDGE_UNAVAILABLE', str(error)) from error
         if not result.get('ok'):
-            raise ApiError(str(result.get('error') or 'EDGE_REQUEST_FAILED'))
+            raise ApiError(result.get('error') or 'EDGE_REQUEST_FAILED', result.get('message'))
         return result
 
     def upload(self, base_url, token, job_id, path, source):
@@ -67,8 +88,7 @@ class EdgeClient:
             with urllib.request.urlopen(request, timeout=300) as response:
                 result = json.loads(response.read().decode('utf-8'))
         except urllib.error.HTTPError as error:
-            detail = error.read().decode('utf-8', 'replace')[:500]
-            raise ApiError(f'OUTPUT_HTTP_{error.code}:{detail}') from error
+            raise api_error_from_http(error, 'OUTPUT') from error
         if not result.get('ok'):
             raise ApiError(str(result.get('error') or 'OUTPUT_UPLOAD_FAILED'))
         return result
@@ -168,12 +188,14 @@ def upload_concurrency():
     return min(8, max(1, value))
 
 
-def upload_assets(client, lease, output, assets):
+def upload_assets(client, lease, output, assets, cancelled=None):
     job_id = lease['job']['id']
     ordered = sorted(assets)
     manifest = {}
 
     def upload_one(path):
+        if cancelled and cancelled.is_set():
+            raise ApiError('JOB_LEASE_LOST_OR_CANCELLED')
         relative = path.relative_to(output).as_posix()
         receipt = client.upload(lease['outputUrl'], lease['token'], job_id, relative, path)
         return relative, receipt
@@ -181,6 +203,10 @@ def upload_assets(client, lease, output, assets):
     with ThreadPoolExecutor(max_workers=min(upload_concurrency(), len(ordered))) as executor:
         futures = {executor.submit(upload_one, path): path for path in ordered}
         for completed, future in enumerate(as_completed(futures), 1):
+            if cancelled and cancelled.is_set():
+                for pending in futures:
+                    pending.cancel()
+                raise ApiError('JOB_LEASE_LOST_OR_CANCELLED')
             relative, receipt = future.result()
             item = {'path': relative, 'size': int(receipt['size']), 'sha256': str(receipt['sha256'])}
             manifest[relative] = item
@@ -337,7 +363,7 @@ def rewrite_result(result, job_id, source_key):
     return result
 
 
-def heartbeat_loop(client, lease, stop):
+def heartbeat_loop(client, lease, stop, cancelled):
     while not stop.wait(30):
         try:
             current_run = run_id(lease)
@@ -345,12 +371,17 @@ def heartbeat_loop(client, lease, stop):
                         jobId=lease['job']['id'], token=lease['token'], **({'runId': current_run} if current_run else {}))
         except Exception as error:
             print(f'[heartbeat] {error}', flush=True)
+            if lease_cancelled(error):
+                cancelled.set()
+                stop.set()
+                return
 
 
 def process_lease(client, lease):
     job_id = lease['job']['id']
     stop = threading.Event()
-    thread = threading.Thread(target=heartbeat_loop, args=(client, lease, stop), daemon=True)
+    cancelled = threading.Event()
+    thread = threading.Thread(target=heartbeat_loop, args=(client, lease, stop, cancelled), daemon=True)
     thread.start()
     try:
         if not re.fullmatch(r'[0-9a-f-]{36}', job_id, re.I):
@@ -363,6 +394,8 @@ def process_lease(client, lease):
         report_progress(client, lease, 'LOCAL_DOWNLOAD', 2, '正在从 R2 下载原片')
         last_reported = [0.0]
         def report_download(current, total):
+            if cancelled.is_set():
+                raise ApiError('JOB_LEASE_LOST_OR_CANCELLED')
             now = time.monotonic()
             if current < total and now - last_reported[0] < 5:
                 return
@@ -372,8 +405,12 @@ def process_lease(client, lease):
                             f'正在下载原片 {current}/{total} 字节',
                             {'substage': 'source', 'current': current, 'total': total, 'unit': 'bytes'})
         download(lease['downloadUrl'], source, report_download)
+        if cancelled.is_set():
+            raise ApiError('JOB_LEASE_LOST_OR_CANCELLED')
         store = RemoteProgressStore(client, lease)
         result_job = process_job(store, job_id, source, None, {}, work / 'output', base_url='')
+        if cancelled.is_set():
+            raise ApiError('JOB_LEASE_LOST_OR_CANCELLED')
         if result_job.get('status') != 'REVIEW':
             error = result_job.get('error') or {'code': 'PIPELINE_FAILED', 'message': result_job.get('message', '处理失败')}
             report_failure(client, lease, error, bool(error.get('retryable', True)))
@@ -381,7 +418,9 @@ def process_lease(client, lease):
         report_progress(client, lease, 'LOCAL_UPLOAD', 96, '正在把 HLS 与封面上传回 R2')
         output = work / 'output' / job_id
         assets = selected_assets(output, result_job['result'])
-        manifest = upload_assets(client, lease, output, assets)
+        manifest = upload_assets(client, lease, output, assets, cancelled)
+        if cancelled.is_set():
+            raise ApiError('JOB_LEASE_LOST_OR_CANCELLED')
         final = rewrite_result(result_job['result'], job_id, lease['job']['source_key'])
         if run_id(lease):
             client.call('worker-complete-v2', jobId=job_id, token=lease['token'], runId=run_id(lease),
@@ -391,6 +430,9 @@ def process_lease(client, lease):
         print(f'[complete] {job_id}', flush=True)
     except Exception as error:
         print(f'[error] {job_id}: {error}', flush=True)
+        if cancelled.is_set() or lease_cancelled(error):
+            print(f'[cancelled] {job_id}: stale lease stopped before the next stage', flush=True)
+            return
         try:
             report_failure(client, lease,
                            {'code': type(error).__name__[:80], 'message': str(error)[:500]}, True)
@@ -418,6 +460,10 @@ def main():
     worker_id = os.getenv('EASTUDY_WORKER_ID', '').strip() or default_worker_id()
     client = EdgeClient(os.getenv('EASTUDY_PROCESSING_ENDPOINT', DEFAULT_ENDPOINT).strip(), secret, worker_id, caps)
     print(f'Eastudy Worker {VERSION} started: {worker_id} {caps}', flush=True)
+    try:
+        client.call('worker-heartbeat')
+    except Exception as error:
+        print(f'[startup-heartbeat] {error}', flush=True)
     while True:
         try:
             lease = client.call('worker-claim')
