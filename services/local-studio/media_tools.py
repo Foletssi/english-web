@@ -132,30 +132,31 @@ def probe(source):
 
 def ladder(width, height, source_fps=30):
     short = min(width, height)
-    # The uploaded source remains available as the original-quality rendition.
-    # Re-encoding the same 1080p input at a fixed 3.5 Mbps only duplicates it
-    # (and can make it larger), so HLS is reserved for network fallback levels.
-    # FormatFactory's space-saving profile also caps 480p at 24 fps. Keep H.264
-    # here for browser-wide HLS support instead of copying its HEVC-only output.
-    profiles = ((480, 900, 24, 64), (720, 1800, 30, 96))
-    values = [(size, rate, fps, audio) for size, rate, fps, audio in profiles if size <= short]
-    if not values:
-        values = [(max(2, short // 2 * 2), 600, 24, 64)]
+    # Eastudy publishes one browser-compatible rendition. Sources below 720p
+    # keep their real encoded resolution, but still use the one canonical
+    # playback tier/path (`720p`) so lower-tier database references never
+    # reappear.
+    encoded_size = min(720, max(2, short // 2 * 2))
+    rate = 1200 if encoded_size == 720 else 700
+    values = [(encoded_size, rate, 30, 96)]
     try:
         source_fps = float(source_fps)
     except (TypeError, ValueError):
         source_fps = 30.0
     if not math.isfinite(source_fps) or source_fps <= 0:
         source_fps = 30.0
-    return [{'label': f'{size}p', 'size': size, 'rateK': rate, 'crf': 23,
-             'fps': min(source_fps, fps), 'audioRateK': audio}
+    return [{'label': '720p', 'size': size, 'rateK': rate, 'crf': 25,
+             'fps': min(source_fps, fps), 'audioRateK': audio,
+             'preset': 'veryfast', 'segmentSeconds': 4,
+             'profileVersion': 'single-720-v2'}
             for size, rate, fps, audio in values]
 
 
 def _profile_signature(level):
     fps = f"{level['fps']:.3f}".rstrip('0').rstrip('.')
-    return (f"web-h264-crf{level['crf']}-{level['label']}-{fps}fps-"
-            f"a{level['audioRateK']}-v1")
+    return (f"{level['profileVersion']}-h264-crf{level['crf']}-{level['label']}-s{level['size']}-"
+            f"{fps}fps-v{level['rateK']}-a{level['audioRateK']}-"
+            f"{level['preset']}-seg{level['segmentSeconds']}")
 
 
 def _valid_hls(folder, expected_profile=None):
@@ -190,7 +191,8 @@ def transcode(source, output, info, progress=None):
         rate = level['rateK']
         audio_rate = level['audioRateK']
         fps = f"{level['fps']:.3f}".rstrip('0').rstrip('.')
-        gop = max(1, round(level['fps'] * 4))
+        segment_seconds = level['segmentSeconds']
+        gop = max(1, round(level['fps'] * segment_seconds))
         profile_signature = _profile_signature(level)
         video = _valid_hls(folder, profile_signature)
         if video is None:
@@ -199,10 +201,12 @@ def transcode(source, output, info, progress=None):
             try:
                 run_progress(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-nostdin', '-y', '-i', str(source),
              '-map', '0:v:0', '-map', '0:a:0', '-sn', '-dn', '-vf', f'scale={scale}:flags=lanczos,setsar=1,fps={fps}',
-             '-c:v', 'libx264', '-profile:v', 'high', '-pix_fmt', 'yuv420p', '-preset', 'veryfast',
+             '-c:v', 'libx264', '-profile:v', 'high', '-pix_fmt', 'yuv420p', '-preset', level['preset'],
              '-crf', str(level['crf']), '-maxrate', f'{rate}k', '-bufsize', f'{rate * 2}k',
-             '-g', str(gop), '-keyint_min', str(gop), '-sc_threshold', '0', '-force_key_frames', 'expr:gte(t,n_forced*4)',
-             '-c:a', 'aac', '-b:a', f'{audio_rate}k', '-ar', '44100', '-ac', '2', '-f', 'hls', '-hls_time', '4',
+             '-g', str(gop), '-keyint_min', str(gop), '-sc_threshold', '0',
+             '-force_key_frames', f'expr:gte(t,n_forced*{segment_seconds})',
+             '-c:a', 'aac', '-b:a', f'{audio_rate}k', '-ar', '44100', '-ac', '2', '-f', 'hls',
+             '-hls_time', str(segment_seconds),
              '-hls_playlist_type', 'vod', '-hls_flags', 'independent_segments', '-hls_list_size', '0',
              '-hls_segment_filename', str(partial / 'segment_%05d.ts'), str(partial / 'index.m3u8')],
              info['duration'], lambda current, total: progress and progress(

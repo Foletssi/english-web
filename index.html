@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0b0e13" id="themeColorMeta">
-<meta name="description" content="Eastudy helps you learn natural English through real videos, bilingual sentence practice, vocabulary, shadowing and progress tracking.">
+<meta name="description" content="Eastudy helps you learn natural English through real videos, bilingual sentence practice, vocabulary, sentence looping and progress tracking.">
 <link rel="icon" type="image/png" href="assets/images/eastudy-icon.png">
 <link rel="apple-touch-icon" href="assets/images/eastudy-icon.png">
 <meta name="color-scheme" content="dark light">
@@ -23,7 +23,7 @@
   }catch(e){document.documentElement.dataset.theme='dark'}
 })();
 </script>
-<link rel="stylesheet" href="assets/css/app.css?v=beta6.32.0">
+<link rel="stylesheet" href="assets/css/app.css?v=beta6.33.0">
 </head>
 <body class="production-build">
 <div class="shell">
@@ -218,9 +218,10 @@
 <main id="learningPage" class="page product-page"><div class="product-shell learning-dashboard-v3">
   <section class="learning-welcome"><div><span class="section-kicker">YOUR PROGRESS</span><h1>早上好，<span data-student-name>学习者</span> 👋</h1><p id="learningWelcomeCopy">正在读取当前账号的学习数据。</p></div><button class="primary" id="learningContinueButton" data-route="/videos"><i data-icon="play"></i>开始学习</button></section>
   <section class="learning-plan-card" aria-labelledby="learningPlanTitle">
-    <div class="learning-plan-head"><div><span class="section-kicker">PERSONAL ROADMAP</span><h2 id="learningPlanTitle">我的学习目标</h2><p>词汇、短语、听说读写与复习会按同一个目标统一安排。</p></div><div class="learning-plan-controls"><label><span>主目标</span><select id="learningTrackSelect" aria-label="选择学习主目标"></select></label><label><span>每天时间</span><select id="dailyMinutesSelect" aria-label="选择每天学习时间"><option value="10">10 分钟</option><option value="20" selected>20 分钟</option><option value="40">40 分钟</option><option value="60">60 分钟</option></select></label></div></div>
-    <div class="learning-plan-summary" id="learningPlanSummary" role="status"></div>
-    <div class="learning-plan-body"><div><h3>目标路线</h3><div class="learning-track-grid" id="learningTrackGrid"></div></div><div><h3>今日安排</h3><div class="today-plan-list" id="todayPlanList"></div></div></div>
+    <div class="learning-plan-head"><div><h2 id="learningPlanTitle">我的学习目标</h2><p id="learningPlanAvailability" role="status">正在读取可学习内容。</p></div><button type="button" class="learning-plan-edit" id="learningPlanEdit" aria-expanded="false" aria-controls="learningPlanEditor">修改</button></div>
+    <div class="learning-plan-current"><div><strong id="learningPlanGoalName">综合英语提升</strong><span id="learningPlanGoalMeta">每天 20 分钟</span></div><button type="button" class="primary" id="learningPlanAction">继续学习</button></div>
+    <div class="learning-plan-progress"><div><span>今日进度</span><b id="learningPlanProgressText">0 / 20 分钟</b></div><div role="progressbar" id="learningPlanProgress" aria-label="今日学习目标进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></div></div>
+    <div class="learning-plan-editor" id="learningPlanEditor" hidden><label><span>学习目标</span><select id="learningTrackSelect" aria-label="选择学习目标"></select></label><label><span>每天学习</span><select id="dailyMinutesSelect" aria-label="选择每天学习时间"><option value="10">10 分钟</option><option value="20" selected>20 分钟</option><option value="40">40 分钟</option><option value="60">60 分钟</option></select></label><button type="button" id="learningPlanSave">确认保存</button><p id="learningPlanSaveStatus" role="status" aria-live="polite"></p></div>
   </section>
   <section class="learning-overview-v3">
     <article class="learning-time-card">
@@ -243,7 +244,7 @@
 <main id="videoPage" class="page video-page" data-mobile-pane="learn">
   <div class="study-top"><button class="study-back" data-route="/videos">‹</button><div class="study-title" data-no-ui-translate>视频正在加载中</div><div class="spacer"></div><button class="study-chip" id="exportBtn">导出生词</button><button class="study-chip study-theme-toggle" id="studyThemeBtn" title="切换主题"><i data-icon="sun"></i></button><button class="study-chip lang-toggle study-lang-toggle" id="studyLangBtn" data-no-ui-translate data-lang="zh" title="切换界面语言"><span class="lang-option zh">中文</span><span class="lang-separator" aria-hidden="true">/</span><span class="lang-option en">EN</span></button><button class="study-chip" id="openSettings">偏好设置</button></div>
   <div class="study-grid"><section class="study-left"><div class="player"><video id="video" preload="metadata" playsinline webkit-playsinline></video><div class="player-overlay"></div><div class="media-state" id="mediaState" role="status"><b id="mediaStateTitle">视频正在加载中…</b><span id="mediaStateCopy">正在读取封面、播放地址和学习字幕。</span><button type="button" id="mediaRetry" hidden>重试加载</button></div></div>
-      <div class="mobile-study-tabs"><button class="active" data-mobile-study="learn"><i data-icon="spark"></i><span>当前句</span></button><button data-mobile-study="transcript"><i data-icon="list"></i><span>全部字幕</span></button></div><div class="current-sentence" id="sentenceCard"><div><div class="current-en" id="currentEn">字幕正在加载中…</div><div class="current-zh" id="currentZh"></div></div></div><div class="timeline"><div id="seek" class="seek" role="slider" tabindex="0" aria-label="视频播放进度" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="0:00 / --:--" aria-disabled="true"><i class="seek-fill"></i><b class="seek-thumb" aria-hidden="true"></b></div><div class="time"><span id="curTime">0:00</span><span id="duration">--:--</span></div><output id="seekPreview" class="seek-preview" hidden></output></div><div class="player-controls"><div class="ctl-left"><label class="speed-control" aria-label="播放速度"><select id="speedSelect"><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label><label class="quality-control"><span class="sr-only">画质设置</span><select id="qualitySelect" aria-label="画质设置"><option value="auto">自动画质</option></select><small id="qualityStatus" role="status" aria-live="polite"></small></label><label class="volume-control"><span>音量</span><input id="volumeRange" type="range" min="0" max="100" step="1" value="100" aria-label="视频音量"><output id="volumeValue" for="volumeRange">100%</output></label></div><div class="center-ctl"><button class="jump" id="prevBtn" aria-label="上一句"><i data-icon="chevron-left"></i><span>上一句</span></button><button class="main-play" id="playBtn" aria-label="播放">▶</button><button class="jump" id="nextBtn" aria-label="下一句"><span>下一句</span><i data-icon="chevron-right"></i></button></div><div class="caption-modes" role="group" aria-label="字幕设置"><span>字幕设置</span><button class="caption-mode active" data-caption="bilingual" aria-pressed="true">双语</button><button class="caption-mode" data-caption="english" aria-pressed="false">英文</button><button class="caption-mode" data-caption="hidden" aria-pressed="false">隐藏</button></div></div><div class="practice-modes" aria-label="播放方式"><span>播放方式</span><button class="practice-mode active" data-practice="watch">连续播放</button><button class="practice-mode" data-practice="intensive">逐句练习</button><button class="practice-mode" data-practice="cloze">听写填空</button><button class="practice-mode" data-practice="shadowing">录音对比</button></div><section class="sentence-insight" id="sentenceInsight"><div class="insight-head"><div><b>当前句解析</b><span>理解之后再模仿，会记得更牢</span></div><button id="insightCollapse" aria-label="展开或收起当前句解析"><i data-icon="chevron-down"></i></button></div><div class="insight-grid"><article><span class="insight-icon purple"><i data-icon="book"></i></span><div><b>重点表达</b><p id="insightVocab">随当前字幕加载</p></div></article><article><span class="insight-icon mint"><i data-icon="spark"></i></span><div><b>语法提示</b><p id="insightGrammar">随当前字幕加载</p></div></article><article class="insight-shadow"><span class="insight-icon amber"><i data-icon="mic"></i></span><div><b>录音建议</b><p>先听原句，再录音回听，对比节奏、重音和停顿。</p></div><button class="mini-action" data-mode-trigger="shadowing">开始对比</button></article></div></section></section><aside class="transcript-wrap"><div class="transcript-head"><div><b>全部字幕</b><span>点击句子跳转 · 点击词语查看释义</span></div><button type="button" id="returnCurrentSentence" hidden>回到当前句</button></div><div class="transcript" id="transcript"><div class="transcript-empty" role="status"><b>学习字幕正在加载中</b><span>视频与字幕状态会分别更新。</span></div></div></aside></div>
+      <div class="mobile-study-tabs"><button class="active" data-mobile-study="learn"><i data-icon="spark"></i><span>当前句</span></button><button data-mobile-study="transcript"><i data-icon="list"></i><span>全部字幕</span></button></div><div class="current-sentence" id="sentenceCard"><div><div class="current-en" id="currentEn"></div><div class="current-zh" id="currentZh"></div></div></div><div class="timeline"><div id="seek" class="seek" role="slider" tabindex="0" aria-label="视频播放进度" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="0:00 / --:--" aria-disabled="true"><i class="seek-fill"></i><b class="seek-thumb" aria-hidden="true"></b></div><div class="time"><span id="curTime">0:00</span><span id="duration">--:--</span></div><output id="seekPreview" class="seek-preview" hidden></output></div><div class="player-controls"><div class="ctl-left"><label class="speed-control" aria-label="播放速度"><select id="speedSelect"><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label><label class="volume-control"><span>音量</span><input id="volumeRange" type="range" min="0" max="100" step="1" value="100" aria-label="视频音量"><output id="volumeValue" for="volumeRange">100%</output></label></div><div class="center-ctl"><button class="jump" id="prevBtn" aria-label="上一句"><i data-icon="chevron-left"></i><span>上一句</span></button><button class="main-play" id="playBtn" aria-label="播放">▶</button><button class="jump" id="nextBtn" aria-label="下一句"><span>下一句</span><i data-icon="chevron-right"></i></button></div><div class="caption-modes" role="group" aria-label="字幕设置"><span>字幕设置</span><button class="caption-mode active" data-caption="bilingual" aria-pressed="true">双语</button><button class="caption-mode" data-caption="english" aria-pressed="false">英文</button><button class="caption-mode" data-caption="hidden" aria-pressed="false">隐藏</button></div></div><div class="practice-modes" aria-label="播放方式"><span>播放方式</span><button class="practice-mode active" data-practice="watch" aria-pressed="true">连续播放</button><button class="practice-mode" data-practice="intensive" aria-pressed="false">逐句练习</button><button class="practice-mode" data-practice="loop" aria-pressed="false">↻ 循环跟读</button><button class="practice-mode" data-practice="cloze" aria-pressed="false">听写填空</button></div><section class="sentence-insight" id="sentenceInsight"><div class="insight-head"><div><b>当前句解析</b><span>理解之后再模仿，会记得更牢</span></div><button id="insightCollapse" aria-label="展开或收起当前句解析"><i data-icon="chevron-down"></i></button></div><div class="insight-grid"><article><span class="insight-icon purple"><i data-icon="book"></i></span><div><b>重点表达</b><p id="insightVocab">随当前字幕加载</p></div></article><article><span class="insight-icon mint"><i data-icon="spark"></i></span><div><b>语法提示</b><p id="insightGrammar">随当前字幕加载</p></div></article><article class="insight-shadow"><span class="insight-icon amber" aria-hidden="true">↻</span><div><b>循环跟读</b><p>当前句结束后自动重播；手动选择上一句或下一句。</p></div><button class="mini-action" data-mode-trigger="loop">循环当前句</button></article></div></section></section><aside class="transcript-wrap"><div class="transcript-head"><div><b>全部字幕</b><span>点击句子跳转 · 点击词语查看释义</span></div><button type="button" id="returnCurrentSentence" hidden>回到当前句</button></div><div class="transcript" id="transcript"><div class="transcript-empty" role="status"><b>学习字幕正在加载中</b><span>视频与字幕状态会分别更新。</span></div></div></aside></div>
 </main>
 </div>
 
@@ -299,17 +300,17 @@
         <p class="auth-slogan">更好的你，从一口流利的英语开始</p>
         <div class="auth-card" id="authCard">
           <div class="auth-main-tabs"><button type="button" class="active" data-auth-tab="login">登录</button><button type="button" data-auth-tab="register">注册</button></div>
-          <div class="auth-method-tabs"><button type="button" data-auth-mode="code">验证码登录</button><button type="button" class="active" data-auth-mode="password">密码登录</button></div>
           <form class="auth-form" id="authForm" autocomplete="off" novalidate>
             <label data-register-field hidden><i data-icon="user"></i><input id="signinName" type="text" autocomplete="nickname" aria-label="昵称" placeholder="请输入昵称"></label>
-            <label><i data-icon="phone"></i><input id="signinPhone" type="tel" inputmode="tel" autocomplete="tel" aria-label="手机号" autocapitalize="off" spellcheck="false" maxlength="18" placeholder="请输入手机号" required></label>
-            <div class="auth-code-row" data-auth-fields="code" hidden><label><i data-icon="shield"></i><input id="signinCode" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="6" aria-label="验证码" placeholder="请输入验证码"></label><button id="authGetCode" type="button">获取验证码</button></div>
-            <p class="auth-code-note" id="authCodeNote" data-auth-fields="code" hidden>未注册的手机号验证后将自动注册</p>
-            <label data-auth-fields="password"><i data-icon="lock"></i><input id="signinPassword" type="password" autocomplete="off" aria-label="密码" placeholder="请输入密码（至少6位）" minlength="6" required><button type="button" class="auth-eye" id="authPasswordEye" aria-controls="signinPassword" aria-label="显示密码" aria-pressed="false"><i data-icon="eye"></i></button></label>
-            <div class="auth-memory" data-auth-fields="password">
+            <label><i data-icon="user"></i><input id="signinAccount" type="text" inputmode="text" autocomplete="username" aria-label="账号" autocapitalize="none" spellcheck="false" maxlength="32" placeholder="请输入账号" required></label>
+            <label><i data-icon="lock"></i><input id="signinPassword" type="password" autocomplete="current-password" aria-label="密码" placeholder="请输入密码" minlength="6" required><button type="button" class="auth-eye" id="authPasswordEye" aria-controls="signinPassword" aria-label="显示密码" aria-pressed="false"><i data-icon="eye"></i></button></label>
+            <label data-register-field hidden><i data-icon="lock"></i><input id="signinPasswordConfirm" type="password" autocomplete="new-password" aria-label="确认密码" placeholder="请再次输入密码" minlength="8"></label>
+            <label data-register-field hidden><i data-icon="shield"></i><input id="signinInviteCode" type="text" autocomplete="off" aria-label="邀请码" autocapitalize="characters" spellcheck="false" maxlength="80" placeholder="请输入邀请码"></label>
+            <p class="auth-code-note" data-register-field hidden>邀请码决定本账号的会员使用期限。</p>
+            <div class="auth-memory">
               <label class="auth-memory-option"><input type="checkbox" id="rememberPassword" checked><span aria-hidden="true"></span><b>记住密码</b></label>
             </div>
-            <button type="button" class="auth-forgot" id="authForgot" data-auth-fields="password" hidden>忘记密码？</button>
+            <button type="button" class="auth-forgot" id="authForgot" hidden>忘记密码？</button>
             <p class="auth-message" id="signinMessage" role="alert" aria-live="polite"></p>
             <button type="submit" class="primary signin-submit" id="signinSubmit">登录</button>
           </form>
@@ -336,25 +337,25 @@
   </section>
 </div>
 
-<div class="follow" id="follow" role="dialog" aria-modal="true" aria-labelledby="followTitle"><div class="follow-head"><div><b id="followTitle">录音对比</b><small>自己对比节奏和停顿，不进行自动评分</small></div><button id="closeFollow" aria-label="关闭录音对比">×</button></div><div class="follow-sentence" id="followSentence"></div><button type="button" class="play-original" id="playOriginalSentence">▶ 听原句</button><p class="record-status" id="recordStatus" role="status">先听原句，再录下自己的声音进行对比</p><button class="record" id="recordBtn" aria-label="开始录音"><span>开始录音</span></button><audio id="recordPlayback" controls hidden aria-label="我的录音"></audio><div class="record-actions" id="recordActions" hidden><button type="button" id="recordAgain">重新录音</button></div></div>
 
 <div class="lesson-complete" id="lessonComplete" role="dialog" aria-modal="true" aria-labelledby="lessonCompleteTitle" hidden><div class="lesson-complete-card"><span class="complete-mark"><i data-icon="check"></i></span><h2 id="lessonCompleteTitle">本条视频播放结束</h2><p id="lessonCompleteSummary">本次学习已经保存。</p><article class="next-lesson-preview" id="nextLessonPreview" hidden><img id="nextLessonCover" src="assets/images/home_video_1.png" alt=""><div><small id="nextLessonReason">来自你的学习目标</small><b id="nextLessonTitle">下一条视频</b><span id="nextLessonCountdown">5 秒后自动播放</span></div></article><label class="queue-loop-option"><input id="queueLoopToggle" type="checkbox" checked><span>本目标视频播完后循环</span></label><div class="lesson-complete-actions"><button type="button" class="primary" id="continueCollection">立即播放下一条</button><button type="button" class="secondary" id="cancelNextLesson">取消本次自动播放</button><button type="button" class="secondary" id="reviewLessonFavorites">复习本次收藏</button><button type="button" class="text-action" id="completeBackHome">返回首页</button></div></div></div>
 
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="shared/supabase-config.js?v=beta6.32.0"></script>
-<script src="shared/supabase-client.js?v=beta6.32.0"></script>
-<script src="shared/learning-contract.js?v=beta6.32.0"></script>
-<script src="shared/content-store.js?v=beta6.32.0"></script>
-<script src="shared/cloud-content.js?v=beta6.32.0"></script>
-<script src="shared/content-taxonomy.js?v=beta6.32.0"></script>
-<script src="shared/catalog-selectors.js?v=beta6.32.0"></script>
-<script src="shared/study-utils.js?v=beta6.32.0"></script>
-<script src="shared/learning-queue.js?v=beta6.32.0"></script>
-<script src="shared/playback-controller.js?v=beta6.32.0"></script>
+<script src="shared/supabase-config.js?v=beta6.33.0"></script>
+<script src="shared/supabase-client.js?v=beta6.33.0"></script>
+<script src="shared/learning-contract.js?v=beta6.33.0"></script>
+<script src="shared/content-store.js?v=beta6.33.0"></script>
+<script src="shared/cloud-content.js?v=beta6.33.0"></script>
+<script src="shared/content-taxonomy.js?v=beta6.33.0"></script>
+<script src="shared/catalog-selectors.js?v=beta6.33.0"></script>
+<script src="shared/study-utils.js?v=beta6.33.0"></script>
+<script src="shared/learning-queue.js?v=beta6.33.0"></script>
+<script src="shared/playback-controller.js?v=beta6.33.0"></script>
+<script src="shared/sentence-loop.js?v=beta6.33.0"></script>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.6.13/dist/hls.min.js"></script>
-<script src="shared/player-state.js?v=beta6.32.0"></script>
-<script src="shared/media-player.js?v=beta6.32.0"></script>
-<script src="assets/js/app.js?v=beta6.32.0"></script>
+<script src="shared/player-state.js?v=beta6.33.0"></script>
+<script src="shared/media-player.js?v=beta6.33.0"></script>
+<script src="assets/js/app.js?v=beta6.33.0"></script>
 </body>
 </html>

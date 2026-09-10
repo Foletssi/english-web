@@ -62,11 +62,12 @@ assert.ok(adminSource.includes('draft.expressions=expressions.map'), 'sentence s
 assert.ok(adminSource.includes('Cloud.setVideoPublication(videoId,next,CloudState.revision)'), 'publication must mutate exactly one video through the guarded RPC');
 const studentSource = fs.readFileSync(new URL('../assets/js/app.js', import.meta.url), 'utf8');
 const playerCss = fs.readFileSync(new URL('../assets/css/app.css', import.meta.url), 'utf8');
+const sentenceLoopSource = fs.readFileSync(new URL('../shared/sentence-loop.js', import.meta.url), 'utf8');
 const timingRules = [...playerCss.matchAll(/[^{}]*timing-active[^{}]*\{([^}]*)\}/g)].map(match => match[1]);
 assert.ok(timingRules.every(rule => !/(?:^|;)\s*color\s*:/.test(rule)), 'timing focus must never override semantic vocabulary colours');
 assert.ok(/@media\(min-width:851px\)[\s\S]*?\.video-page \.study-left\{[\s\S]*?overflow-y:auto!important/.test(playerCss), 'desktop learning controls must remain vertically reachable');
-assert.ok(studentSource.includes("video.addEventListener('timeupdate',controller.check)"), 'original-sentence playback must stop from media time');
-assert.ok(!studentSource.includes("Math.random()*35"), 'recording UI must not use a fake random waveform');
-assert.ok(studentSource.includes('sentenceId,textRevision,videoId'), 'recording must bind to a stable sentence revision');
+assert.ok(sentenceLoopSource.includes("video.addEventListener('timeupdate',checkBoundary)"), 'sentence looping must enforce its boundary from media time');
+assert.ok(!studentSource.includes('MediaRecorder') && !studentSource.includes('getUserMedia'), 'sentence looping must not request or fake microphone recording');
+assert.ok(studentSource.includes("SentenceLoop?.select(next)"), 'previous and next controls must select a stable sentence loop target');
 
 console.log(JSON.stringify({ ok: true, tests: 19 }, null, 2));

@@ -71,17 +71,17 @@ Result: **PASS**  (71/71)
 - PASS — autoplay queue filters reviewed target content and supports fixed collections
 - PASS — cloud content and R2 contract regression — {
   "ok": true,
-  "tests": 35
+  "tests": 78
 }
 - PASS — runtime shared-contract regression — {
   "ok": true,
-  "tests": 20,
+  "tests": 30,
   "videoCount": 10,
   "publishedCount": 8,
   "jobCount": 3
 }
 - PASS — student OTP and password contract regression — {
   "ok": true,
-  "tests": 15
+  "tests": 18
 }
-- PASS — learning queue and countdown contract regression — Learning queue contract: 9/9 checks passed.
+- PASS — learning queue and countdown contract regression — Learning queue contract: 11/11 checks passed.

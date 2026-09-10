@@ -41,7 +41,7 @@ def process_job(store, job_id, source_path, cover_path, ai_config, media_root,
             save_json_checkpoint(checkpoints / 'probe.json', probe_key, info)
         else:
             progress('probe', 10, '已复用素材检查结果')
-        progress('transcode', 18, '正在生成节省空间的 480p / 720p 自适应清晰度')
+        progress('transcode', 18, '正在生成节省空间的单档 720P 标准视频')
         variants = transcode(source_path, output, info, progress=transcode_progress)
         cover = make_cover(source_path, output / 'cover.webp', info['duration'], cover_path)
         progress('asr', 48, '正在提取英语音轨')
@@ -65,6 +65,7 @@ def process_job(store, job_id, source_path, cover_path, ai_config, media_root,
         }, ai_config, progress, cache_dir=checkpoints / 'ai')
         playback_variants = [{**item, 'url': public_media(base_url, job_id, item['path'])}
                              for item in variants]
+        playback_url = playback_variants[0]['url']
         title = job['metadata'].get('title') or Path(job['sourceName']).stem
         video = {
             'title': title, 'titleZh': metadata['titleZh'],
@@ -75,11 +76,10 @@ def process_job(store, job_id, source_path, cover_path, ai_config, media_root,
             'goalIds': [],
             'goalMappings': metadata['goalMappings'], 'duration': info['duration'],
             'cover': public_media(base_url, job_id, 'cover.webp'),
-            'mediaUrl': public_media(base_url, job_id, 'master.m3u8'),
-            'playback': {'masterUrl': public_media(base_url, job_id, 'master.m3u8'),
-                         'variants': playback_variants,
-                         'original': {'label': f"{min(info['width'], info['height'])}p 原画",
-                                      'width': info['width'], 'height': info['height']}},
+            'mediaUrl': playback_url,
+            'playback': {'policy': 'single-standard-v2',
+                         'masterUrl': playback_url,
+                         'variants': playback_variants},
             'pipelineStatus': 'READY', 'status': 'REVIEW',
         }
         result = {'video': video, 'sentences': learning, 'evidence': {

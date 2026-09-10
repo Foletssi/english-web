@@ -10,7 +10,7 @@
 <script>
 try{const raw=localStorage.getItem('zs:admin:theme');const t=raw?JSON.parse(raw):'dark';document.documentElement.dataset.theme=(t==='light'?'light':'dark');document.documentElement.dataset.adminAuth='signed-out'}catch(e){document.documentElement.dataset.adminAuth='signed-out'}
 </script>
-<link rel="stylesheet" href="assets/admin.css?v=beta6.32.0">
+<link rel="stylesheet" href="assets/admin.css?v=beta6.33.0">
 </head>
 <body>
 <div class="admin-shell">
@@ -27,8 +27,10 @@ try{const raw=localStorage.getItem('zs:admin:theme');const t=raw?JSON.parse(raw)
       <span class="nav-label">智能处理</span>
       <a href="#/pipeline" data-nav="/pipeline"><i data-icon="spark"></i><span>解析队列</span><em id="navJobCount">0</em></a>
       <a href="#/subtitles" data-nav="/subtitles"><i data-icon="subtitles"></i><span>字幕审核</span></a>
-      <span class="nav-label">学习数据</span>
-      <a href="#/analytics" data-nav="/analytics"><i data-icon="chart"></i><span>学习数据</span></a>
+      <span class="nav-label">学员与数据</span>
+      <a href="#/learners" data-nav="/learners"><i data-icon="users"></i><span>学员管理</span></a>
+      <a href="#/invites" data-nav="/invites"><i data-icon="book"></i><span>邀请码管理</span></a>
+      <a href="#/analytics" data-nav="/analytics"><i data-icon="chart"></i><span>内容审计</span></a>
       <span class="nav-label">系统</span>
       <a href="#/settings" data-nav="/settings"><i data-icon="settings"></i><span>系统设置</span></a>
     </nav>
@@ -165,15 +167,15 @@ try{const raw=localStorage.getItem('zs:admin:theme');const t=raw?JSON.parse(raw)
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="../shared/supabase-config.js?v=beta6.32.0"></script>
-<script src="../shared/supabase-client.js?v=beta6.32.0"></script>
-<script src="../shared/learning-contract.js?v=beta6.32.0"></script>
-<script src="../shared/content-store.js?v=beta6.32.0"></script>
-<script src="../shared/content-taxonomy.js?v=beta6.32.0"></script>
-<script src="../shared/catalog-selectors.js?v=beta6.32.0"></script>
-<script src="../shared/cloud-content.js?v=beta6.32.0"></script>
-<script src="../shared/studio-client.js?v=beta6.32.0"></script>
-<script src="assets/studio-v2.js?v=beta6.32.0"></script>
-<script src="assets/admin.js?v=beta6.32.0"></script>
+<script src="../shared/supabase-config.js?v=beta6.33.0"></script>
+<script src="../shared/supabase-client.js?v=beta6.33.0"></script>
+<script src="../shared/learning-contract.js?v=beta6.33.0"></script>
+<script src="../shared/content-store.js?v=beta6.33.0"></script>
+<script src="../shared/content-taxonomy.js?v=beta6.33.0"></script>
+<script src="../shared/catalog-selectors.js?v=beta6.33.0"></script>
+<script src="../shared/cloud-content.js?v=beta6.33.0"></script>
+<script src="../shared/studio-client.js?v=beta6.33.0"></script>
+<script src="assets/studio-v2.js?v=beta6.33.0"></script>
+<script src="assets/admin.js?v=beta6.33.0"></script>
 </body>
 </html>

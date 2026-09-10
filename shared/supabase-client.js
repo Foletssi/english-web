@@ -12,6 +12,7 @@
   let outboxFlushPromise = null;
   let studentIdentityId = null;
   let studentIdentityGeneration = 0;
+  let stopActivityHeartbeat = null;
 
   function observeStudentIdentity(userId) {
     const next = userId ? String(userId) : null;
@@ -92,56 +93,50 @@
     return { user, session: sessionData.session, profile, error: error || null };
   }
 
-  async function signUpPhone(input, scope) {
-    const api = client(scope);
-    const phone = cleanPhone(input.phone);
-    const invalid = phoneError(phone);
-    if (!api) return { data: null, error: new Error('SUPABASE_NOT_CONFIGURED') };
-    if (invalid) return { data: null, error: new Error(invalid) };
-    return api.auth.signUp({
-      phone,
-      password: String(input.password || ''),
-      options: { data: { nickname: String(input.displayName || '').trim() || '新学员' } }
-    });
-  }
-
   async function signInPhone(input, scope) {
     const api = client(scope);
     const phone = cleanPhone(input.phone);
     const invalid = phoneError(phone);
     if (!api) return { data: null, error: new Error('SUPABASE_NOT_CONFIGURED') };
     if (invalid) return { data: null, error: new Error(invalid) };
-    const result = await api.auth.signInWithPassword({ phone, password: String(input.password || '') });
-    if (!result.error && scope !== 'admin') void api.rpc('mark_my_password_set');
-    return result;
+    return api.auth.signInWithPassword({ phone, password: String(input.password || '') });
   }
 
-  async function sendPhoneOtp(input, scope) {
+  async function applyServerSession(session, scope = 'student') {
     const api = client(scope);
-    const phone = cleanPhone(input.phone);
-    const invalid = phoneError(phone);
-    if (!api) return { data: null, error: new Error('SUPABASE_NOT_CONFIGURED') };
-    if (invalid) return { data: null, error: new Error(invalid) };
-    return api.auth.signInWithOtp({
-      phone,
-      options: {
-        shouldCreateUser: input.shouldCreateUser !== false,
-        data: { nickname: String(input.displayName || '').trim() || '新学员' }
-      }
-    });
+    if (!api || !session?.access_token || !session?.refresh_token) {
+      return { data: null, error: new Error('INVALID_AUTH_SESSION') };
+    }
+    return api.auth.setSession({ access_token: session.access_token, refresh_token: session.refresh_token });
   }
 
-  async function verifyPhoneOtp(input, scope) {
-    const api = client(scope);
-    const phone = cleanPhone(input.phone);
-    const invalid = phoneError(phone);
-    const token = String(input.token || '').replace(/\D/g, '');
-    if (!api) return { data: null, error: new Error('SUPABASE_NOT_CONFIGURED') };
-    if (invalid) return { data: null, error: new Error(invalid) };
-    if (!/^\d{6}$/.test(token)) return { data: null, error: new Error('INVALID_OTP') };
-    const result = await api.auth.verifyOtp({ phone, token, type: 'sms' });
-    if (!result.error && scope !== 'admin') void api.rpc('mark_my_phone_verified');
-    return result;
+  async function signInAccount(input, scope = 'student') {
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ account: String(input.account || '').trim(), password: String(input.password || '') })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) return { data: null, error: new Error(payload.error || 'INVALID_LOGIN') };
+      return applyServerSession(payload.session, scope);
+    } catch (error) { return { data: null, error }; }
+  }
+
+  async function registerWithInvite(input, scope = 'student') {
+    try {
+      const response = await fetch('/api/auth/register', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          account: String(input.account || '').trim(), password: String(input.password || ''),
+          nickname: String(input.displayName || '').trim(), inviteCode: String(input.inviteCode || '').trim(),
+          attemptId: String(input.attemptId || '')
+        })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) return { data: null, error: new Error(payload.error || 'REGISTRATION_UNAVAILABLE') };
+      const result = await applyServerSession(payload.session, scope);
+      return result.error ? result : { ...result, membership: payload.membership, account: payload.account };
+    } catch (error) { return { data: null, error }; }
   }
 
   async function ensureStudentProfile(displayName) {
@@ -162,16 +157,16 @@
     const next = String(password || '');
     if (!api) return { data: null, error: new Error('SUPABASE_NOT_CONFIGURED') };
     if (next.length < 6) return { data: null, error: new Error('PASSWORD_TOO_SHORT') };
-    const result = await api.auth.updateUser({ password: next });
-    if (result.error) return result;
-    if (scope !== 'admin') await api.rpc('mark_my_password_set');
-    return result;
+    return api.auth.updateUser({ password: next });
   }
 
   async function signOut(scope) {
     const api = client(scope);
     if (api) await api.auth.signOut();
-    if (scope !== 'admin') observeStudentIdentity(null);
+    if (scope !== 'admin') {
+      stopLearnerActivity();
+      observeStudentIdentity(null);
+    }
   }
 
   function outboxKey(userId) {
@@ -533,9 +528,155 @@
     };
   }
 
+  async function generateInviteCodes(input = {}) {
+    const api = client('admin');
+    const context = await getContext('admin');
+    if (!api || !context.user || context.profile?.role !== 'admin') {
+      return { codes: [], error: new Error('ADMIN_REQUIRED') };
+    }
+    const durationDays = Math.max(1, Math.min(3660, Number(input.durationDays) || 30));
+    const count = Math.max(1, Math.min(100, Number(input.count) || 1));
+    const validUntil = input.validUntil ? new Date(input.validUntil).toISOString() : null;
+    const { data, error } = await api.rpc('admin_generate_activation_codes_v2', {
+      p_label: String(input.label || '邀请码注册').trim().slice(0, 100),
+      p_duration_days: durationDays, p_count: count, p_valid_until: validUntil,
+      p_channel: String(input.channel || '').trim().slice(0, 60)
+    });
+    return { batchId: data?.batchId || null, codes: Array.isArray(data?.codes) ? data.codes : [], error: error || null };
+  }
+
+  async function listInviteCodes(params = {}) {
+    const api = client('admin');
+    const context = await getContext('admin');
+    if (!api || !context.user || context.profile?.role !== 'admin') throw new Error('ADMIN_REQUIRED');
+    const { data, error } = await api.rpc('admin_list_activation_codes_v1', {
+      p_query: String(params.query || '').trim().slice(0, 100),
+      p_status: String(params.status || 'all'),
+      p_page: Math.max(1, Number(params.page) || 1),
+      p_page_size: Math.max(1, Math.min(100, Number(params.pageSize) || 25)),
+      p_batch_id: params.batchId || null
+    });
+    if (error) throw error;
+    if (!data || !Array.isArray(data.items) || !Array.isArray(data.batches) || !data.stats) {
+      throw new Error('INVALID_INVITE_RESPONSE');
+    }
+    return { ...data, total: Number(data.total) || 0, page: Number(data.page) || 1, pageSize: Number(data.pageSize) || 25 };
+  }
+
+  async function revokeInviteCode(codeId, reason = '') {
+    const api = client('admin');
+    const context = await getContext('admin');
+    if (!api || !context.user || context.profile?.role !== 'admin') throw new Error('ADMIN_REQUIRED');
+    const { data, error } = await api.rpc('admin_revoke_activation_code_v1', {
+      p_code_id: String(codeId || ''), p_reason: String(reason || '').trim().slice(0, 200)
+    });
+    if (error) throw error;
+    return data;
+  }
+
+  async function setInviteBatchDisabled(batchId, disabled, reason = '') {
+    const api = client('admin');
+    const context = await getContext('admin');
+    if (!api || !context.user || context.profile?.role !== 'admin') throw new Error('ADMIN_REQUIRED');
+    const { data, error } = await api.rpc('admin_set_activation_batch_disabled_v1', {
+      p_batch_id: String(batchId || ''), p_disabled: Boolean(disabled),
+      p_reason: String(reason || '').trim().slice(0, 200)
+    });
+    if (error) throw error;
+    return data;
+  }
+
+  async function reissueInviteCode(codeId, validUntil = null) {
+    const api = client('admin');
+    const context = await getContext('admin');
+    if (!api || !context.user || context.profile?.role !== 'admin') throw new Error('ADMIN_REQUIRED');
+    const until = validUntil ? new Date(validUntil).toISOString() : null;
+    const { data, error } = await api.rpc('admin_reissue_activation_code_v1', {
+      p_code_id: String(codeId || ''), p_valid_until: until
+    });
+    if (error) throw error;
+    return data;
+  }
+
+  async function listLearners(params = {}) {
+    const api = client('admin');
+    const context = await getContext('admin');
+    if (!api || !context.user || context.profile?.role !== 'admin') throw new Error('ADMIN_REQUIRED');
+    const input = {
+      p_query: String(params.query || '').trim(),
+      p_status: String(params.status || 'all'),
+      p_page: Math.max(1, Number(params.page) || 1),
+      p_page_size: Math.max(1, Math.min(100, Number(params.pageSize) || 25)),
+      p_user_id: params.userId || null
+    };
+    const { data, error } = await api.rpc('admin_list_learners_v1', input);
+    if (error) throw error;
+    if (!data || !Array.isArray(data.items) || !Number.isFinite(Number(data.total))) {
+      throw new Error('INVALID_LEARNER_RESPONSE');
+    }
+    return { ...data, total: Number(data.total), page: Number(data.page), pageSize: Number(data.pageSize) };
+  }
+
+  async function getLearnerDetail(userId, options = {}) {
+    const api = client('admin');
+    const context = await getContext('admin');
+    if (!api || !context.user || context.profile?.role !== 'admin') throw new Error('ADMIN_REQUIRED');
+    const today = new Date(), from = new Date(today);
+    from.setDate(from.getDate() - 29);
+    const day = value => [value.getFullYear(), String(value.getMonth() + 1).padStart(2, '0'), String(value.getDate()).padStart(2, '0')].join('-');
+    const { data, error } = await api.rpc('admin_get_learner_detail_v1', {
+      p_user_id: String(userId || ''),
+      p_from: options.from || day(from),
+      p_to: options.to || day(today),
+      p_history_page: Math.max(1, Number(options.historyPage) || 1),
+      p_page_size: Math.max(1, Math.min(100, Number(options.pageSize) || 25))
+    });
+    if (error) throw error;
+    if (!data?.learner || !Array.isArray(data.daily) || !Array.isArray(data.history?.items)) {
+      throw new Error('INVALID_LEARNER_DETAIL_RESPONSE');
+    }
+    return data;
+  }
+
+  function stopLearnerActivity() {
+    if (stopActivityHeartbeat) stopActivityHeartbeat();
+    stopActivityHeartbeat = null;
+  }
+
+  function startLearnerActivity(expectedUserId) {
+    stopLearnerActivity();
+    const api = client('student'), expected = String(expectedUserId || '');
+    if (!api || !expected) return () => {};
+    let stopped = false, pending = false, lastAttempt = -Infinity;
+    async function touch() {
+      if (stopped || pending || document.hidden || !navigator.onLine || performance.now() - lastAttempt < 60000) return;
+      pending = true;
+      lastAttempt = performance.now();
+      try {
+        const session = await api.auth.getSession();
+        if (String(session.data?.session?.user?.id || '') !== expected) return;
+        const result = await api.rpc('touch_my_activity_v1');
+        if (result.error && !stopped) console.warn('Activity heartbeat failed', result.error.code || result.error.message);
+      } finally { pending = false; }
+    }
+    const wake = () => { void touch().catch(() => {}); };
+    const timer = globalThis.setInterval(wake, 60000);
+    document.addEventListener('visibilitychange', wake);
+    window.addEventListener('online', wake);
+    wake();
+    stopActivityHeartbeat = () => {
+      if (stopped) return;
+      stopped = true;
+      globalThis.clearInterval(timer);
+      document.removeEventListener('visibilitychange', wake);
+      window.removeEventListener('online', wake);
+    };
+    return stopActivityHeartbeat;
+  }
+
   window.addEventListener?.('online', () => { void flushStudyOutbox(); });
   globalThis.document?.addEventListener?.('visibilitychange', () => { if (!document.hidden) void flushStudyOutbox(); });
 
-  window.EastudyAuth = Object.freeze({ available, client, cleanPhone, isLearnerProfile, getRememberLogin, setRememberLogin, getContext, signUpPhone, signInPhone, sendPhoneOtp, verifyPhoneOtp, ensureStudentProfile, updatePassword, signOut });
-  window.EastudyData = Object.freeze({ upsertProgress, recordStudyActivity, pendingStudyEvents, flushStudyOutbox, setFavorite, setVocabulary, setCreatorFollow, setCollectionSave, saveLearningPreferences, logStudyEvent, hydrateStudentLearning, getLearningGoalProfile, saveLearningGoalProfile, getMembership, redeemMembership, getAdminAnalytics });
+  window.EastudyAuth = Object.freeze({ available, client, cleanPhone, isLearnerProfile, getRememberLogin, setRememberLogin, getContext, signInAccount, registerWithInvite, signInPhone, ensureStudentProfile, updatePassword, signOut });
+  window.EastudyData = Object.freeze({ upsertProgress, recordStudyActivity, pendingStudyEvents, flushStudyOutbox, setFavorite, setVocabulary, setCreatorFollow, setCollectionSave, saveLearningPreferences, logStudyEvent, hydrateStudentLearning, getLearningGoalProfile, saveLearningGoalProfile, getMembership, redeemMembership, getAdminAnalytics, generateInviteCodes, listInviteCodes, revokeInviteCode, setInviteBatchDisabled, reissueInviteCode, listLearners, getLearnerDetail, startLearnerActivity, stopLearnerActivity });
 })();

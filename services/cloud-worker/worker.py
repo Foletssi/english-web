@@ -351,14 +351,12 @@ def rewrite_result(result, job_id, source_key):
     base = f'/api/processing/media/{job_id}'
     video = result['video']
     video['cover'] = f'{base}/cover.webp'
-    video['mediaUrl'] = f'{base}/master.m3u8'
     playback = video.get('playback', {})
-    original = dict(playback.get('original') or {})
-    original['url'] = '/api/media?key=' + urllib.parse.quote(source_key, safe='')
-    original.setdefault('label', '1080p 原画')
-    video['playback'] = {'masterUrl': video['mediaUrl'], 'variants': [
-        {**row, 'url': f"{base}/{row['path']}"} for row in playback.get('variants', [])
-    ], 'original': original}
+    published_variants = [{**row, 'url': f"{base}/{row['path']}"}
+                          for row in playback.get('variants', [])]
+    video['mediaUrl'] = published_variants[0]['url']
+    video['playback'] = {'policy': 'single-standard-v2', 'masterUrl': video['mediaUrl'],
+                         'variants': published_variants}
     result.setdefault('evidence', {})['storage'] = 'cloudflare-r2'
     result['evidence']['workerVersion'] = VERSION
     return result

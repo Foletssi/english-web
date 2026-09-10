@@ -8,6 +8,10 @@ function config(env) {
   };
 }
 
+export function supabaseConfig(env) {
+  return config(env);
+}
+
 export function json(payload, status = 200, headers = {}) {
   return new Response(JSON.stringify(payload), {
     status,

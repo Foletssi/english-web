@@ -5,12 +5,33 @@ function initial(){
   return {catalog:'loading',session:'loading',media:'idle',captions:'loading',playRequested:false,firstFramePresented:false,error:null};
 }
 
+function buildCaptionTimeline(rows){
+  return (rows||[]).map((sentence,index)=>({
+    sentence,index,
+    start:Number(sentence.s??sentence.startTime),
+    end:Number(sentence.e??sentence.endTime)
+  })).filter(cue=>Number.isFinite(cue.start)&&Number.isFinite(cue.end)&&cue.start>=0&&cue.end>cue.start)
+    .sort((a,b)=>a.start-b.start||a.index-b.index);
+}
+
+function selectCaption(status,timeline,time){
+  const blank=kind=>({kind,index:-1,activeIndex:-1,sentence:null});
+  if(status==='loading'||status==='error')return blank(status);
+  if(!timeline.length)return blank('empty');
+  const value=Number(time);
+  if(!Number.isFinite(value))return blank('blank');
+  let low=0,high=timeline.length-1,found=-1;
+  while(low<=high){
+    const middle=(low+high)>>1;
+    if(timeline[middle].start<=value){found=middle;low=middle+1}else high=middle-1;
+  }
+  if(found<0)return blank('blank');
+  const cue=timeline[found],active=value<cue.end;
+  return {kind:active?'cue':'hold',index:cue.index,activeIndex:active?cue.index:-1,sentence:cue.sentence};
+}
+
 function captionView(status,rows,time){
-  if(status==='loading')return {kind:'loading',text:'字幕正在加载中…'};
-  if(status==='error')return {kind:'error',text:'字幕加载失败，可重试；视频仍可播放'};
-  if(status==='empty')return {kind:'empty',text:'此视频暂未提供学习字幕'};
-  const index=(rows||[]).findIndex(row=>time>=Number(row.s??row.startTime)&&time<Number(row.e??row.endTime));
-  return index<0?{kind:'gap',text:'字幕将随对白出现',index:-1}:{kind:'cue',sentence:rows[index],index};
+  return selectCaption(status,buildCaptionTimeline(rows),time);
 }
 
 function activeSlice(previous,current){
@@ -24,5 +45,5 @@ function activeSlice(previous,current){
   return {activeSeconds:wall,watchRange:[previous.mediaTime,current.mediaTime]};
 }
 
-global.EastudyPlayerState=Object.freeze({initial,captionView,activeSlice});
+global.EastudyPlayerState=Object.freeze({initial,buildCaptionTimeline,selectCaption,captionView,activeSlice});
 })(window);

@@ -65,13 +65,11 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(worker.content_type('720p/segment_00001.ts'), 'video/mp2t')
 
     def test_result_urls_point_to_cloud_route(self):
-        result = {'video': {'playback': {'variants': [{'path': '720p/index.m3u8'}],
-                                        'original': {'label': '1080p 原画'}}}, 'evidence': {}}
+        result = {'video': {'playback': {'variants': [{'path': '720p/index.m3u8'}]}}, 'evidence': {}}
         value = worker.rewrite_result(result, '00000000-0000-0000-0000-000000000001',
                                       'videos/00000000-0000-0000-0000-000000000099/source.mp4')
-        self.assertEqual(value['video']['mediaUrl'], '/api/processing/media/00000000-0000-0000-0000-000000000001/master.m3u8')
-        self.assertEqual(value['video']['playback']['original']['url'],
-                         '/api/media?key=videos%2F00000000-0000-0000-0000-000000000099%2Fsource.mp4')
+        self.assertEqual(value['video']['mediaUrl'], '/api/processing/media/00000000-0000-0000-0000-000000000001/720p/index.m3u8')
+        self.assertNotIn('original', value['video']['playback'])
         self.assertEqual(value['evidence']['storage'], 'cloudflare-r2')
 
     def test_selected_assets_ignore_stale_renditions(self):

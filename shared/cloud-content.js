@@ -165,17 +165,19 @@
     const {data,error}=await api.auth.getSession();
     const session=data?.session;
     if(error||!session?.access_token)throw error||new Error('AUTHENTICATION_REQUIRED');
-    const now=Math.floor(Date.now()/1000),cached=mediaSessions[key];
-    if(!options.force&&cached?.token===session.access_token&&cached.expiresAt-now>120)return true;
+    const match=String(options.mediaUrl||'').match(/\/api\/processing\/media\/([0-9a-f-]{36})\//i),jobId=match?.[1]||'';
+    const cacheKey=key+':'+jobId,now=Math.floor(Date.now()/1000),cached=mediaSessions[cacheKey];
+    if(!options.force&&cached?.token===session.access_token&&cached.expiresAt-now>60)return true;
     const token=session.access_token;
-    const response = await fetch('/api/session', { method: 'POST', headers: { Authorization: 'Bearer ' + token } });
+    const response = await fetch('/api/session', { method: 'POST', headers: { Authorization: 'Bearer ' + token,'Content-Type':'application/json' },body:JSON.stringify({jobId:jobId||null}) });
     if(!response.ok){const payload=await response.json().catch(()=>({})),failure=new Error(payload.error||('MEDIA_SESSION_HTTP_'+response.status));failure.stage='session';failure.status=response.status;throw failure}
-    mediaSessions[key]={token,expiresAt:Number(session.expires_at)||now+3300};
+    const payload=await response.json().catch(()=>({}));
+    mediaSessions[cacheKey]={token,expiresAt:Number(payload.expiresAt)||Number(session.expires_at)||now+300};
     return true;
   }
 
   async function clearMediaSession() {
-    mediaSessions.student=null;mediaSessions.admin=null;
+    Object.keys(mediaSessions).forEach(key=>{mediaSessions[key]=null});
     await fetch('/api/session', { method: 'DELETE' }).catch(() => {});
   }
 

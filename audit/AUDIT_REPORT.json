@@ -341,22 +341,22 @@
     {
       "name": "cloud content and R2 contract regression",
       "ok": true,
-      "detail": "{\n  \"ok\": true,\n  \"tests\": 35\n}"
+      "detail": "{\n  \"ok\": true,\n  \"tests\": 78\n}"
     },
     {
       "name": "runtime shared-contract regression",
       "ok": true,
-      "detail": "{\n  \"ok\": true,\n  \"tests\": 20,\n  \"videoCount\": 10,\n  \"publishedCount\": 8,\n  \"jobCount\": 3\n}"
+      "detail": "{\n  \"ok\": true,\n  \"tests\": 30,\n  \"videoCount\": 10,\n  \"publishedCount\": 8,\n  \"jobCount\": 3\n}"
     },
     {
       "name": "student OTP and password contract regression",
       "ok": true,
-      "detail": "{\n  \"ok\": true,\n  \"tests\": 15\n}"
+      "detail": "{\n  \"ok\": true,\n  \"tests\": 18\n}"
     },
     {
       "name": "learning queue and countdown contract regression",
       "ok": true,
-      "detail": "Learning queue contract: 9/9 checks passed."
+      "detail": "Learning queue contract: 11/11 checks passed."
     }
   ]
 }

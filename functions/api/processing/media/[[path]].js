@@ -1,4 +1,5 @@
 import { authenticate, json, requireBucket } from '../../../_lib/auth.js';
+import { cookieValue, openPlaybackTicket } from '../../../_lib/playback-ticket.js';
 
 function joinedPath(value) {
   return Array.isArray(value) ? value.join('/') : String(value || '');
@@ -12,27 +13,51 @@ function rangeFromHeader(value, size) {
   return { start, end: Math.min(end, size - 1) };
 }
 
-async function handle({ request, env, params }, headOnly) {
+async function handle({ request, env, params, waitUntil }, headOnly) {
   const bucketError = requireBucket(env);
   if (bucketError) return bucketError;
-  const auth = await authenticate(request, env);
-  if (auth.error) return auth.error;
   const raw = joinedPath(params.path);
   const slash = raw.indexOf('/');
   const job = slash < 0 ? '' : raw.slice(0, slash);
   const path = slash < 0 ? '' : raw.slice(slash + 1);
   if (!/^[0-9a-f-]{36}$/i.test(job) || !path) return json({ error: 'MEDIA_PATH_INVALID' }, 400);
-  const response = await fetch(auth.url + '/rest/v1/rpc/resolve_processing_media', {
-    method: 'POST', headers: { ...auth.headers, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ p_job_id: job, p_path: path })
-  });
-  if (!response.ok) return json({ error: 'MEDIA_AUTH_FAILED' }, 502);
-  const rows = await response.json();
-  const key = rows?.[0]?.object_key;
+  const playbackAsset=/^720p\/(?:index\.m3u8|segment_[0-9]{5}\.ts)$/.test(path);
+  let key='';
+  if(playbackAsset){
+    try{
+      const ticket=await openPlaybackTicket(cookieValue(request,'eastudy_playback'),env);
+      if(ticket.job!==job||typeof ticket.prefix!=='string'||!ticket.prefix.endsWith('/'))throw new Error('PLAYBACK_FORBIDDEN');
+      key=ticket.prefix+path;
+    }catch{return json({error:'PLAYBACK_SESSION_REQUIRED'},401)}
+  }else{
+    const auth = await authenticate(request, env);
+    if (auth.error) return auth.error;
+    const response = await fetch(auth.url + '/rest/v1/rpc/resolve_processing_media', {
+      method: 'POST', headers: { ...auth.headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_job_id: job, p_path: path })
+    });
+    if (!response.ok) return json({ error: 'MEDIA_AUTH_FAILED' }, 502);
+    key = (await response.json())?.[0]?.object_key || '';
+  }
   if (!key) return json({ error: 'MEDIA_NOT_FOUND' }, 404);
+  const requested = request.headers.get('Range');
+  if(playbackAsset&&!headOnly&&!requested&&typeof caches!=='undefined'){
+    const cache= caches.default,cacheUrl=new URL(request.url);cacheUrl.pathname='/__eastudy_media_cache__/'+key;cacheUrl.search='';
+    const cacheKey=new Request(cacheUrl.toString(),{method:'GET'});
+    let cached=await cache.match(cacheKey);
+    if(!cached){
+      const object=await env.VIDEO_BUCKET.get(key);
+      if(!object?.body)return json({error:'MEDIA_NOT_FOUND'},404);
+      const headers=new Headers();object.writeHttpMetadata(headers);headers.set('Accept-Ranges','bytes');headers.set('ETag',object.httpEtag||object.etag);headers.set('Content-Length',String(object.size));headers.set('Cache-Control',path.endsWith('.m3u8')?'public, max-age=300':'public, max-age=31536000, immutable');
+      cached=new Response(object.body,{status:200,headers});
+      const cacheWrite=cache.put(cacheKey,cached.clone());
+      if(typeof waitUntil==='function')waitUntil(cacheWrite);
+      else await cacheWrite;
+    }
+    const outgoing=new Response(cached.body,cached);outgoing.headers.set('Cache-Control','private, no-store');outgoing.headers.set('X-Content-Type-Options','nosniff');return outgoing;
+  }
   const head = await env.VIDEO_BUCKET.head(key);
   if (!head) return json({ error: 'MEDIA_NOT_FOUND' }, 404);
-  const requested = request.headers.get('Range');
   const range = requested ? rangeFromHeader(requested, head.size) : null;
   if (requested && !range) return new Response(null, { status: 416, headers: { 'Content-Range': 'bytes */' + head.size } });
   const object = headOnly ? head : await env.VIDEO_BUCKET.get(key, range ? { range: { offset: range.start, length: range.end - range.start + 1 } } : undefined);

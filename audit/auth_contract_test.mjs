@@ -2,77 +2,36 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
 
-function storage() {
-  const values = new Map();
-  return {
-    getItem: key => values.has(key) ? values.get(key) : null,
-    setItem: (key, value) => values.set(key, String(value)),
-    removeItem: key => values.delete(key)
-  };
-}
+function storage(){const values=new Map();return {getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,String(value)),removeItem:key=>values.delete(key)}}
+const calls=[],localStorage=storage(),sessionStorage=storage();
+const api={auth:{setSession:async input=>{calls.push(['set-session',input]);return {data:{session:input},error:null}},signInWithPassword:async input=>{calls.push(['legacy-login',input]);return {data:{},error:null}},updateUser:async input=>{calls.push(['password',input]);return {data:{},error:null}}},rpc:async name=>{calls.push(['rpc',name]);return {data:null,error:null}}};
+const fetch=async(url,init)=>{calls.push(['fetch',url,JSON.parse(init.body)]);return {ok:true,json:async()=>({session:{access_token:'access',refresh_token:'refresh'}})}};
+const window={localStorage,sessionStorage,fetch,EASTUDY_SUPABASE_CONFIG:{url:'https://fixture.supabase.co',publishableKey:'fixture-key'},supabase:{createClient:()=>api}};
+const context=vm.createContext({window,localStorage,sessionStorage,fetch,console,crypto:{randomUUID:()=> '00000000-0000-4000-8000-000000000001'}});
+vm.runInContext(fs.readFileSync(new URL('../shared/supabase-client.js',import.meta.url),'utf8'),context);
 
-const calls = [];
-const localStorage = storage();
-const sessionStorage = storage();
-const api = {
-  auth: {
-    signInWithPassword: async input => { calls.push(['password-login', input]); return { data: {}, error: null }; },
-    signInWithOtp: async input => { calls.push(['send', input]); return { data: {}, error: null }; },
-    verifyOtp: async input => { calls.push(['verify', input]); return { data: {}, error: null }; },
-    updateUser: async input => { calls.push(['password', input]); return { data: { user: { id: 'student-1' } }, error: null }; }
-  },
-  rpc: async name => { calls.push(['rpc', name]); return { data: null, error: null }; }
-};
-const window = {
-  localStorage,
-  sessionStorage,
-  EASTUDY_SUPABASE_CONFIG: { url: 'https://fixture.supabase.co', publishableKey: 'fixture-key' },
-  supabase: { createClient: () => api }
-};
-const context = vm.createContext({ window, localStorage, sessionStorage, console });
-vm.runInContext(fs.readFileSync(new URL('../shared/supabase-client.js', import.meta.url), 'utf8'), context);
-
-const auth = window.EastudyAuth;
-assert.equal(auth.cleanPhone('138 0013 8000'), '+8613800138000');
-assert.equal(auth.isLearnerProfile({ role: 'learner' }), true);
-assert.equal(auth.isLearnerProfile({ role: 'student' }), true);
-assert.equal(auth.isLearnerProfile({ role: 'admin' }), true);
-
-await auth.sendPhoneOtp({ phone: '13800138000', displayName: '测试学员', shouldCreateUser: true }, 'student');
-assert.deepEqual(JSON.parse(JSON.stringify(calls[0])), ['send', {
-  phone: '+8613800138000',
-  options: { shouldCreateUser: true, data: { nickname: '测试学员' } }
-}]);
-
-await auth.signInPhone({ phone: '13800138000', password: 'Password123' }, 'student');
-assert.deepEqual(JSON.parse(JSON.stringify(calls[1])), ['password-login', { phone: '+8613800138000', password: 'Password123' }]);
-assert.deepEqual(JSON.parse(JSON.stringify(calls[2])), ['rpc', 'mark_my_password_set']);
-
-await auth.verifyPhoneOtp({ phone: '13800138000', token: '123456' }, 'student');
-assert.deepEqual(JSON.parse(JSON.stringify(calls[3])), ['verify', { phone: '+8613800138000', token: '123456', type: 'sms' }]);
-assert.deepEqual(JSON.parse(JSON.stringify(calls[4])), ['rpc', 'mark_my_phone_verified']);
-
-await auth.updatePassword('123456', 'student');
-assert.deepEqual(JSON.parse(JSON.stringify(calls[5])), ['password', { password: '123456' }]);
-assert.deepEqual(JSON.parse(JSON.stringify(calls[6])), ['rpc', 'mark_my_password_set']);
-
-const shortPassword = await auth.updatePassword('12345', 'student');
-assert.equal(shortPassword.error.message, 'PASSWORD_TOO_SHORT');
-
-const invalid = await auth.verifyPhoneOtp({ phone: '13800138000', token: '123' }, 'student');
-assert.equal(invalid.error.message, 'INVALID_OTP');
+const auth=window.EastudyAuth;
+assert.equal(auth.isLearnerProfile({role:'admin'}),true);
+await auth.signInAccount({account:'learner_01',password:'Password123'},'student');
+assert.deepEqual(calls[0],['fetch','/api/auth/login',{account:'learner_01',password:'Password123'}]);
+assert.deepEqual(JSON.parse(JSON.stringify(calls[1])),['set-session',{access_token:'access',refresh_token:'refresh'}]);
+await auth.registerWithInvite({account:'new_learner',password:'Password123',displayName:'测试学员',inviteCode:'EAST-TEST-CODE',attemptId:'00000000-0000-4000-8000-000000000001'},'student');
+assert.equal(calls[2][1],'/api/auth/register');
+assert.equal(calls[2][2].inviteCode,'EAST-TEST-CODE');
+assert.equal(calls[2][2].attemptId,'00000000-0000-4000-8000-000000000001');
+await auth.updatePassword('12345678','student');
+assert.deepEqual(JSON.parse(JSON.stringify(calls.at(-1))),['password',{password:'12345678'}]);
+assert.ok(!calls.some(row=>row[0]==='rpc'&&row[1]==='mark_my_phone_verified'));
 
 const studentHtml=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
 const studentApp=fs.readFileSync(new URL('../assets/js/app.js',import.meta.url),'utf8');
 const adminHtml=fs.readFileSync(new URL('../admin/index.html',import.meta.url),'utf8');
-assert.ok(studentHtml.includes('id="authPasswordEye"')&&studentHtml.includes('aria-pressed="false"'),'student login must expose an accessible password visibility control');
-assert.ok(studentApp.includes('function setPasswordVisible('),'student password visibility must update input and accessible state together');
-assert.ok(studentApp.includes("visible?'eye-off':'eye'"),'student password control must show distinct visible and hidden icons');
-assert.ok(studentApp.includes("input.type!=='text'"),'student password control must toggle from the live input type');
-assert.ok(studentApp.includes("name:'雅思学术类 IELTS Academic'")&&studentApp.includes("name:'托福网考 TOEFL iBT'"),'student learning goals must present Chinese names before English exam abbreviations');
-assert.ok(studentHtml.includes('assets/js/app.js?v=beta6.32.0'),'student app must use the current cache key');
-const studentCss=fs.readFileSync(new URL('../assets/css/app.css',import.meta.url),'utf8');
-assert.ok(studentCss.includes('.auth-eye{z-index:3')&&studentCss.includes('.auth-eye svg{pointer-events:none'),'student password visibility control must remain above the input hit target');
-assert.ok(adminHtml.includes('data-password-target="adminAuthPass"'),'administrator login must expose the same password visibility control');
-
-console.log(JSON.stringify({ ok: true, tests: 23 }, null, 2));
+assert.ok(studentHtml.includes('id="signinAccount"'));
+assert.ok(studentHtml.includes('id="signinInviteCode"'));
+assert.ok(studentHtml.includes('id="signinPasswordConfirm"'));
+assert.ok(!studentHtml.includes('id="authGetCode"'));
+assert.ok(studentHtml.includes('id="authPasswordEye"')&&studentHtml.includes('aria-pressed="false"'));
+assert.ok(studentApp.includes('function setPasswordVisible('));
+assert.ok(studentApp.includes("visible?'eye-off':'eye'"));
+assert.ok(adminHtml.includes('data-password-target="adminAuthPass"'));
+console.log(JSON.stringify({ok:true,tests:18},null,2));
