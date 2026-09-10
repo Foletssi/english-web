@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 const migration=fs.readFileSync('supabase/migrations/20260911153000_invite_admin_management_v1.sql','utf8');
 const hotfix=fs.readFileSync('supabase/migrations/20260911154000_production_function_type_fixes.sql','utf8');
 const learningFix=fs.readFileSync('supabase/migrations/20260911154500_learning_sync_numeric_fix.sql','utf8');
+const rateLimit=fs.readFileSync('supabase/migrations/20260911155000_invite_generation_rate_limit.sql','utf8');
 const admin=fs.readFileSync('admin/assets/admin.js','utf8');
 const client=fs.readFileSync('shared/supabase-client.js','utf8');
 const html=fs.readFileSync('admin/index.html','utf8');
@@ -25,6 +26,8 @@ assert.ok(!migration.includes('raw_code'));
 assert.ok(hotfix.includes('on conflict on constraint membership_entitlements_pkey'));
 assert.ok(hotfix.includes('p_duration::numeric'));
 assert.ok(learningFix.includes('p_duration_seconds::numeric'));
+assert.ok(rateLimit.includes('pg_advisory_xact_lock'));
+assert.ok(rateLimit.includes('v_day_codes + new.code_count > 500'));
 
 for(const token of [
   'listInviteCodes','revokeInviteCode','setInviteBatchDisabled','reissueInviteCode'
