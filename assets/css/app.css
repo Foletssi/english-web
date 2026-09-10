@@ -1282,6 +1282,23 @@ body.session-signed-out{overflow:hidden}.signin-backdrop{z-index:1200!important;
 .quality-control select{height:34px;min-width:76px;padding:0 9px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);font-size:12px;font-weight:750;outline:0}.quality-control select:focus{border-color:var(--accent)}.quality-control select:disabled{opacity:.55}
 @media(max-width:760px){.video-page .quality-control select{min-height:40px;min-width:72px;padding:0 7px}}
 
+/* beta6.30: truthful player/catalog/loading and directly actionable study data. */
+.sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+.study-stat-grid>button{display:grid;grid-template-columns:34px 1fr;grid-template-rows:auto auto;column-gap:8px;align-items:center;width:100%;padding:7px;border:1px solid transparent;border-radius:11px;background:transparent;color:var(--text);text-align:left;cursor:pointer}
+.study-stat-grid>button:hover,.study-stat-grid>button:focus-visible{border-color:var(--line2);background:var(--panel2);outline:0}
+.study-stat-grid>button .stat-icon{grid-row:1/3}.study-stat-grid>button b{font-size:15px}.study-stat-grid>button small{font-size:9px;color:var(--muted)}
+.learning-mini-stat{width:100%;color:var(--text);font:inherit;text-align:left;cursor:pointer}.learning-mini-stat:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.quality-control{display:flex;align-items:center;gap:6px}.quality-control small{max-width:120px;color:var(--muted);font-size:9px;white-space:nowrap}
+.video-page .media-state[data-kind="loading"],.video-page .media-state[data-kind="buffering"],.video-page .media-state[data-kind="slow"]{padding-left:48px}
+.video-page .media-state[data-kind="loading"]:before,.video-page .media-state[data-kind="buffering"]:before,.video-page .media-state[data-kind="slow"]:before{content:"";position:absolute;left:17px;top:50%;width:17px;height:17px;margin-top:-9px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:eastudy-spin .8s linear infinite}
+@keyframes eastudy-spin{to{transform:rotate(360deg)}}
+.video-page .media-state[data-kind="captions"]{position:relative;inset:auto;margin-top:8px;background:var(--panel2);color:var(--text);border-color:var(--line)}
+.video-page .media-state[data-kind="captions"] span{color:var(--muted)}
+.collection-v2.is-unavailable .collection-v2-cover,.collection-v2.is-unavailable .collection-meta-chips,.collection-v2.is-unavailable .collection-progress-block,.collection-v2.is-unavailable .collection-summary{display:none}
+.collection-v2.is-unavailable .collection-v2-hero{grid-template-columns:1fr}.collection-v2.is-unavailable .collection-v2-copy{padding:34px;text-align:center}
+.creator-orb img+span,.creator-big-orb img+span,.creator-profile-avatar img+span,.entity-avatar img+span{display:none}
+@media(max-width:760px){.quality-control{flex:1}.quality-control select{flex:1}.quality-control small{max-width:98px}.study-stat-grid>button{padding:6px 4px}}
+
 /* Beta 6.22 — trusted membership, complete account names, pronunciation and plans. */
 .vip-badge:not(.is-active){display:none!important}
 .vip-status-card:not(.is-active){background:var(--panel2);border-style:dashed}

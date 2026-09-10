@@ -106,8 +106,8 @@ def validate_metadata(payload, topic_ids, goal_ids, sentence_ids, tag_ids=None):
     if not isinstance(goals, list):
         raise StudioError('AI_GOAL_INVALID', 'AI 学习目标格式错误。', True)
     if tag_ids is not None:
-        if not isinstance(tags, list) or not 3 <= len(tags) <= 8:
-            raise StudioError('AI_TAG_COUNT', 'AI 标签必须有3到8个。', True)
+        if not isinstance(tags, list) or not 1 <= len(tags) <= 5:
+            raise StudioError('AI_TAG_COUNT', 'AI 标签必须有1到5个。', True)
         seen_tags = set()
         for tag in tags:
             evidence = tag.get('sentenceIds', []) if isinstance(tag, dict) else []

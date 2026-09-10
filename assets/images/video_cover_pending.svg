@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" role="img" aria-label="视频封面准备中">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#101827"/><stop offset="1" stop-color="#172554"/></linearGradient></defs>
+  <rect width="1600" height="900" fill="url(#g)"/>
+  <circle cx="800" cy="420" r="88" fill="#ffffff" fill-opacity=".12"/>
+  <path d="M775 367 858 420 775 473Z" fill="#fff" fill-opacity=".84"/>
+  <text x="800" y="570" text-anchor="middle" fill="#dbeafe" font-family="sans-serif" font-size="38">视频封面准备中</text>
+</svg>

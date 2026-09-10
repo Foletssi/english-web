@@ -31,9 +31,10 @@
   }
 
   function tagIds(video) {
-    return uniqueStrings(video?.tagIds || (video?.tagAssignments || [])
+    const direct=Array.isArray(video?.tagIds)?video.tagIds.filter(Boolean):[];
+    return uniqueStrings(direct.length?direct:(video?.tagAssignments || [])
       .filter(row => row && (row.reviewStatus === 'APPROVED' || row.approved === true))
-      .map(row => row.tagId));
+      .map(row => row.tagId ?? row.id));
   }
 
   function queryVideos(videos, filters = {}) {

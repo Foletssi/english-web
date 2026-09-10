@@ -23,7 +23,7 @@
   }catch(e){document.documentElement.dataset.theme='dark'}
 })();
 </script>
-<link rel="stylesheet" href="assets/css/app.css?v=beta6.29.0">
+<link rel="stylesheet" href="assets/css/app.css?v=beta6.30.0">
 </head>
 <body class="production-build">
 <div class="shell">
@@ -31,7 +31,7 @@
   <div class="brand" data-route="/home"><img class="eastudy-logo eastudy-logo--top" src="assets/images/eastudy-logo.png" alt="Eastudy · Learn English, the Easy Way."></div>
   <nav class="navlinks">
     <button class="navlink" data-route="/home"><i data-icon="home"></i>首页</button>
-    <button class="navlink" data-route="/compilation/36"><i data-icon="grid"></i>合集</button>
+    <button class="navlink" data-route="/collections"><i data-icon="grid"></i>合集</button>
     <button class="navlink" data-route="/creators"><i data-icon="users"></i>博主</button>
     <button class="navlink" data-route="/vocabulary"><i data-icon="book"></i>生词本</button>
     <button class="navlink" data-route="/learning"><i data-icon="chart"></i>我的学习</button>
@@ -70,7 +70,7 @@
       <div class="home-brand" data-route="/home"><img class="eastudy-logo eastudy-logo--sidebar" src="assets/images/eastudy-logo.png" alt="Eastudy · Learn English, the Easy Way."></div>
       <nav class="home-nav">
         <button class="home-nav-item active" data-route="/home"><i data-icon="home"></i>首页</button>
-        <button class="home-nav-item" data-route="/compilation/36"><i data-icon="grid"></i>合集</button>
+        <button class="home-nav-item" data-route="/collections"><i data-icon="grid"></i>合集</button>
         <button class="home-nav-item" data-route="/creators"><i data-icon="users"></i>博主</button>
         <button class="home-nav-item" data-route="/vocabulary"><i data-icon="book"></i>生词本</button>
         <button class="home-nav-item" data-route="/history"><i data-icon="clock"></i>观看记录</button>
@@ -99,16 +99,16 @@
             <div class="today-progress-top"><div><small>今日学习</small><strong><span id="todayMinutes">0</span> <em>min</em></strong></div><button class="today-streak time-detail-link" data-route="/learning" type="button" title="查看学习时长明细"><i data-icon="flame"></i><span><b id="currentStreak">0 天</b><small>连续学习 · 查看明细</small></span></button></div>
             <div class="today-goal-row"><span>每日目标</span><b id="todayGoalPercent">0%</b></div>
             <div class="today-goal-bar"><i id="todayGoalBar"></i></div>
-            <div class="today-progress-foot"><span id="todayGoalCopy">从第一段真实英语开始</span><button id="todayPrimaryAction" data-route="/video/2805">开始第一课</button></div>
+            <div class="today-progress-foot"><span id="todayGoalCopy">从第一段真实英语开始</span><button id="todayPrimaryAction" data-route="/videos">选择第一课</button></div>
           </article>
-          <article class="priority-resume-card" id="priorityResumeCard" data-route="/video/2805" tabindex="0">
+          <article class="priority-resume-card" id="priorityResumeCard" data-route="/videos" tabindex="0">
             <div class="priority-resume-cover"><img id="priorityResumeCover" src="assets/images/home_video_1.png" alt="我在英国乡村如何开始一天"><span class="resume-play"><i data-icon="play"></i></span></div>
             <div class="priority-resume-copy"><span id="priorityResumeLabel">开始你的第一个 Vlog</span><h3 id="priorityResumeTitle">我在英国乡村如何开始一天</h3><div class="resume-meta"><b id="priorityResumeProgress">尚未开始</b><span id="priorityResumeTime">约 1 分钟</span></div><div class="resume-progress"><i id="priorityResumeBar"></i></div></div>
           </article>
         </div>
       </section>
 
-      <section class="home-hero"><div class="home-hero-overlay"></div><div class="home-hero-content"><div class="home-kicker">REAL VIDEOS · REAL PEOPLE · REAL PROGRESS</div><h1>Better English.<br>A Brighter You.</h1><p>在真实的世界里，遇见更好的自己</p><button class="home-start" data-route="/video/2805"><span>▶</span>开始学习</button></div><div class="hero-dots"><i class="active"></i><i></i><i></i></div></section>
+      <section class="home-hero"><div class="home-hero-overlay"></div><div class="home-hero-content"><div class="home-kicker">REAL VIDEOS · REAL PEOPLE · REAL PROGRESS</div><h1>Better English.<br>A Brighter You.</h1><p>在真实的世界里，遇见更好的自己</p><button class="home-start" data-route="/videos"><span>▶</span>开始学习</button></div><div class="hero-dots"><i class="active"></i><i></i><i></i></div></section>
 
       <div class="mobile-category-heading"><b>内容分类</b><button data-route="/videos">查看全部 <i data-icon="chevron-right"></i></button></div>
       <div class="home-category-row" id="homeCategoryRow"><button class="active" data-cat="热门"><span class="cat-icon"><i data-icon="flame"></i></span><b class="cat-name">热门</b></button><button data-cat="旅行"><span class="cat-icon"><i data-icon="plane"></i></span><b class="cat-name">旅行</b></button><button data-cat="日常生活"><span class="cat-icon"><i data-icon="coffee"></i></span><b class="cat-name">日常生活</b></button><button data-cat="职场"><span class="cat-icon"><i data-icon="briefcase"></i></span><b class="cat-name">职场</b></button><button data-cat="教育"><span class="cat-icon"><i data-icon="graduation"></i></span><b class="cat-name">教育</b></button><button data-cat="心理"><span class="cat-icon"><i data-icon="brain"></i></span><b class="cat-name">心理</b></button><button data-cat="美食"><span class="cat-icon"><i data-icon="utensils"></i></span><b class="cat-name">美食</b></button><button data-cat="自然"><span class="cat-icon"><i data-icon="leaf"></i></span><b class="cat-name">自然</b></button><button data-cat="科技"><span class="cat-icon"><i data-icon="cpu"></i></span><b class="cat-name">科技</b></button></div>
@@ -122,29 +122,29 @@
     <aside class="home-right">
       <div class="home-side-actions" aria-label="显示与账户操作"><div class="home-side-actions-inner"><button id="homeThemeBtn" title="切换主题"><i data-icon="sun"></i></button><button class="lang-toggle" id="langToggleBtn" data-no-ui-translate data-lang="zh" title="切换界面语言"><span class="lang-option zh">中文</span><span class="lang-separator" aria-hidden="true">/</span><span class="lang-option en">EN</span></button><button title="学习提醒"><i data-icon="bell"></i></button><div class="home-user-shell account-shell" id="homeUserShell"><button class="home-user account-button" id="homeUserBtn" aria-haspopup="menu" aria-expanded="false"><span class="home-user-avatar" style="background-image:url('assets/images/home_video_2.png')"></span><span class="home-user-copy"><b>Alex</b><small class="vip-expiry">VIP · 加载中</small></span><span class="vip-badge">VIP</span><i data-icon="chevron-down"></i></button><div class="home-user-menu account-menu" id="homeUserMenu" role="menu"><div class="home-user-head account-menu-head"><span class="home-user-avatar" style="background-image:url('assets/images/home_video_2.png')"></span><div class="meta"><b>Alex</b><small id="userPlanText">Pro 学习者 · alex@zospeak.demo</small><em class="vip-expiry">VIP · 加载中</em></div></div><div class="vip-status-card" aria-label="VIP会员状态"><div class="vip-card-top"><span class="vip-emblem">♛<b>VIP</b></span><div><strong>Eastudy Pro</strong><small class="vip-expiry">有效期至 加载中</small></div></div><div class="vip-card-meta"><span class="vip-days">剩余计算中</span><button type="button" class="vip-manage" data-account-action="vip">管理会员</button></div></div><button class="user-menu-item" data-account-action="learning"><i data-icon="chart"></i><span>我的学习</span></button><button class="user-menu-item" data-account-action="profile"><i data-icon="user"></i><span id="menuProfileText">账户资料</span></button><button class="user-menu-item" data-account-action="preferences"><i data-icon="settings"></i><span>学习偏好</span></button><button class="user-menu-item vip-menu-item" data-account-action="vip"><i data-icon="spark"></i><span>激活 VIP CDK</span></button><div class="user-menu-sep account-menu-sep"></div><button class="user-menu-item" data-account-action="switch"><i data-icon="users"></i><span id="menuSwitchText">切换账号</span></button><button class="user-menu-item danger-item" data-account-action="logout"><i data-icon="logout"></i><span id="menuLogoutText">退出登录</span></button></div></div></div></div>
       <section class="right-quote"><div class="quote-mark">“</div><b>Small steps every day<br>lead to big changes.</b><p>每天进步一点点，未来的你会感谢现在的坚持。</p></section>
-      <section class="right-card"><div class="right-title"><h3 id="statsTitle">我的学习数据</h3><button data-route="/learning" id="statsViewAll">查看全部 ›</button></div><div class="study-stat-grid"><div><span class="stat-icon mint">▶</span><b id="statVideos">0</b><small>已学习视频</small></div><div><span class="stat-icon blue">♧</span><b id="statWords">0</b><small>掌握词汇</small></div><div><span class="stat-icon orange">▣</span><b id="statDays">0</b><small>累计天数</small></div><div><span class="stat-icon purple">◴</span><b id="statHours">0m</b><small>学习时长</small></div></div></section>
+      <section class="right-card"><div class="right-title"><h3 id="statsTitle">我的学习数据</h3><button data-route="/learning" id="statsViewAll">查看全部 ›</button></div><div class="study-stat-grid"><button type="button" data-route="/history?status=started"><span class="stat-icon mint">▶</span><b id="statVideos">0</b><small>已学习视频</small></button><button type="button" data-route="/vocabulary?state=mastered"><span class="stat-icon blue">♧</span><b id="statWords">0</b><small>掌握词汇</small></button><button type="button" data-route="/learning?view=calendar"><span class="stat-icon orange">▣</span><b id="statDays">0</b><small>累计天数</small></button><button type="button" data-route="/learning?view=time"><span class="stat-icon purple">◴</span><b id="statHours">0m</b><small>学习时长</small></button></div></section>
       <section class="right-card streak streak-v3"><div class="streak-v3-head"><div class="streak-v3-icon"><i data-icon="flame"></i></div><div class="streak-v3-title"><span>连续学习</span><strong><span id="streakDays">0</span> <em>天</em></strong></div><button class="streak-v3-week time-detail-link" data-route="/learning" type="button" title="查看本周学习时长明细"><b id="streakWeekMinutes">0</b><small>本周分钟 · 查看明细</small></button></div><div class="streak-v3-days" id="streakCalendar"></div><div class="streak-v3-foot" id="streakQuote"><span><b>0/7</b> 本周已完成</span><span>今天 0 分钟</span></div></section>
-      <section class="right-card daily-pick"><div class="right-title green"><h3 id="dailyTitle">今日学习建议</h3><button data-route="/video/2805">→</button></div><div class="daily-thumb"><img src="assets/images/home_daily_pick.png" alt="今日学习建议"></div><h4>A Simple Life in the Mountains</h4><p>8 分钟 · 15 个重点词汇</p><button class="daily-start" data-route="/video/2805">开始学习</button></section>
+      <section class="right-card daily-pick" hidden><div class="right-title green"><h3 id="dailyTitle">今日学习建议</h3><button data-route="/videos">→</button></div><div class="daily-thumb"><img src="assets/images/video_cover_pending.svg" alt="今日学习建议加载中"></div><h4>内容加载中</h4><p>正在读取已发布视频</p><button class="daily-start" data-route="/videos">开始学习</button></section>
       <section class="right-card"><div class="right-title"><h3 id="hotTagTitle">热门标签</h3><button id="refreshTagCloud">换一批</button></div><div class="tag-cloud" id="tagCloud"></div></section>
-      <button class="right-card progress-mini progress-launcher" data-route="/video/2805" type="button" aria-label="继续当前视频学习"><div><b>当前视频进度</b><span id="homeProgressText">上次学到 0:00</span></div><div class="progressbar"><i id="homeProgressBar"></i></div><div class="mini-fav">收藏句 <b id="statFavs">0</b><strong>继续学习 →</strong></div></button>
+      <button class="right-card progress-mini progress-launcher" data-route="/videos" type="button" aria-label="继续当前视频学习"><div><b>当前视频进度</b><span id="homeProgressText">尚未开始</span></div><div class="progressbar"><i id="homeProgressBar"></i></div><div class="mini-fav">收藏句 <b id="statFavs">0</b><strong>选择视频 →</strong></div></button>
     </aside>
   </div>
 </main>
 
 <main id="collectionPage" class="page product-page">
   <div class="product-shell collection-v2">
-    <div class="product-crumb"><button data-route="/home">首页</button><i data-icon="chevron-right"></i><span>合集</span><i data-icon="chevron-right"></i><b>Comprehensible Input</b></div>
+        <div class="product-crumb"><button data-route="/home">首页</button><i data-icon="chevron-right"></i><span>合集</span><i data-icon="chevron-right"></i><b>加载中…</b></div>
     <section class="collection-v2-hero">
-      <div class="collection-v2-cover"><img src="assets/images/home_collection_1.png" alt="Comprehensible Input"><div class="collection-cover-badge"><i data-icon="play"></i>42 个真实视频</div></div>
+      <div class="collection-v2-cover"><img src="assets/images/video_cover_pending.svg" alt="合集封面加载中"><div class="collection-cover-badge"><i data-icon="play"></i>内容加载中</div></div>
       <div class="collection-v2-copy">
-        <div class="eyebrow">EDITOR'S PICK · 可理解输入</div>
-        <h1>Comprehensible Input<br><span>真实英语输入</span></h1>
-        <p>从英国乡村、旅行、日常生活到人物访谈，用真实语境建立英语直觉。每条内容包含逐句双语字幕、重点词汇和跟读训练。</p>
-        <div class="collection-meta-chips"><span><i data-icon="signal"></i>A2–B2</span><span><i data-icon="clock"></i>约 9.6 小时</span><span><i data-icon="video"></i>42 视频</span><span><i data-icon="users"></i>8 位博主</span></div>
-        <div class="collection-progress-block"><div><b>你的学习进度</b><span>12 / 42 · 29%</span></div><div class="collection-progress-line"><i></i></div></div>
-        <div class="collection-hero-actions"><button class="primary wide" data-route="/video/2805"><i data-icon="play"></i>继续学习</button><button class="secondary collection-save" id="collectionSaveBtn"><i data-icon="bookmark"></i><span>收藏合集</span></button></div>
+        <div class="eyebrow">REAL VIDEOS · 真实语境</div>
+        <h1>合集正在加载<br><span>请稍候</span></h1>
+        <p>正在读取后台已经发布的合集资料与视频成员。</p>
+        <div class="collection-meta-chips"><span><i data-icon="signal"></i>—</span><span><i data-icon="clock"></i>—</span><span><i data-icon="video"></i>—</span><span><i data-icon="users"></i>—</span></div>
+        <div class="collection-progress-block"><div><b>你的学习进度</b><span>同步中…</span></div><div class="collection-progress-line"><i style="width:0"></i></div></div>
+        <div class="collection-hero-actions"><button class="primary wide" disabled><i data-icon="play"></i>加载中</button><button class="secondary collection-save" id="collectionSaveBtn" disabled><i data-icon="bookmark"></i><span>收藏合集</span></button></div>
       </div>
-      <aside class="collection-summary"><div><strong>42</strong><span>视频</span></div><div><strong>286</strong><span>重点词</span></div><div><strong>9.6h</strong><span>总时长</span></div><div><strong>4.9</strong><span>学习评分</span></div></aside>
+      <aside class="collection-summary"><div><strong>—</strong><span>视频</span></div><div><strong>—</strong><span>重点表达</span></div><div><strong>—</strong><span>总时长</span></div></aside>
     </section>
     <section class="collection-content-v2">
       <div class="collection-toolbar-v2"><div class="toolbar-title"><h2>合集内容</h2><p>按你的学习状态筛选</p></div><div class="toolbar-search"><i data-icon="search"></i><input id="collectionSearch" placeholder="搜索合集内视频"></div><div class="collection-filter-group"><button class="collection-filter active" data-filter="all">全部</button><button class="collection-filter" data-filter="learning">学习中</button><button class="collection-filter" data-filter="done">已完成</button><button class="collection-filter" data-filter="new">未学习</button></div><button class="sort-menu" id="collectionSortMenu"><i data-icon="sort"></i>最新</button></div>
@@ -204,9 +204,9 @@
 
 <main id="historyPage" class="page product-page"><div class="product-shell">
   <section class="page-heading"><div><span class="section-kicker">KEEP GOING</span><h1>观看记录</h1><p>所有学习进度都在这里继续。</p></div><button class="secondary" id="clearHistoryBtn"><i data-icon="trash"></i>清理记录</button></section>
-  <section class="history-summary"><div><b>7</b><span>本周学习视频</span></div><div><b>2.4h</b><span>本周学习时长</span></div><div><b>42</b><span>新增词汇</span></div><div><b>86%</b><span>平均完成度</span></div></section>
-  <div class="history-date-block"><div class="date-heading"><b>今天</b><span>9 月 4 日</span></div><div class="history-list" id="historyToday"></div></div>
-  <div class="history-date-block"><div class="date-heading"><b>昨天</b><span>9 月 3 日</span></div><div class="history-list" id="historyYesterday"></div></div>
+  <section class="history-summary"><div><b id="historyVideoCount">0</b><span>已学习视频</span></div><div><b id="historyTimeTotal">0m</b><span>累计学习时长</span></div><div><b id="historyWordCount">0</b><span>掌握词汇</span></div><div><b id="historyCompletionAverage">0%</b><span>平均完成度</span></div></section>
+  <div class="history-date-block"><div class="date-heading"><b>观看记录</b><span id="historyScopeLabel">当前账号</span></div><div class="history-list" id="historyToday"></div></div>
+  <div class="history-date-block" hidden><div class="history-list" id="historyYesterday"></div></div>
 </div></main>
 
 <main id="favoritesPage" class="page product-page"><div class="product-shell">
@@ -216,7 +216,7 @@
 </div></main>
 
 <main id="learningPage" class="page product-page"><div class="product-shell learning-dashboard-v3">
-  <section class="learning-welcome"><div><span class="section-kicker">YOUR PROGRESS</span><h1>早上好，<span data-student-name>学习者</span> 👋</h1><p>今天再学 18 分钟，就能完成你的每日目标。</p></div><button class="primary" data-route="/video/2805"><i data-icon="play"></i>继续学习</button></section>
+  <section class="learning-welcome"><div><span class="section-kicker">YOUR PROGRESS</span><h1>早上好，<span data-student-name>学习者</span> 👋</h1><p id="learningWelcomeCopy">正在读取当前账号的学习数据。</p></div><button class="primary" id="learningContinueButton" data-route="/videos"><i data-icon="play"></i>开始学习</button></section>
   <section class="learning-plan-card" aria-labelledby="learningPlanTitle">
     <div class="learning-plan-head"><div><span class="section-kicker">PERSONAL ROADMAP</span><h2 id="learningPlanTitle">我的学习目标</h2><p>词汇、短语、听说读写与复习会按同一个目标统一安排。</p></div><div class="learning-plan-controls"><label><span>主目标</span><select id="learningTrackSelect" aria-label="选择学习主目标"></select></label><label><span>每天时间</span><select id="dailyMinutesSelect" aria-label="选择每天学习时间"><option value="10">10 分钟</option><option value="20" selected>20 分钟</option><option value="40">40 分钟</option><option value="60">60 分钟</option></select></label></div></div>
     <div class="learning-plan-summary" id="learningPlanSummary" role="status"></div>
@@ -224,15 +224,15 @@
   </section>
   <section class="learning-overview-v3">
     <article class="learning-time-card">
-      <div class="time-card-head"><span class="time-icon"><i data-icon="clock"></i></span><div><small>总学习时长</small><b>12<em>h</em> 30<em>m</em></b></div><span class="time-growth">↑ 2.4h 本周</span></div>
-      <div class="time-card-body"><div class="time-focus"><strong>18</strong><span>分钟<br>今日已学</span></div><div class="time-spark" id="learningTimeSpark"><i style="height:38%"></i><i style="height:55%"></i><i style="height:32%"></i><i style="height:72%"></i><i style="height:48%"></i><i style="height:84%"></i><i class="today" style="height:64%"></i></div></div>
-      <div class="time-card-foot"><span>本周目标 140 分钟</span><b>124 / 140</b></div><div class="time-progress"><i style="width:88%"></i></div>
+      <div class="time-card-head"><span class="time-icon"><i data-icon="clock"></i></span><div><small>总学习时长</small><b id="learningTotalTime">0m</b></div><span class="time-growth" id="learningWeekTime">本周 0 分钟</span></div>
+      <div class="time-card-body"><div class="time-focus"><strong id="learningTodayTime">0</strong><span id="learningTodayUnit">分钟<br>今日已学</span></div><div class="time-spark" id="learningTimeSpark"></div></div>
+      <div class="time-card-foot"><span id="learningWeekGoal">本周目标 140 分钟</span><b id="learningWeekProgress">0 / 140</b></div><div class="time-progress"><i id="learningWeekProgressBar" style="width:0"></i></div>
     </article>
     <div class="learning-mini-grid">
-      <article class="learning-mini-stat mint"><span class="metric-icon mint"><i data-icon="book"></i></span><div><small>掌握词汇</small><b id="learningWordCount">342</b><em>本周 +18</em></div></article>
-      <article class="learning-mini-stat amber"><span class="metric-icon amber"><i data-icon="flame"></i></span><div><small>连续学习</small><b>28 天</b><em>最好记录 41 天</em></div></article>
-      <article class="learning-mini-stat blue"><span class="metric-icon blue"><i data-icon="video"></i></span><div><small>已学视频</small><b>128</b><em>完成 86%</em></div></article>
-      <article class="learning-goal-mini"><div class="goal-ring small"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="48"></circle><circle class="goal-progress" cx="60" cy="60" r="48"></circle></svg><div><b>72%</b><span>今日目标</span></div></div><div><b>还差 8 分钟</b><p>完成后连续学习 29 天</p><button data-route="/video/2805">继续完成</button></div></article>
+      <button type="button" class="learning-mini-stat mint" data-route="/vocabulary?state=mastered"><span class="metric-icon mint"><i data-icon="book"></i></span><div><small>掌握词汇</small><b id="learningWordCount">0</b><em>查看词汇明细</em></div></button>
+      <button type="button" class="learning-mini-stat amber" data-route="/learning?view=calendar"><span class="metric-icon amber"><i data-icon="flame"></i></span><div><small>连续学习</small><b id="learningStreakCount">0 天</b><em>查看每日明细</em></div></button>
+      <button type="button" class="learning-mini-stat blue" data-route="/history?status=started"><span class="metric-icon blue"><i data-icon="video"></i></span><div><small>已学视频</small><b id="learningVideoCount">0</b><em id="learningVideoCompletion">完成 0%</em></div></button>
+      <article class="learning-goal-mini"><div class="goal-ring small"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="48"></circle><circle class="goal-progress" id="learningGoalRing" cx="60" cy="60" r="48"></circle></svg><div><b id="learningGoalPercent">0%</b><span>今日目标</span></div></div><div><b id="learningGoalRemaining">尚未开始</b><p id="learningSyncStatus">云端数据已同步</p><button id="learningGoalAction" data-route="/videos">开始学习</button></div></article>
     </div>
   </section>
   <section class="learning-chart-card learning-week-card"><div class="card-heading"><div><h2>本周学习节奏</h2><p>把学习分散到每天，比一次学很久更容易坚持。</p></div><select><option>近 7 天</option><option>近 30 天</option></select></div><div class="learning-bar-chart" id="learningChart"></div><div class="chart-days"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div></section>
@@ -241,15 +241,15 @@
 
 
 <main id="videoPage" class="page video-page" data-mobile-pane="learn">
-  <div class="study-top"><button class="study-back" data-route="/compilation/36">‹</button><div class="study-title" data-no-ui-translate>How I Start My Day in the English Countryside</div><div class="spacer"></div><button class="study-chip" id="exportBtn">导出生词</button><button class="study-chip study-theme-toggle" id="studyThemeBtn" title="切换主题"><i data-icon="sun"></i></button><button class="study-chip lang-toggle study-lang-toggle" id="studyLangBtn" data-no-ui-translate data-lang="zh" title="切换界面语言"><span class="lang-option zh">中文</span><span class="lang-separator" aria-hidden="true">/</span><span class="lang-option en">EN</span></button><button class="study-chip" id="openSettings">偏好设置</button></div>
-  <div class="study-grid"><section class="study-left"><div class="player"><video id="video" preload="metadata" playsinline webkit-playsinline poster="assets/images/flower_frame.png"></video><div class="player-overlay"></div><div class="media-state" id="mediaState" role="status" hidden><b id="mediaStateTitle">该视频暂无学习字幕</b><span id="mediaStateCopy">你仍可正常播放视频，逐句学习将在字幕准备完成后开放。</span><button type="button" id="mediaRetry" hidden>重试加载</button></div></div>
-      <div class="mobile-study-tabs"><button class="active" data-mobile-study="learn"><i data-icon="spark"></i><span>学习</span></button><button data-mobile-study="transcript"><i data-icon="list"></i><span>字幕</span></button></div><div class="current-sentence" id="sentenceCard"><div><div class="current-en" id="currentEn"></div><div class="current-zh" id="currentZh"></div></div></div><div class="timeline"><input id="seek" class="seek" type="range" min="0" max="30" step=".01" value="0" aria-label="视频播放进度"><div class="time"><span id="curTime">0:00</span><span id="duration">0:30</span></div></div><div class="player-controls"><div class="ctl-left"><button class="ctl" id="repeatBtn">↻ 单句</button><label class="speed-control" aria-label="播放速度"><select id="speedSelect"><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label><label class="quality-control" aria-label="播放清晰度"><select id="qualitySelect"><option value="auto">自动</option></select></label><button class="ctl" id="autoPauseBtn">句后暂停</button><button class="ctl" id="muteBtn" aria-label="静音">🔊</button></div><div class="center-ctl"><button class="jump" id="prevBtn" aria-label="上一句">◀</button><button class="main-play" id="playBtn" aria-label="播放">▶</button><button class="jump" id="nextBtn" aria-label="下一句">▶</button></div><div class="caption-modes" aria-label="字幕显示"><span>字幕</span><button class="caption-mode active" data-caption="bilingual">双语</button><button class="caption-mode" data-caption="english">英文</button><button class="caption-mode" data-caption="hidden">隐藏</button></div></div><div class="practice-modes" aria-label="练习方式"><span>练习</span><button class="practice-mode active" data-practice="watch">观看</button><button class="practice-mode" data-practice="intensive">精听</button><button class="practice-mode" data-practice="cloze">挖空</button><button class="practice-mode" data-practice="shadowing">跟读</button></div><section class="sentence-insight" id="sentenceInsight"><div class="insight-head"><div><b>当前句解析</b><span>理解之后再模仿，会记得更牢</span></div><button id="insightCollapse" aria-label="展开或收起当前句解析"><i data-icon="chevron-down"></i></button></div><div class="insight-grid"><article><span class="insight-icon purple"><i data-icon="book"></i></span><div><b>重点表达</b><p id="insightVocab">long to-do list · 一长串待办事项</p></div></article><article><span class="insight-icon mint"><i data-icon="spark"></i></span><div><b>语法提示</b><p id="insightGrammar">have got 在口语中常表示“有 / 拥有”。</p></div></article><article class="insight-shadow"><span class="insight-icon amber"><i data-icon="mic"></i></span><div><b>跟读建议</b><p>先听完整节奏，再按重音复述当前句。</p></div><button class="mini-action" data-mode-trigger="shadowing">开始跟读</button></article></div></section></section><aside class="transcript-wrap"><div class="transcript-head"><div><b>逐句学习</b><span>点击句子跳转 · 点击词语查看释义</span></div><button type="button" id="returnCurrentSentence" hidden>回到当前句</button></div><div class="transcript" id="transcript"></div></aside></div>
+  <div class="study-top"><button class="study-back" data-route="/videos">‹</button><div class="study-title" data-no-ui-translate>视频正在加载中</div><div class="spacer"></div><button class="study-chip" id="exportBtn">导出生词</button><button class="study-chip study-theme-toggle" id="studyThemeBtn" title="切换主题"><i data-icon="sun"></i></button><button class="study-chip lang-toggle study-lang-toggle" id="studyLangBtn" data-no-ui-translate data-lang="zh" title="切换界面语言"><span class="lang-option zh">中文</span><span class="lang-separator" aria-hidden="true">/</span><span class="lang-option en">EN</span></button><button class="study-chip" id="openSettings">偏好设置</button></div>
+  <div class="study-grid"><section class="study-left"><div class="player"><video id="video" preload="metadata" playsinline webkit-playsinline></video><div class="player-overlay"></div><div class="media-state" id="mediaState" role="status"><b id="mediaStateTitle">视频正在加载中…</b><span id="mediaStateCopy">正在读取封面、播放地址和学习字幕。</span><button type="button" id="mediaRetry" hidden>重试加载</button></div></div>
+      <div class="mobile-study-tabs"><button class="active" data-mobile-study="learn"><i data-icon="spark"></i><span>学习</span></button><button data-mobile-study="transcript"><i data-icon="list"></i><span>字幕</span></button></div><div class="current-sentence" id="sentenceCard"><div><div class="current-en" id="currentEn">字幕正在加载中…</div><div class="current-zh" id="currentZh"></div></div></div><div class="timeline"><input id="seek" class="seek" type="range" min="0" max="0" step=".01" value="0" aria-label="视频播放进度" disabled><div class="time"><span id="curTime">0:00</span><span id="duration">--:--</span></div></div><div class="player-controls"><div class="ctl-left"><button class="ctl" id="repeatBtn">↻ 单句</button><label class="speed-control" aria-label="播放速度"><select id="speedSelect"><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label><label class="quality-control"><span class="sr-only">画质设置</span><select id="qualitySelect" aria-label="画质设置"><option value="auto">自动画质</option></select><small id="qualityStatus" role="status" aria-live="polite"></small></label><button class="ctl" id="autoPauseBtn">句后暂停</button><button class="ctl" id="muteBtn" aria-label="静音">🔊</button></div><div class="center-ctl"><button class="jump" id="prevBtn" aria-label="上一句">◀</button><button class="main-play" id="playBtn" aria-label="播放">▶</button><button class="jump" id="nextBtn" aria-label="下一句">▶</button></div><div class="caption-modes" role="group" aria-label="字幕设置"><span>字幕设置</span><button class="caption-mode active" data-caption="bilingual" aria-pressed="true">双语</button><button class="caption-mode" data-caption="english" aria-pressed="false">英文</button><button class="caption-mode" data-caption="hidden" aria-pressed="false">隐藏</button></div></div><div class="practice-modes" aria-label="练习方式"><span>练习</span><button class="practice-mode active" data-practice="watch">观看</button><button class="practice-mode" data-practice="intensive">精听</button><button class="practice-mode" data-practice="cloze">挖空</button><button class="practice-mode" data-practice="shadowing">跟读</button></div><section class="sentence-insight" id="sentenceInsight"><div class="insight-head"><div><b>当前句解析</b><span>理解之后再模仿，会记得更牢</span></div><button id="insightCollapse" aria-label="展开或收起当前句解析"><i data-icon="chevron-down"></i></button></div><div class="insight-grid"><article><span class="insight-icon purple"><i data-icon="book"></i></span><div><b>重点表达</b><p id="insightVocab">随当前字幕加载</p></div></article><article><span class="insight-icon mint"><i data-icon="spark"></i></span><div><b>语法提示</b><p id="insightGrammar">随当前字幕加载</p></div></article><article class="insight-shadow"><span class="insight-icon amber"><i data-icon="mic"></i></span><div><b>跟读建议</b><p>先听完整节奏，再按重音复述当前句。</p></div><button class="mini-action" data-mode-trigger="shadowing">开始跟读</button></article></div></section></section><aside class="transcript-wrap"><div class="transcript-head"><div><b>逐句学习</b><span>点击句子跳转 · 点击词语查看释义</span></div><button type="button" id="returnCurrentSentence" hidden>回到当前句</button></div><div class="transcript" id="transcript"><div class="transcript-empty" role="status"><b>学习字幕正在加载中</b><span>视频与字幕状态会分别更新。</span></div></div></aside></div>
 </main>
 </div>
 
 
 <div class="search-backdrop" id="searchBackdrop"><section class="search-modal"><div class="search-modal-bar"><i data-icon="search"></i><input id="globalSearchInput" placeholder="搜索视频、合集、博主或学习主题…" autocomplete="off"><kbd>ESC</kbd></div><div class="search-suggestions" id="searchSuggestions"><div class="search-section-title">热门搜索</div><div class="search-chips"><button>日常生活</button><button>旅行英语</button><button>Jojo English</button><button>职场表达</button><button>心理学</button></div><div class="search-section-title">最近学习</div></div><div class="search-results" id="globalSearchResults"></div></section></div>
-<nav class="mobile-nav" id="mobileNav"><button data-route="/home"><i data-icon="home"></i><span>首页</span></button><button data-route="/compilation/36"><i data-icon="grid"></i><span>合集</span></button><button data-route="/vocabulary"><i data-icon="book"></i><span>生词</span></button><button data-route="/learning"><i data-icon="chart"></i><span>学习</span></button><button data-route="/favorites"><i data-icon="star"></i><span>收藏</span></button><button data-route="/me"><i data-icon="user"></i><span>我的</span></button></nav>
+<nav class="mobile-nav" id="mobileNav"><button data-route="/home"><i data-icon="home"></i><span>首页</span></button><button data-route="/collections"><i data-icon="grid"></i><span>合集</span></button><button data-route="/vocabulary"><i data-icon="book"></i><span>生词</span></button><button data-route="/learning"><i data-icon="chart"></i><span>学习</span></button><button data-route="/favorites"><i data-icon="star"></i><span>收藏</span></button><button data-route="/me"><i data-icon="user"></i><span>我的</span></button></nav>
 
 <div class="dict" id="dict"><div class="dict-top"><div class="dict-row"><div><div class="dict-word" id="dictWord"></div><div class="dict-phon" id="dictPhon"></div><div class="level-badges" id="dictBadges"></div></div><button class="speakbtn" id="speakWord" type="button" aria-label="播放单词发音" title="播放单词发音">🔊</button><button class="dict-close" id="dictClose" type="button" aria-label="关闭词典">×</button></div></div><div class="dict-body"><div class="pronunciation-status" id="pronunciationStatus" role="status">点击扬声器播放英音</div><div class="sense"><b>核心释义</b><p id="dictMeaning"></p></div><div class="sense"><b>语境理解</b><p id="dictExplain"></p></div><div class="context-box" id="dictContext"></div><div class="dict-actions"><button id="copyWord">复制词语</button><button class="saveword" id="saveWord">＋ 加入生词本</button></div></div></div>
 
@@ -341,16 +341,18 @@
 
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="shared/supabase-config.js?v=beta6.29.0"></script>
-<script src="shared/supabase-client.js?v=beta6.29.0"></script>
-<script src="shared/content-store.js?v=beta6.29.0"></script>
-<script src="shared/cloud-content.js?v=beta6.29.0"></script>
-<script src="shared/catalog-selectors.js?v=beta6.29.0"></script>
-<script src="shared/study-utils.js?v=beta6.29.0"></script>
-<script src="shared/learning-queue.js?v=beta6.29.0"></script>
-<script src="shared/playback-controller.js?v=beta6.29.0"></script>
+<script src="shared/supabase-config.js?v=beta6.30.0"></script>
+<script src="shared/supabase-client.js?v=beta6.30.0"></script>
+<script src="shared/content-store.js?v=beta6.30.0"></script>
+<script src="shared/cloud-content.js?v=beta6.30.0"></script>
+<script src="shared/content-taxonomy.js?v=beta6.30.0"></script>
+<script src="shared/catalog-selectors.js?v=beta6.30.0"></script>
+<script src="shared/study-utils.js?v=beta6.30.0"></script>
+<script src="shared/learning-queue.js?v=beta6.30.0"></script>
+<script src="shared/playback-controller.js?v=beta6.30.0"></script>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.6.13/dist/hls.min.js"></script>
-<script src="shared/media-player.js?v=beta6.29.0"></script>
-<script src="assets/js/app.js?v=beta6.29.0"></script>
+<script src="shared/player-state.js?v=beta6.30.0"></script>
+<script src="shared/media-player.js?v=beta6.30.0"></script>
+<script src="assets/js/app.js?v=beta6.30.0"></script>
 </body>
 </html>

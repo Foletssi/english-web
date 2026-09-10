@@ -32,11 +32,18 @@ class Contracts(unittest.TestCase):
                           for x in ('vlog', 'daily-life', 'spoken-english')]}
         self.assertEqual(validate_metadata(value, {'daily'}, {'general'}, {'v:1'})['level'], 'A2')
 
-    def test_metadata_requires_three_evidence_tags(self):
+    def test_metadata_requires_at_least_one_evidence_tag(self):
         value = {'titleZh': '日常生活英语记录', 'descriptionZh': '跟着博主完成一天的安排，练习自然的日常表达和跟读。',
                  'level': 'A2', 'topicIds': ['daily'], 'goalMappings': [], 'tags': []}
         with self.assertRaisesRegex(StudioError, 'AI_TAG_COUNT'):
-            validate_metadata(value, {'daily'}, {'general'}, {'v:1'}, {'vlog'})
+            validate_metadata(value, {'daily'}, {'general'}, {'v:1'}, {'daily-life'})
+
+    def test_metadata_allows_one_or_two_evidence_tags(self):
+        base = {'titleZh': '日常生活英语记录', 'descriptionZh': '跟着博主完成一天的安排，练习自然的日常表达和跟读。',
+                'level': 'A2', 'topicIds': ['daily'], 'goalMappings': []}
+        for ids in (('daily-life',), ('daily-life', 'spoken-english')):
+            value = {**base, 'tags': [{'tagId': tag, 'sentenceIds': ['v:1'], 'reasonZh': '字幕证据'} for tag in ids]}
+            self.assertEqual(validate_metadata(value, {'daily'}, {'general'}, {'v:1'}, set(ids))['tagIds'], list(ids))
 
     def test_invalid_json_is_error(self):
         with self.assertRaisesRegex(StudioError, 'AI_INVALID_JSON'):

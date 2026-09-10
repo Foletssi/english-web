@@ -82,7 +82,7 @@ class AiTools(unittest.TestCase):
             'descriptionZh': '跟着视频积累真实自然的清晨问候表达，并练习日常英语听力和口语。',
             'level': 'A2', 'levelReason': '短句为主', 'topicIds': ['daily'],
             'tags': [{'tagId': tag, 'sentenceIds': ['v-1'], 'reasonZh': '字幕证据'}
-                     for tag in ('vlog', 'daily-life', 'spoken-english')],
+                     for tag in ('daily-life', 'spoken-english')],
             'goalMappings': [{'goalId': 'daily', 'sentenceIds': ['v-1'], 'reason': '日常表达'}]}
         config = {'model': 'fixture', 'baseUrl': 'https://api.example.com', 'apiKey': 'secret'}
         info = {'title': 'Morning', 'creator': 'Alice', 'duration': 10, 'wordsPerMinute': 12}
@@ -114,7 +114,7 @@ class AiTools(unittest.TestCase):
             return {'titleZh': '我的日常', 'descriptionZh': '通过真实生活视频积累自然英语表达，同时练习听力、词汇和日常口语。',
                 'level': 'A2', 'levelReason': '短句为主', 'topicIds': ['daily'],
                 'tags': [{'tagId': tag, 'sentenceIds': ['v-0'], 'reasonZh': '字幕证据'}
-                         for tag in ('vlog', 'daily-life', 'spoken-english')],
+                         for tag in ('daily-life', 'spoken-english')],
                 'goalMappings': [{'goalId': 'daily', 'sentenceIds': ['v-0'], 'reason': '日常表达'}]}, {'requestId': 'metadata'}
 
         with tempfile.TemporaryDirectory() as folder, patch('ai_tools.call_json', side_effect=fake_call):

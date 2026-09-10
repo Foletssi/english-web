@@ -4,6 +4,7 @@
 
   const MAX_FILE_BYTES = 2 * 1024 * 1024 * 1024;
   const PART_BYTES = 8 * 1024 * 1024;
+  const mediaSessions = { student: null, admin: null };
 
   function auth(scope) {
     return global.EastudyAuth?.client(scope);
@@ -53,6 +54,16 @@
     if (!api) return { error: new Error('SUPABASE_NOT_CONFIGURED') };
     const { data, error } = await api.rpc('admin_publish_content_snapshot_v2', { p_snapshot: snapshot, p_expected_revision: Number(expectedRevision) });
     return { data: firstRow(data), error: error || null };
+  }
+
+  async function publishEntity(entityType, entity, expectedRevision) {
+    if(global.ZoContent?.localOnly)return {error:new Error('LOCAL_CONTENT_CLOUD_WRITE_DISABLED')};
+    const api=auth('admin');
+    if(!api)return {error:new Error('SUPABASE_NOT_CONFIGURED')};
+    const {data,error}=await api.rpc('admin_publish_content_entity_v3',{
+      p_entity_type:String(entityType||''),p_entity:entity||{},p_expected_revision:Number(expectedRevision)
+    });
+    return {data:firstRow(data),error:error||null};
   }
 
   async function listTrash() {
@@ -127,14 +138,24 @@
     return { data: firstRow(data), error: error || null };
   }
 
-  async function syncMediaSession(scope) {
-    const token = await sessionToken(scope === 'admin' ? 'admin' : 'student');
+  async function syncMediaSession(scope, options = {}) {
+    const key=scope === 'admin' ? 'admin' : 'student';
+    const api=auth(key);
+    if(!api)throw new Error('SUPABASE_NOT_CONFIGURED');
+    const {data,error}=await api.auth.getSession();
+    const session=data?.session;
+    if(error||!session?.access_token)throw error||new Error('AUTHENTICATION_REQUIRED');
+    const now=Math.floor(Date.now()/1000),cached=mediaSessions[key];
+    if(!options.force&&cached?.token===session.access_token&&cached.expiresAt-now>120)return true;
+    const token=session.access_token;
     const response = await fetch('/api/session', { method: 'POST', headers: { Authorization: 'Bearer ' + token } });
-    if (!response.ok) throw new Error('MEDIA_SESSION_FAILED');
+    if(!response.ok){const payload=await response.json().catch(()=>({})),failure=new Error(payload.error||('MEDIA_SESSION_HTTP_'+response.status));failure.stage='session';failure.status=response.status;throw failure}
+    mediaSessions[key]={token,expiresAt:Number(session.expires_at)||now+3300};
     return true;
   }
 
   async function clearMediaSession() {
+    mediaSessions.student=null;mediaSessions.admin=null;
     await fetch('/api/session', { method: 'DELETE' }).catch(() => {});
   }
 
@@ -192,7 +213,7 @@
     return { key: payload.key, url: payload.url, size: Number(payload.size) || file.size, type: 'image/webp' };
   }
 
-  global.EastudyCloudContent = Object.freeze({ pullPublished, pullAdmin, saveDraft, publish, listTrash, trashVideos, restoreVideo,
+  global.EastudyCloudContent = Object.freeze({ pullPublished, pullAdmin, saveDraft, publish, publishEntity, listTrash, trashVideos, restoreVideo,
     processingHealth, createProcessingJob, listProcessingJobs, retryProcessingJob,
     syncMediaSession, clearMediaSession, uploadVideo, uploadCreatorAvatar });
 })(window);

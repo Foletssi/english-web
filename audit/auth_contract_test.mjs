@@ -70,7 +70,7 @@ assert.ok(studentApp.includes('function setPasswordVisible('),'student password 
 assert.ok(studentApp.includes("visible?'eye-off':'eye'"),'student password control must show distinct visible and hidden icons');
 assert.ok(studentApp.includes("input.type!=='text'"),'student password control must toggle from the live input type');
 assert.ok(studentApp.includes("name:'雅思学术类 IELTS Academic'")&&studentApp.includes("name:'托福网考 TOEFL iBT'"),'student learning goals must present Chinese names before English exam abbreviations');
-assert.ok(studentHtml.includes('assets/js/app.js?v=beta6.29.0'),'student app must use the current cache key');
+assert.ok(studentHtml.includes('assets/js/app.js?v=beta6.30.0'),'student app must use the current cache key');
 const studentCss=fs.readFileSync(new URL('../assets/css/app.css',import.meta.url),'utf8');
 assert.ok(studentCss.includes('.auth-eye{z-index:3')&&studentCss.includes('.auth-eye svg{pointer-events:none'),'student password visibility control must remain above the input hit target');
 assert.ok(adminHtml.includes('data-password-target="adminAuthPass"'),'administrator login must expose the same password visibility control');

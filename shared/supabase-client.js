@@ -7,6 +7,20 @@
   const clients = {};
   const empty = { user: null, session: null, profile: null, error: null };
   const REMEMBER_LOGIN_KEY = 'eastudy:student:remember-login';
+  const PAGE_STUDY_SESSION_ID = globalThis.crypto?.randomUUID?.() || '00000000-0000-4000-8000-' + String(Date.now()).padStart(12, '0').slice(-12);
+  let studySequence = 0;
+  let outboxFlushPromise = null;
+  let studentIdentityId = null;
+  let studentIdentityGeneration = 0;
+
+  function observeStudentIdentity(userId) {
+    const next = userId ? String(userId) : null;
+    if (next !== studentIdentityId) {
+      studentIdentityId = next;
+      studentIdentityGeneration += 1;
+    }
+    return studentIdentityGeneration;
+  }
 
   function getRememberLogin() {
     try { return localStorage.getItem(REMEMBER_LOGIN_KEY) !== 'false'; } catch (_) { return false; }
@@ -68,8 +82,12 @@
     const api = client(scope);
     if (!api) return { ...empty, error: new Error('SUPABASE_NOT_CONFIGURED') };
     const { data: sessionData, error: sessionError } = await api.auth.getSession();
-    if (sessionError || !sessionData.session) return { ...empty, error: sessionError || null };
+    if (sessionError || !sessionData.session) {
+      if (scope !== 'admin') observeStudentIdentity(null);
+      return { ...empty, error: sessionError || null };
+    }
     const user = sessionData.session.user;
+    if (scope !== 'admin') observeStudentIdentity(user.id);
     const { data: profile, error } = await api.from('profiles').select('*').eq('id', user.id).maybeSingle();
     return { user, session: sessionData.session, profile, error: error || null };
   }
@@ -153,41 +171,90 @@
   async function signOut(scope) {
     const api = client(scope);
     if (api) await api.auth.signOut();
+    if (scope !== 'admin') observeStudentIdentity(null);
   }
 
-  function learningSession() {
-    const idKey = 'eastudy.learning.session.v2';
-    const seqKey = 'eastudy.learning.sequence.v2';
-    let id = sessionStorage.getItem(idKey);
-    if (!id) {
-      id = globalThis.crypto?.randomUUID?.() || '00000000-0000-4000-8000-' + String(Date.now()).padStart(12, '0').slice(-12);
-      sessionStorage.setItem(idKey, id);
-      sessionStorage.setItem(seqKey, '0');
-    }
-    const sequence = Math.max(0, Number(sessionStorage.getItem(seqKey)) || 0) + 1;
-    sessionStorage.setItem(seqKey, String(sequence));
-    return { id, sequence };
+  function outboxKey(userId) {
+    return 'eastudy:study-outbox:v3:' + String(userId);
+  }
+
+  function readOutbox(userId) {
+    try {
+      const rows = JSON.parse(localStorage.getItem(outboxKey(userId)) || '[]');
+      return Array.isArray(rows) ? rows.filter(row => row && row.userId === String(userId) && row.payload) : [];
+    } catch (_) { return []; }
+  }
+
+  function writeOutbox(userId, rows) {
+    try { localStorage.setItem(outboxKey(userId), JSON.stringify((rows || []).slice(-1000))); } catch (_) {}
+  }
+
+  function pendingStudyEvents() {
+    if (!studentIdentityId) return 0;
+    return readOutbox(studentIdentityId).length;
+  }
+
+  function queueStudyEvent(userId, payload) {
+    const rows = readOutbox(userId);
+    const event = {
+      userId: String(userId),
+      sessionId: PAGE_STUDY_SESSION_ID,
+      sequenceNo: ++studySequence,
+      queuedAt: new Date().toISOString(),
+      payload
+    };
+    rows.push(event);
+    writeOutbox(userId, rows);
+    return event;
+  }
+
+  async function flushStudyOutbox() {
+    if (outboxFlushPromise) return outboxFlushPromise;
+    outboxFlushPromise = (async () => {
+      const api = client('student'), context = await getContext('student');
+      if (!api || !context.user || !isLearnerProfile(context.profile)) return { error: context.error || null };
+      const userId = String(context.user.id), generation = studentIdentityGeneration;
+      let rows = readOutbox(userId), lastData = null;
+      while (rows.length) {
+        const current = rows[0];
+        if (studentIdentityGeneration !== generation || studentIdentityId !== userId) return { error: new Error('STUDENT_IDENTITY_CHANGED') };
+        const { data, error } = await api.rpc('apply_study_event_v2', current.payload);
+        if (error) return { data: lastData, error };
+        lastData = data;
+        const latest = readOutbox(userId);
+        const index = latest.findIndex(row => row.sessionId === current.sessionId && Number(row.sequenceNo) === Number(current.sequenceNo));
+        if (index >= 0) latest.splice(index, 1);
+        writeOutbox(userId, latest);
+        rows = latest;
+      }
+      return { data: lastData, error: null };
+    })().finally(() => { outboxFlushPromise = null; });
+    return outboxFlushPromise;
   }
 
   async function applyStudySync(input, activeSeconds, activityStartedAt, activityEndedAt) {
-    const api = client('student');
     const context = await getContext('student');
     const duration = Math.max(0, Number(input?.duration) || 0);
-    if (!api || !context.user || !isLearnerProfile(context.profile) || !duration) return { error: null };
-    const session = learningSession();
-    return api.rpc('apply_study_event_v2', {
-      p_session_id: session.id,
-      p_sequence_no: session.sequence,
+    if (!context.user || !isLearnerProfile(context.profile) || !duration) return { error: context.error || null };
+    const clientRecordedAt = new Date().toISOString();
+    const event = queueStudyEvent(context.user.id, {
+      p_session_id: PAGE_STUDY_SESSION_ID,
+      p_sequence_no: studySequence,
       p_video_id: Number(input.videoId),
-      p_media_version: String(input.mediaVersion || 'published-v1'),
+      p_media_version: String(input.mediaVersion || 'unknown'),
       p_position_seconds: Math.max(0, Math.min(duration, Number(input.position) || 0)),
       p_duration_seconds: duration,
       p_watch_ranges: Array.isArray(input.watchRanges) ? input.watchRanges.slice(-500) : [],
       p_active_seconds: Math.max(0, Math.min(60, Math.round(Number(activeSeconds) || 0))),
       p_activity_started_at: activityStartedAt || null,
       p_activity_ended_at: activityEndedAt || null,
-      p_client_recorded_at: new Date().toISOString()
+      p_client_recorded_at: clientRecordedAt
     });
+    event.payload.p_sequence_no = event.sequenceNo;
+    const rows = readOutbox(context.user.id), index = rows.findIndex(row => row.sessionId === event.sessionId && row.sequenceNo === event.sequenceNo);
+    if (index >= 0) rows[index] = event;
+    writeOutbox(context.user.id, rows);
+    return flushStudyOutbox();
   }
 
   async function upsertProgress(input) {
@@ -332,16 +399,22 @@
     const api = client('student');
     const context = await getContext('student');
     if (!api || !context.user || !isLearnerProfile(context.profile)) return context;
-    const [progress, favorites, vocabulary, learningGoal, daily, follows, collectionSaves, preferences] = await Promise.all([
-      api.from('user_progress').select('*').order('last_watched_at', { ascending: false }),
-      api.from('saved_sentences').select('*'),
-      api.from('user_vocabulary').select('*'),
+    const requestUserId = String(context.user.id), requestGeneration = studentIdentityGeneration;
+    const [progress, favorites, vocabulary, learningGoal, daily, follows, collectionSaves, preferences, summary] = await Promise.all([
+      api.from('user_progress').select('*').eq('user_id', requestUserId).order('last_watched_at', { ascending: false }),
+      api.from('saved_sentences').select('*').eq('user_id', requestUserId),
+      api.from('user_vocabulary').select('*').eq('user_id', requestUserId),
       api.from('learner_goal_profiles').select('*').eq('user_id', context.user.id).maybeSingle(),
-      api.from('daily_learning_stats').select('study_date,learning_seconds').order('study_date', { ascending: true }).limit(366),
-      api.from('user_creator_follows').select('creator_id,active'),
-      api.from('user_collection_saves').select('collection_id,active'),
-      api.from('user_learning_preferences').select('settings').eq('user_id', context.user.id).maybeSingle()
+      api.from('daily_learning_stats').select('study_date,learning_seconds').eq('user_id', requestUserId).order('study_date', { ascending: false }).limit(366),
+      api.from('user_creator_follows').select('creator_id,active').eq('user_id', requestUserId),
+      api.from('user_collection_saves').select('collection_id,active').eq('user_id', requestUserId),
+      api.from('user_learning_preferences').select('settings').eq('user_id', requestUserId).maybeSingle(),
+      api.rpc('get_my_learning_summary_v3')
     ]);
+    const currentSession = await api.auth.getSession();
+    if (requestGeneration !== studentIdentityGeneration || String(currentSession.data?.session?.user?.id || '') !== requestUserId) {
+      return { ...context, error: new Error('STUDENT_IDENTITY_CHANGED') };
+    }
     if (!progress.error) {
       (progress.data || []).forEach(row => {
         setLocal(context.user.id, 'progress:' + row.video_id, { time: row.position_seconds || 0, duration: row.duration_seconds || 0, percent: row.completion_percent || 0, watchCoveragePercent: row.watch_coverage_percent || 0, completed: Boolean(row.completed_at), updatedAt: Date.parse(row.last_watched_at || '') || Date.now() });
@@ -389,7 +462,17 @@
     if (!follows.error) (follows.data || []).forEach(row => setLocal(context.user.id, 'follow:' + row.creator_id, Boolean(row.active)));
     if (!collectionSaves.error) (collectionSaves.data || []).forEach(row => setLocal(context.user.id, 'collectionSaved:' + row.collection_id, Boolean(row.active)));
     if (!preferences.error && preferences.data?.settings) setLocal(context.user.id, 'settings', preferences.data.settings);
+    if (!summary.error && summary.data) {
+      const row = Array.isArray(summary.data) ? summary.data[0] : summary.data;
+      setLocal(context.user.id, 'learningSummary', {
+        totalSeconds: Number(row?.totalSeconds ?? row?.total_seconds) || 0,
+        learningDays: Number(row?.learningDays ?? row?.learning_days) || 0,
+        completedVideos: Number(row?.completedVideos ?? row?.completed_videos) || 0,
+        masteredWords: Number(row?.masteredWords ?? row?.mastered_words) || 0
+      });
+    }
     window.dispatchEvent(new CustomEvent('eastudy:learning-hydrated', { detail: { userId: context.user.id } }));
+    void flushStudyOutbox();
     return context;
   }
 
@@ -450,6 +533,9 @@
     };
   }
 
+  window.addEventListener?.('online', () => { void flushStudyOutbox(); });
+  globalThis.document?.addEventListener?.('visibilitychange', () => { if (!document.hidden) void flushStudyOutbox(); });
+
   window.EastudyAuth = Object.freeze({ available, client, cleanPhone, isLearnerProfile, getRememberLogin, setRememberLogin, getContext, signUpPhone, signInPhone, sendPhoneOtp, verifyPhoneOtp, ensureStudentProfile, updatePassword, signOut });
-  window.EastudyData = Object.freeze({ upsertProgress, recordStudyActivity, setFavorite, setVocabulary, setCreatorFollow, setCollectionSave, saveLearningPreferences, logStudyEvent, hydrateStudentLearning, getLearningGoalProfile, saveLearningGoalProfile, getMembership, redeemMembership, getAdminAnalytics });
+  window.EastudyData = Object.freeze({ upsertProgress, recordStudyActivity, pendingStudyEvents, flushStudyOutbox, setFavorite, setVocabulary, setCreatorFollow, setCollectionSave, saveLearningPreferences, logStudyEvent, hydrateStudentLearning, getLearningGoalProfile, saveLearningGoalProfile, getMembership, redeemMembership, getAdminAnalytics });
 })();

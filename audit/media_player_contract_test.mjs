@@ -22,7 +22,7 @@ assert.match(select.innerHTML,/720p/);
 assert.match(select.innerHTML,/1080p 原画/);
 player.setQuality('1');
 player.setQuality('original');
-assert.equal(player.mode,'native');
+assert.equal(player.mode,'file');
 assert.equal(video.src,'source.mp4');
 assert.equal(video.currentTime,4);
 player.setQuality('auto');
