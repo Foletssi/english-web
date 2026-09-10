@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
-from ai_tools import LEARNING_PROMPT, ai_concurrency, asr_profile, call_json, endpoint, enrich, prepare_asr_model, repair_learning, retry_ai
+from ai_tools import LEARNING_PROMPT, LEARNING_REPAIR_PROMPT, ai_concurrency, asr_profile, call_json, endpoint, enrich, prepare_asr_model, repair_learning, retry_ai
 from contracts import StudioError
 
 
@@ -129,8 +129,9 @@ class AiTools(unittest.TestCase):
             'keyWords': ["I've been doing"], 'expressions': [{'surface': "I've been doing",
                 'coreMeaningZh': '一直在做', 'contextMeaningZh': '表示此前持续进行的事情。',
                 'usageNoteZh': '现在完成进行时。'}], 'grammar': '现在完成进行时'}]}
-        with tempfile.TemporaryDirectory() as folder, patch('ai_tools.call_json', return_value=(payload, {'requestId': 'repair'})):
+        with tempfile.TemporaryDirectory() as folder, patch('ai_tools.call_json', return_value=(payload, {'requestId': 'repair'})) as mocked:
             learned, evidence = repair_learning(rows, {'model': 'fixture', 'baseUrl': 'https://api.example.com', 'apiKey': 'secret'}, cache_dir=Path(folder))
+        self.assertEqual(mocked.call_args.args[1], LEARNING_REPAIR_PROMPT)
         self.assertEqual(learned[0]['keyWords'], ["I've been doing"])
         self.assertEqual(learned[0]['startTime'], 1.25)
         self.assertEqual(learned[0]['wordTimings'], rows[0]['wordTimings'])
