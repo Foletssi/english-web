@@ -16,7 +16,10 @@ def finite(value):
 
 
 def normalize_words(value):
-    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9' -]", " ", str(value).lower())).strip()
+    # Keep this identical to the browser and Supabase learning contract.
+    # Numbers are context (for example, "11 a.m."), not part of a reusable
+    # teaching expression, so both the source and selected phrase omit them.
+    return re.sub(r"\s+", " ", re.sub(r"[^a-z' -]", " ", str(value).lower())).strip()
 
 
 def validate_transcript(rows, duration):

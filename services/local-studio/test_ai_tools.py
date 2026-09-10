@@ -137,6 +137,19 @@ class AiTools(unittest.TestCase):
         self.assertEqual(learned[0]['wordTimings'], rows[0]['wordTimings'])
         self.assertEqual(evidence[0]['requestId'], 'repair')
 
+    def test_learning_repair_uses_same_number_agnostic_phrase_contract_as_web(self):
+        rows = [{'id': 'v-1', 'english': 'We were launching at 11 a.m. today',
+                 'keyWords': ['launching at a m'], 'startTime': 1.25, 'endTime': 2.75,
+                 'wordTimings': []}]
+        payload = {'sentences': [{'id': 'v-1', 'chinese': '我们今天上午十一点发布。',
+                    'keyWords': ['launching at a m'], 'expressions': [{
+                        'surface': 'launching at a m', 'coreMeaningZh': '在某时发布',
+                        'contextMeaningZh': '本句指上午十一点发布。', 'usageNoteZh': 'launch at + 时间'}],
+                    'grammar': '过去进行时。'}]}
+        with tempfile.TemporaryDirectory() as folder, patch('ai_tools.call_json', return_value=(payload, {'requestId': 'repair'})):
+            learned, _ = repair_learning(rows, {'model': 'fixture', 'baseUrl': 'https://api.example.com', 'apiKey': 'secret'}, cache_dir=Path(folder))
+        self.assertEqual(learned[0]['keyWords'], ['launching at a m'])
+
     def test_learning_repair_rejects_changed_requested_keywords(self):
         rows = [{'id': 'v-1', 'english': 'Good morning guys', 'keyWords': ['Good morning'],
                  'startTime': 0, 'endTime': 2}]
