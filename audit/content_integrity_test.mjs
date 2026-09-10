@@ -57,5 +57,16 @@ assert.deepEqual(JSON.parse(JSON.stringify(decoded)), original, 'punctuation and
 assert.throws(() => timelineContext.parseWordTimeline('No,@16.98-17.22'), /JSON/, 'legacy comma parsing must not silently corrupt words');
 assert.ok(adminSource.includes("else location.hash='#/analytics'"), 'audit actions must open a persistent result view');
 assert.ok(adminSource.includes('failed?6000:2600'), 'failed operations must stay visible and remain replaceable');
+assert.ok(adminSource.includes('readSentenceDraft(card,existing,{approve:true})'), 'single sentence approval must read the expressions editor');
+assert.ok(adminSource.includes('draft.expressions=expressions.map'), 'sentence save must persist expression definitions');
+assert.ok(adminSource.includes('Cloud.setVideoPublication(videoId,next,CloudState.revision)'), 'publication must mutate exactly one video through the guarded RPC');
+const studentSource = fs.readFileSync(new URL('../assets/js/app.js', import.meta.url), 'utf8');
+const playerCss = fs.readFileSync(new URL('../assets/css/app.css', import.meta.url), 'utf8');
+const timingRules = [...playerCss.matchAll(/[^{}]*timing-active[^{}]*\{([^}]*)\}/g)].map(match => match[1]);
+assert.ok(timingRules.every(rule => !/(?:^|;)\s*color\s*:/.test(rule)), 'timing focus must never override semantic vocabulary colours');
+assert.ok(/@media\(min-width:851px\)[\s\S]*?\.video-page \.study-left\{[\s\S]*?overflow-y:auto!important/.test(playerCss), 'desktop learning controls must remain vertically reachable');
+assert.ok(studentSource.includes("video.addEventListener('timeupdate',controller.check)"), 'original-sentence playback must stop from media time');
+assert.ok(!studentSource.includes("Math.random()*35"), 'recording UI must not use a fake random waveform');
+assert.ok(studentSource.includes('sentenceId,textRevision,videoId'), 'recording must bind to a stable sentence revision');
 
-console.log(JSON.stringify({ ok: true, tests: 10 }, null, 2));
+console.log(JSON.stringify({ ok: true, tests: 19 }, null, 2));

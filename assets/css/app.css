@@ -419,8 +419,7 @@ body.session-signed-out .account-shell{opacity:.65}
 }
 
 /* Learning Engine V1: the spoken token follows the media clock. */
-.word-token.timing-active{background:var(--accent)!important;color:#fff!important;box-shadow:0 0 0 3px var(--accentSoft),0 4px 14px rgba(168,85,247,.28);transform:translateY(-1px);}
-html[data-theme="light"] .word-token.timing-active{color:#fff!important}
+.word-token.timing-active{background:var(--accent)!important;box-shadow:0 0 0 3px var(--accentSoft),0 4px 14px rgba(168,85,247,.28);transform:translateY(-1px);}
 
 /* Beta4 interaction polish: quiet teal replaces the previous heavy purple. */
 :root{--accent:#0f9f8f;--accent2:#08766d;--accentSoft:rgba(15,159,143,.13)}
@@ -430,7 +429,7 @@ html[data-theme="light"]{--accent:#0b8f80;--accent2:#066d62;--accentSoft:rgba(11
 .progress-launcher:hover{border-color:color-mix(in srgb,var(--accent) 45%,var(--line));box-shadow:0 9px 24px rgba(15,159,143,.10)}
 .progress-launcher .mini-fav{display:flex;align-items:center;gap:6px}.progress-launcher .mini-fav strong{margin-left:auto;color:var(--accent);font-size:11px}
 .tag-cloud button{cursor:pointer;transition:background .16s,border-color .16s,color .16s,transform .16s}.tag-cloud button:hover,.tag-cloud button.active{background:var(--accentSoft);border-color:rgba(15,159,143,.38);color:var(--accent);transform:translateY(-1px)}
-.word-token.timing-active{background:rgba(15,159,143,.16)!important;color:var(--text)!important;box-shadow:inset 0 -2px 0 var(--accent),0 0 0 1px rgba(15,159,143,.12)!important;transform:none!important}
+.word-token.timing-active{background:rgba(15,159,143,.16)!important;box-shadow:inset 0 -2px 0 var(--accent),0 0 0 1px rgba(15,159,143,.12)!important;transform:none!important}
 .study-top{height:64px;padding:0 26px;gap:12px}.study-top .study-chip,.study-theme-toggle,.study-lang-toggle,#studyThemeBtn,#studyLangBtn{min-height:42px;height:42px;border-radius:12px;display:inline-flex;align-items:center;justify-content:center}.study-theme-toggle,#studyThemeBtn{width:42px!important;min-width:42px!important;padding:0!important}.study-lang-toggle,#studyLangBtn{min-width:76px!important;padding:0 12px!important;font-size:12px!important;gap:5px!important}.study-top .study-chip{padding:0 12px;font-size:13px}.study-title{font-size:16px}.home-top-actions{align-items:center!important}.home-user{height:44px!important;min-width:142px!important;align-items:center!important}.home-user-copy{justify-content:center}.lang-toggle{height:42px!important;min-width:76px!important;padding:0 13px!important;border-radius:12px!important;font-size:12px!important}@media(max-width:850px){.home-top-actions .lang-toggle{display:inline-flex!important}.home-top-actions>button:nth-of-type(3){display:none!important}.home-user{min-width:116px!important}.study-top{height:58px;padding:0 14px;gap:8px}.study-title{font-size:13px}.study-theme-toggle,#studyThemeBtn{width:40px!important;min-width:40px!important;height:40px!important;min-height:40px!important}.study-lang-toggle,#studyLangBtn{min-width:68px!important;height:40px!important;min-height:40px!important}.study-top .study-chip{display:none!important}}
 
 
@@ -450,8 +449,8 @@ html[data-theme="light"]{--accent:#0b8f80;--accent2:#066d62;--accentSoft:rgba(11
 .time-detail-link{appearance:none;text-align:left;cursor:pointer;font:inherit;color:inherit;border:0;background:transparent;padding:0}
 .time-detail-link:hover b,.time-detail-link:hover strong,.time-detail-link:hover small{color:var(--accent)!important}
 .time-detail-link small{display:block}
-.word-token.timing-active{display:inline!important;background:#EAF0F6!important;border:1px solid #D5DEE8!important;border-radius:7px!important;padding:2px 6px!important;color:#0F172A!important;box-shadow:none!important;text-shadow:none!important;transition:background .16s ease,border-color .16s ease!important}
-html[data-theme="dark"] .word-token.timing-active{background:rgba(148,163,184,.18)!important;border-color:rgba(148,163,184,.24)!important;color:#F8FAFC!important}
+.word-token.timing-active{display:inline!important;background:#EAF0F6!important;border:1px solid #D5DEE8!important;border-radius:7px!important;padding:2px 6px!important;box-shadow:none!important;text-shadow:none!important;transition:background .16s ease,border-color .16s ease!important}
+html[data-theme="dark"] .word-token.timing-active{background:rgba(148,163,184,.18)!important;border-color:rgba(148,163,184,.24)!important}
 html[data-theme="dark"] .transcript,.video-page{color:#E5E7EB}
 @media(max-width:850px){.home-side-actions{display:none}.home-topbar .home-top-actions{display:flex!important;align-items:center;gap:7px}.home-topbar .home-top-actions .lang-toggle{display:inline-flex!important;min-width:76px!important;height:34px!important;padding:0 8px!important}.home-topbar .home-top-actions .home-user{display:none!important}}
 
@@ -521,10 +520,8 @@ html[data-theme="dark"] .transcript,.video-page{color:#E5E7EB}
 }
 html[data-theme="light"] .video-page .current-en,
 html[data-theme="light"] .video-page .line.active .line-en{color:#1F2937}
-html[data-theme="light"] .video-page .word-token.timing-active{color:#0F172A!important}
 html[data-theme="dark"] .video-page .current-en,
 html[data-theme="dark"] .video-page .line.active .line-en{color:#E5E7EB}
-html[data-theme="dark"] .video-page .word-token.timing-active{color:#F8FAFC!important}
 html[data-theme="dark"] .video-page .word-token.timing-active::after{background:rgba(148,163,184,.18);border-color:rgba(148,163,184,.24)}
 @media(prefers-reduced-motion:reduce){.video-page .word-token,.video-page .word-token::after{transition:none!important;animation:none!important}}
 
@@ -543,7 +540,6 @@ html[data-theme="dark"]{--bg:#111827;--bg2:#0F172A;--panel:#18212F;--panel2:#1E2
 .home-side-actions-inner{overflow:visible!important}
 .home-side-actions,.home-side-actions-inner,.home-user-shell{position:relative;z-index:300}
 .home-user-menu,.account-menu{z-index:500!important}
-.video-page .word-token.timing-active{color:inherit!important}
 .video-page .word-token.timing-active::after{background:#DCE8F2;border-color:#AFC3D5;box-shadow:none}
 html[data-theme="dark"] .video-page .word-token.timing-active::after{background:rgba(148,163,184,.18);border-color:rgba(148,163,184,.30)}
 /* Theme controls replace their data-icon child with a direct SVG at runtime. */
@@ -610,12 +606,7 @@ html[data-theme="dark"] .vip-status-card{border-color:#334155;background:#1E293B
 html[data-theme="dark"] .video-page .line.active{background:#1E293B;border-left-color:#5EEAD4}
 html[data-theme="dark"] .video-page .line-en{color:#E5E7EB}
 html[data-theme="dark"] .video-page .line-zh{color:#94A3B8}
-/* semantic vocabulary colors win over the focus marker */
-.video-page .word-token.timing-active:not([class*="level-"]){color:inherit!important}
-.video-page .word-token.timing-active.level-cet4{color:#059669!important}
-.video-page .word-token.timing-active.level-cet6{color:#0891B2!important}
-.video-page .word-token.timing-active.level-ielts{color:#7C3AED!important}
-.video-page .word-token.timing-active.level-phrase{color:#B45309!important}
+/* The timing marker only changes the surface; semantic word colours stay untouched. */
 .video-page .word-token.timing-active::after{inset:-2px -5px;border-radius:6px;background:#E3EDF5;border-color:#AFC3D5}
 html[data-theme="dark"] .video-page .word-token.timing-active::after{background:rgba(148,163,184,.18);border-color:rgba(148,163,184,.30)}
 @media(max-width:1100px) and (min-width:761px){.video-page .study-grid{grid-template-columns:minmax(0,1fr) minmax(330px,.82fr)}.video-page .study-left{padding:18px}.video-page .transcript{padding-left:26px;padding-right:18px}.video-page .player-controls{grid-template-columns:1fr auto}.video-page .study-modes{grid-column:1/-1;justify-content:center}}
@@ -889,23 +880,6 @@ html[data-theme="dark"][data-track="outline"] .word-token.level-ielts{color:#C08
 @media(max-width:760px){.video-page .transcript-head span{font-size:12px!important}.video-page .line-time{font-size:11px!important}.video-page .line-actions .action-chip{font-size:11px!important}}
 /* Keep the utility tray inside the 282px right rail on wide screens. */
 @media(min-width:1251px){.home-side-actions-inner .home-user{min-width:0!important}.home-side-actions-inner .home-user-copy{min-width:0!important}.home-side-actions-inner .home-user .vip-badge{font-size:8px!important;padding:2px 4px!important}}
-/* Preserve each vocabulary level colour while the timing marker is active. */
-.video-page .word-token.timing-active.level-cet4{color:#059669!important}
-.video-page .word-token.timing-active.level-cet6{color:#0891B2!important}
-.video-page .word-token.timing-active.level-ielts{color:#7C3AED!important}
-.video-page .word-token.timing-active.level-phrase{color:#B45309!important}
-.video-page .word-token.timing-active:not([class*="level-"]){color:inherit!important}
-html[data-theme="dark"] .video-page .word-token.timing-active.level-cet4{color:#34D399!important}
-html[data-theme="dark"] .video-page .word-token.timing-active.level-cet6{color:#22D3EE!important}
-html[data-theme="dark"] .video-page .word-token.timing-active.level-ielts{color:#C084FC!important}
-html[data-theme="dark"] .video-page .word-token.timing-active.level-phrase{color:#F59E0B!important}
-html[data-theme="dark"] .video-page .word-token.timing-active:not([class*="level-"]){color:inherit!important}
-/* Light theme uses the same semantic colours instead of the navy focus colour. */
-html[data-theme="light"] .video-page .word-token.timing-active.level-cet4{color:#059669!important}
-html[data-theme="light"] .video-page .word-token.timing-active.level-cet6{color:#0891B2!important}
-html[data-theme="light"] .video-page .word-token.timing-active.level-ielts{color:#7C3AED!important}
-html[data-theme="light"] .video-page .word-token.timing-active.level-phrase{color:#B45309!important}
-html[data-theme="light"] .video-page .word-token.timing-active:not([class*="level-"]){color:inherit!important}
 /* Eastudy identity: a flat, quiet mark that remains clear in both themes. */
 .brand-mark{background:var(--accentSoft)!important;color:var(--accent)!important;border:1px solid color-mix(in srgb,var(--accent) 28%,var(--line))!important;box-shadow:none!important;border-radius:8px!important}
 .brand-mark svg{stroke:currentColor;fill:none}
@@ -1099,7 +1073,8 @@ html[data-theme="dark"]{
     min-height:0!important;
     max-height:100%!important;
     padding:14px 18px 16px!important;
-    overflow:hidden!important;
+    overflow-y:auto!important;
+    overflow-x:hidden!important;
     display:flex!important;
     flex-direction:column!important;
   }

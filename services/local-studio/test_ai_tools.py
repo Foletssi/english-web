@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
-from ai_tools import LEARNING_PROMPT, ai_concurrency, asr_profile, call_json, endpoint, enrich, prepare_asr_model, retry_ai
+from ai_tools import LEARNING_PROMPT, ai_concurrency, asr_profile, call_json, endpoint, enrich, prepare_asr_model, repair_learning, retry_ai
 from contracts import StudioError
 
 
@@ -120,6 +120,32 @@ class AiTools(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder, patch('ai_tools.call_json', side_effect=fake_call):
             learned, _, _ = enrich(rows, info, config, cache_dir=Path(folder))
         self.assertEqual([item['id'] for item in learned], [item['id'] for item in rows])
+
+    def test_learning_repair_preserves_requested_keywords_and_timing(self):
+        rows = [{'id': 'v-1', 'english': "I've been doing this", 'chinese': '',
+                 'keyWords': ["I've been doing"], 'startTime': 1.25, 'endTime': 2.75,
+                 'wordTimings': [{'text': "I've", 'start': 1.25, 'end': 1.6}]}]
+        payload = {'sentences': [{'id': 'v-1', 'chinese': '我一直在做这件事',
+            'keyWords': ["I've been doing"], 'expressions': [{'surface': "I've been doing",
+                'coreMeaningZh': '一直在做', 'contextMeaningZh': '表示此前持续进行的事情。',
+                'usageNoteZh': '现在完成进行时。'}], 'grammar': '现在完成进行时'}]}
+        with tempfile.TemporaryDirectory() as folder, patch('ai_tools.call_json', return_value=(payload, {'requestId': 'repair'})):
+            learned, evidence = repair_learning(rows, {'model': 'fixture', 'baseUrl': 'https://api.example.com', 'apiKey': 'secret'}, cache_dir=Path(folder))
+        self.assertEqual(learned[0]['keyWords'], ["I've been doing"])
+        self.assertEqual(learned[0]['startTime'], 1.25)
+        self.assertEqual(learned[0]['wordTimings'], rows[0]['wordTimings'])
+        self.assertEqual(evidence[0]['requestId'], 'repair')
+
+    def test_learning_repair_rejects_changed_requested_keywords(self):
+        rows = [{'id': 'v-1', 'english': 'Good morning guys', 'keyWords': ['Good morning'],
+                 'startTime': 0, 'endTime': 2}]
+        payload = {'sentences': [{'id': 'v-1', 'chinese': '大家早上好',
+            'keyWords': ['morning guys'], 'expressions': [{'surface': 'morning guys',
+                'coreMeaningZh': '早上的大家', 'contextMeaningZh': '错误替换', 'usageNoteZh': '测试'}],
+            'grammar': '问候'}]}
+        with tempfile.TemporaryDirectory() as folder, patch('ai_tools.call_json', return_value=(payload, {'requestId': 'changed'})):
+            with self.assertRaisesRegex(StudioError, 'AI_REPAIR_KEYWORDS_CHANGED'):
+                repair_learning(rows, {'model': 'fixture', 'baseUrl': 'https://api.example.com', 'apiKey': 'secret'}, cache_dir=Path(folder))
 
 
 if __name__ == '__main__':

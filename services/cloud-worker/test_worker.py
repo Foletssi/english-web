@@ -106,6 +106,33 @@ class WorkerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder, patch.dict('os.environ', {'EASTUDY_WORK_ROOT': folder}):
             self.assertEqual(worker.worker_root(), Path(folder).resolve())
 
+    def test_learning_repair_skips_all_media_io(self):
+        calls = []
+        class Client:
+            def call(self, action, **values):
+                calls.append((action, values))
+                return {'ok': True}
+        lease = {'job': {'id': '00000000-0000-0000-0000-000000000001',
+                         'run_id': '00000000-0000-0000-0000-000000000002',
+                         'input': {'kind': 'LEARNING_REPAIR', 'sentences': [
+                             {'id': '1-1', 'english': 'Good morning', 'chinese': '', 'keyWords': ['Good morning']}
+                         ]}}, 'token': 'x' * 32}
+        repaired = [{'id': '1-1', 'english': 'Good morning', 'chinese': '早上好',
+                     'keyWords': ['Good morning'], 'expressions': [{'surface': 'Good morning',
+                     'coreMeaningZh': '早上好', 'contextMeaningZh': '日常问候'}]}]
+        with tempfile.TemporaryDirectory() as folder, \
+             patch.dict('os.environ', {'EASTUDY_WORK_ROOT': folder}), \
+             patch.object(worker, 'repair_learning', return_value=(repaired, {'model': 'test'})), \
+             patch.object(worker, 'download') as download_mock, \
+             patch.object(worker, 'process_job') as process_mock, \
+             patch.object(worker, 'upload_assets') as upload_mock:
+            worker.process_lease(Client(), lease)
+        download_mock.assert_not_called()
+        process_mock.assert_not_called()
+        upload_mock.assert_not_called()
+        self.assertEqual(calls[-1][0], 'worker-complete-learning-v4')
+        self.assertEqual(calls[-1][1]['result']['sentences'], repaired)
+
 
 if __name__ == '__main__':
     unittest.main()

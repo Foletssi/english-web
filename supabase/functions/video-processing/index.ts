@@ -75,7 +75,7 @@ async function handleWorker(action: string, body: any) {
   const token = String(body.token || '');
   if (!/^[0-9a-f-]{36}$/i.test(jobId) || token.length < 32 || token.length > 256) throw new Error('JOB_TOKEN_INVALID');
   const runId = String(body.runId || '');
-  const v2 = action.endsWith('-v2');
+  const v2 = action.endsWith('-v2') || action.endsWith('-v4');
   if (v2 && !/^[0-9a-f-]{36}$/i.test(runId)) throw new Error('RUN_ID_INVALID');
   if (action === 'worker-job-heartbeat-v2') {
     return { job: await rpc('processing_heartbeat_job_v2', {
@@ -108,6 +108,12 @@ async function handleWorker(action: string, body: any) {
     return { result: await rpc('processing_commit_leased_result_v2', {
       p_job_id: jobId, p_run_id: runId, p_token: token, p_worker_id: workerId,
       p_result: body.result, p_manifest: Array.isArray(body.manifest) ? body.manifest : []
+    }) };
+  }
+  if (action === 'worker-complete-learning-v4') {
+    return { result: await rpc('processing_commit_learning_repair_v4', {
+      p_job_id: jobId, p_run_id: runId, p_token: token, p_worker_id: workerId,
+      p_result: body.result
     }) };
   }
   if (action === 'worker-job-heartbeat') {

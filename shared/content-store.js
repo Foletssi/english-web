@@ -9,6 +9,7 @@
   const SCHEMA_VERSION=3;
   const deep=x=>JSON.parse(JSON.stringify(x));
   const now=()=>new Date().toISOString();
+  const learningContract=global.EastudyLearningContract;
   const normalizeToken=t=>String(t||'').toLowerCase().replace(/[^a-z'-]/g,'');
   const normalizeKeyword=t=>String(t||'').toLowerCase().replace(/[^a-z'\-]+/g,' ').trim().replace(/\s+/g,' ');
   function deriveWordTimings(english,startTime,endTime){
@@ -22,11 +23,14 @@
   }
   function normalizeSentence(input,videoId,order){
     const row={...deep(input),videoId:Number(videoId),order:Number(input.order??order)};
+    row.learningContractVersion=Number(row.learningContractVersion)||learningContract?.VERSION||4;
+    row.textRevision=Math.max(1,Number(row.textRevision)||1);
     row.keyWords=Array.isArray(row.keyWords)?row.keyWords.map(normalizeKeyword).filter(Boolean):[];
     row.expressions=Array.isArray(row.expressions)?row.expressions.map(item=>({
       ...deep(item),surface:String(item?.surface||'').trim(),coreMeaningZh:String(item?.coreMeaningZh||'').trim(),
       contextMeaningZh:String(item?.contextMeaningZh||'').trim(),usageNoteZh:String(item?.usageNoteZh||'').trim(),
-      reviewStatus:item?.reviewStatus||'REVIEW',source:item?.source||'ai'
+      reviewStatus:item?.reviewStatus||'REVIEW',source:item?.source||'ai',
+      sourceTextRevision:Math.max(1,Number(item?.sourceTextRevision)||row.textRevision)
     })).filter(item=>item.surface):[];
     const suppliedTimings=Array.isArray(row.wordTimings)&&row.wordTimings.some(x=>Number.isFinite(Number(x?.start))&&Number.isFinite(Number(x?.end))&&Number(x.end)>Number(x.start));
     row.wordTimings=normalizeWordTimings(row.wordTimings,row.english,row.startTime,row.endTime);
@@ -130,7 +134,7 @@
   function listVideos(opts={}){const s=load();let rows=s.videos||[];if(opts.publishedOnly)rows=rows.filter(v=>v.status==='PUBLISHED');return deep(rows)}
   function getVideo(id){return deep((load().videos||[]).find(v=>String(v.id)===String(id))||null)}
   function saveVideo(input){const s=load();if(s.tombstones?.[String(input.id)]?.deleted)throw new Error('VIDEO_IN_TRASH');const id=input.id??Date.now();const idx=s.videos.findIndex(v=>String(v.id)===String(id));const prev=idx>=0?s.videos[idx]:{},normalized=deep(input);if(typeof normalized.tagIds==='string')normalized.tagIds=[...new Set(normalized.tagIds.split(',').map(x=>x.trim()).filter(Boolean))];const next={...prev,...normalized,id,updatedAt:now()};if(idx>=0)s.videos[idx]=next;else s.videos.unshift(next);save(s,{type:idx>=0?'video.update':'video.create',entityId:id,title:next.title});return deep(next)}
-  function setVideoStatus(id,status){const s=load();const v=s.videos.find(x=>String(x.id)===String(id));if(!v)throw new Error('VIDEO_NOT_FOUND');if(status==='PUBLISHED'){if(localOnly&&isPlaceholder(v))throw new Error('PLACEHOLDER_MEDIA_REMOVED');const rows=s.sentences[String(id)]||[];if(!v.mediaUrl)throw new Error('PUBLISHED_MEDIA_MISSING');if(!rows.length)throw new Error('PUBLISHED_SUBTITLES_MISSING');if(rows.some(row=>row.reviewStatus!=='APPROVED'))throw new Error('HUMAN_REVIEW_REQUIRED');const approved=new Set((v.tagAssignments||[]).filter(row=>row?.reviewStatus==='APPROVED').map(row=>String(row.tagId||row.id||'')));if(!approved.size||!(v.tagIds||[]).some(id=>approved.has(String(id))))throw new Error('PUBLISHED_TAGS_MISSING');if(v.pipelineStatus&&!['READY','SUCCESS'].includes(v.pipelineStatus))throw new Error('PIPELINE_NOT_READY')}v.status=status;v.publishedAt=status==='PUBLISHED'?(v.publishedAt||now()):v.publishedAt;v.updatedAt=now();save(s,{type:'video.status',entityId:id,status});return deep(v)}
+  function setVideoStatus(id,status){const s=load();const v=s.videos.find(x=>String(x.id)===String(id));if(!v)throw new Error('VIDEO_NOT_FOUND');if(status==='PUBLISHED'){if(localOnly&&isPlaceholder(v))throw new Error('PLACEHOLDER_MEDIA_REMOVED');const rows=(s.sentences[String(id)]||[]).map((row,index)=>normalizeSentence(row,id,index));const issues=learningContract?.videoPublishIssues(v,rows)||[];if(issues.length){const error=new Error(issues[0].code);error.issues=issues;throw error}}v.status=status;v.publishedAt=status==='PUBLISHED'?(v.publishedAt||now()):v.publishedAt;v.updatedAt=now();save(s,{type:'video.status',entityId:id,status});return deep(v)}
   function isPlaceholder(video){
     const path=String(video.mediaUrl||'').replace(/^(\.\/|\.\.\/|\/)/,'').split(/[?#]/)[0];
     return Number.isInteger(Number(video.id))&&Number(video.id)>=2805&&Number(video.id)<=2813&&path==='assets/video/sample_lesson.mp4'
@@ -194,6 +198,7 @@
       if(v.status==='PUBLISHED' && !v.mediaUrl)issues.push({severity:'ERROR',code:'PUBLISHED_MEDIA_MISSING',entityId:v.id});
       if(v.status==='PUBLISHED' && !rows.length)issues.push({severity:'WARN',code:'LEGACY_PUBLISHED_SUBTITLES_MISSING',entityId:v.id});
       if(v.status==='PUBLISHED' && rows.some(row=>row.reviewStatus!=='APPROVED'))issues.push({severity:'ERROR',code:'PUBLISHED_REVIEW_MISSING',entityId:v.id});
+      if(v.status==='PUBLISHED'&&learningContract)for(const issue of learningContract.videoPublishIssues(v,rows))issues.push({severity:'ERROR',...issue,entityId:issue.sentenceId||v.id});
       let prevEnd=-1;
       for(const row of rows){if(!(row.endTime>row.startTime))issues.push({severity:'ERROR',code:'INVALID_SENTENCE_RANGE',entityId:row.id});if(row.startTime<prevEnd-0.001)issues.push({severity:'WARN',code:'SENTENCE_OVERLAP',entityId:row.id});if(row.keyWords!=null&&!Array.isArray(row.keyWords))issues.push({severity:'ERROR',code:'INVALID_KEYWORDS',entityId:row.id});if(!Array.isArray(row.keyWords)||!row.keyWords.length)issues.push({severity:'WARN',code:'KEY_EXPRESSION_MISSING',entityId:row.id});if(!String(row.grammar||row.grammarNote||'').trim())issues.push({severity:'WARN',code:'GRAMMAR_ANALYSIS_MISSING',entityId:row.id});const words=normalizeWordTimings(row.wordTimings,row.english,row.startTime,row.endTime);for(const word of words){if(word.start<row.startTime-.001||word.end>row.endTime+.001||word.end<=word.start)issues.push({severity:'ERROR',code:'INVALID_WORD_TIMING',entityId:row.id})}prevEnd=Math.max(prevEnd,row.endTime)}
     }

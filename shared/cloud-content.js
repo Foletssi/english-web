@@ -66,6 +66,26 @@
     return {data:firstRow(data),error:error||null};
   }
 
+  async function setVideoPublication(videoId, status, expectedRevision) {
+    if(global.ZoContent?.localOnly)return {error:new Error('LOCAL_CONTENT_CLOUD_WRITE_DISABLED')};
+    const api=auth('admin');
+    if(!api)return {error:new Error('SUPABASE_NOT_CONFIGURED')};
+    const {data,error}=await api.rpc('admin_set_video_publication_v4',{
+      p_video_id:String(videoId||''),p_status:String(status||''),p_expected_revision:Number(expectedRevision)
+    });
+    return {data:firstRow(data),error:error||null};
+  }
+
+  async function createLearningRepair(videoId, expectedRevision) {
+    if(global.ZoContent?.localOnly)return {error:new Error('LOCAL_CONTENT_CLOUD_WRITE_DISABLED')};
+    const api=auth('admin');
+    if(!api)return {error:new Error('SUPABASE_NOT_CONFIGURED')};
+    const {data,error}=await api.rpc('admin_create_learning_repair_job_v4',{
+      p_video_id:String(videoId||''),p_expected_revision:Number(expectedRevision)
+    });
+    return {data:firstRow(data),error:error||null};
+  }
+
   async function listTrash() {
     const api = auth('admin');
     if (!api) return { rows: [], error: new Error('SUPABASE_NOT_CONFIGURED') };
@@ -119,9 +139,9 @@
     if (!api) return { rows: [], error: new Error('SUPABASE_NOT_CONFIGURED') };
     const { data, error } = await api.rpc('admin_list_processing_jobs', { p_limit: Number(limit) || 50 });
     const stageStep = { LOCAL_DOWNLOAD: 'download', PROBE: 'probe', TRANSCODE: 'transcode', ASR: 'asr', ENRICH: 'enrich', LOCAL_UPLOAD: 'output', REVIEW: 'review' };
-    const order = ['download', 'probe', 'transcode', 'asr', 'enrich', 'output', 'review'];
     const rows = (Array.isArray(data) ? data : []).map((row) => row.job || row).map((job) => {
-      const currentStep = stageStep[job.stage] || 'download';
+      const learningRepair=job.type==='LEARNING_REPAIR',order=learningRepair?['enrich','review']:['download','probe','transcode','asr','enrich','output','review'];
+      const currentStep = stageStep[job.stage] || (learningRepair?'enrich':'download');
       const current = order.indexOf(currentStep);
       const status = String(job.status || 'WAITING').toUpperCase();
       const telemetry = job.telemetry && typeof job.telemetry === 'object' ? job.telemetry : {};
@@ -213,7 +233,7 @@
     return { key: payload.key, url: payload.url, size: Number(payload.size) || file.size, type: 'image/webp' };
   }
 
-  global.EastudyCloudContent = Object.freeze({ pullPublished, pullAdmin, saveDraft, publish, publishEntity, listTrash, trashVideos, restoreVideo,
+  global.EastudyCloudContent = Object.freeze({ pullPublished, pullAdmin, saveDraft, publish, publishEntity, setVideoPublication, createLearningRepair, listTrash, trashVideos, restoreVideo,
     processingHealth, createProcessingJob, listProcessingJobs, retryProcessingJob,
     syncMediaSession, clearMediaSession, uploadVideo, uploadCreatorAvatar });
 })(window);

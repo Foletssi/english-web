@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from urllib.parse import urlparse
 from checkpoint import canonical_hash, read_valid_json, save_json_checkpoint
-from contracts import StudioError, strict_json, validate_learning, validate_metadata, validate_transcript
+from contracts import StudioError, normalize_words, strict_json, validate_learning, validate_metadata, validate_transcript
 
 
 TOPICS = {'daily': '日常生活', 'travel': '旅行', 'food': '美食', 'work': '职场',
@@ -269,3 +269,41 @@ def enrich(rows, info, config, progress=None, cache_dir=None):
         lambda payload: validate_metadata(payload, set(TOPICS), set(GOALS), {x['id'] for x in merged}, set(TAGS))))
     provenance.append({**meta, 'cacheReused': reused})
     return merged, metadata, provenance
+
+
+def repair_learning(rows, config=None, progress=None, cache_dir=None):
+    """Generate only missing sentence learning text; never process or replace media."""
+    config = config or {}
+    progress = progress or (lambda *_, **__: None)
+    batches = [rows[offset:offset + 20] for offset in range(0, len(rows), 20)]
+    if not batches:
+        raise StudioError('LEARNING_REPAIR_EMPTY', '没有需要补齐的学习内容。')
+    repaired, provenance = [], []
+    for index, batch in enumerate(batches):
+        request_payload = {'repairOnly': True, 'sentences': [{
+            'id': row['id'], 'english': row['english'],
+            'requestedKeyWords': row.get('keyWords') or []
+        } for row in batch]}
+        cache_key = canonical_hash({'kind': 'learning-repair-v4', 'payload': request_payload,
+            'prompt': LEARNING_PROMPT, 'model': str(config.get('model') or os.getenv('ZOSPEAK_AI_MODEL', '')),
+            'baseUrl': str(config.get('baseUrl') or os.getenv('ZOSPEAK_AI_BASE_URL', ''))})
+
+        def validate_repair(payload):
+            learned = validate_learning(batch, payload)
+            for source, result in zip(batch, learned):
+                requested = [normalize_words(value) for value in source.get('keyWords', []) if normalize_words(value)]
+                returned = [normalize_words(value) for value in result.get('keyWords', []) if normalize_words(value)]
+                if requested and requested != returned:
+                    raise StudioError('AI_REPAIR_KEYWORDS_CHANGED', 'AI 补全时改变了已选重点表达。', True)
+            return learned
+
+        learned, meta, reused = retry_ai(lambda: _cached_ai(
+            cache_dir, f'learning-repair-{index:04d}', cache_key,
+            lambda: call_json(config, LEARNING_PROMPT, request_payload), validate_repair))
+        repaired.extend(learned)
+        provenance.append({**meta, 'cacheReused': reused})
+        completed = index + 1
+        progress('enrich', 72 + int(23 * completed / len(batches)),
+                 f'已补齐学习内容 {completed}/{len(batches)} 批', substage='learning-repair',
+                 current=completed, total=len(batches), unit='batches')
+    return repaired, provenance

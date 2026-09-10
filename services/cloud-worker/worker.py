@@ -19,11 +19,11 @@ LOCAL_STUDIO = ROOT / 'services' / 'local-studio'
 sys.path.insert(0, str(LOCAL_STUDIO))
 
 from pipeline import process_job  # noqa: E402
-from ai_tools import prepare_asr_model  # noqa: E402
+from ai_tools import prepare_asr_model, repair_learning  # noqa: E402
 from checkpoint import atomic_json  # noqa: E402
 
 
-VERSION = '2.1.0'
+VERSION = '2.2.0'
 DEFAULT_ENDPOINT = 'https://ehxqtgakjgqgmghhdmjg.supabase.co/functions/v1/video-processing'
 STAGE_MAP = {'probe': 'PROBE', 'transcode': 'TRANSCODE', 'asr': 'ASR', 'enrich': 'ENRICH'}
 
@@ -234,7 +234,8 @@ def capabilities():
                    ('ZOSPEAK_AI_API_KEY', 'ZOSPEAK_AI_BASE_URL', 'ZOSPEAK_AI_MODEL'))
     return {'ffmpeg': bool(shutil.which('ffmpeg') and shutil.which('ffprobe')),
             'whisper': whisper, 'asr': whisper_detail,
-            'deepseek': bool(deepseek), 'platform': platform.system().lower()}
+            'deepseek': bool(deepseek), 'learningRepairV4': True,
+            'platform': platform.system().lower()}
 
 
 def configure_ai_environment():
@@ -390,6 +391,27 @@ def process_lease(client, lease):
         work.mkdir(parents=True, exist_ok=True)
         if not work.resolve().is_relative_to(worker_root()):
             raise ApiError('WORK_PATH_INVALID')
+        job_input = lease['job'].get('input') or {}
+        if job_input.get('kind') == 'LEARNING_REPAIR':
+            if not run_id(lease):
+                raise ApiError('LEARNING_REPAIR_PROTOCOL_REQUIRED')
+            rows = job_input.get('sentences')
+            if not isinstance(rows, list) or not rows:
+                raise ApiError('LEARNING_REPAIR_INPUT_INVALID')
+            report_progress(client, lease, 'ENRICH', 72, '正在补齐缺失翻译与释义',
+                            {'substage': 'learning-repair', 'current': 0, 'total': len(rows), 'unit': 'sentences'})
+            def repair_progress(_stage, progress, message, **metrics):
+                if cancelled.is_set():
+                    raise ApiError('JOB_LEASE_LOST_OR_CANCELLED')
+                report_progress(client, lease, 'ENRICH', min(99, int(progress)), message, metrics)
+            repaired, provenance = repair_learning(rows, {}, repair_progress, work / 'learning-repair-cache')
+            if cancelled.is_set():
+                raise ApiError('JOB_LEASE_LOST_OR_CANCELLED')
+            client.call('worker-complete-learning-v4', jobId=job_id, token=lease['token'],
+                        runId=run_id(lease), result={'sentences': repaired,
+                        'evidence': {'kind': 'learning-repair-v4', 'provenance': provenance}})
+            print(f'[complete-learning-repair] {job_id}', flush=True)
+            return
         source = work / Path(lease['job']['source_key']).name
         report_progress(client, lease, 'LOCAL_DOWNLOAD', 2, '正在从 R2 下载原片')
         last_reported = [0.0]
