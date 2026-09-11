@@ -124,8 +124,9 @@
 
   async function registerWithInvite(input, scope = 'student') {
     try {
-      const response = await fetch('/api/auth/register', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      const edgeUrl = `${String(config.url || '').replace(/\/$/, '')}/functions/v1/invite-register`;
+      const response = await fetch(edgeUrl, {
+        method: 'POST', headers: { apikey: config.publishableKey, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           account: String(input.account || '').trim(), password: String(input.password || ''),
           nickname: String(input.displayName || '').trim(), inviteCode: String(input.inviteCode || '').trim(),
