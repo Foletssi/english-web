@@ -537,7 +537,7 @@
     const durationDays = Math.max(1, Math.min(3660, Number(input.durationDays) || 30));
     const count = Math.max(1, Math.min(100, Number(input.count) || 1));
     const validUntil = input.validUntil ? new Date(input.validUntil).toISOString() : null;
-    const { data, error } = await api.rpc('admin_generate_activation_codes_v2', {
+    const { data, error } = await api.rpc('admin_generate_activation_codes_v3', {
       p_label: String(input.label || '邀请码注册').trim().slice(0, 100),
       p_duration_days: durationDays, p_count: count, p_valid_until: validUntil,
       p_channel: String(input.channel || '').trim().slice(0, 60)
@@ -549,7 +549,7 @@
     const api = client('admin');
     const context = await getContext('admin');
     if (!api || !context.user || context.profile?.role !== 'admin') throw new Error('ADMIN_REQUIRED');
-    const { data, error } = await api.rpc('admin_list_activation_codes_v1', {
+    const { data, error } = await api.rpc('admin_list_activation_codes_v2', {
       p_query: String(params.query || '').trim().slice(0, 100),
       p_status: String(params.status || 'all'),
       p_page: Math.max(1, Number(params.page) || 1),
@@ -591,7 +591,7 @@
     const context = await getContext('admin');
     if (!api || !context.user || context.profile?.role !== 'admin') throw new Error('ADMIN_REQUIRED');
     const until = validUntil ? new Date(validUntil).toISOString() : null;
-    const { data, error } = await api.rpc('admin_reissue_activation_code_v1', {
+    const { data, error } = await api.rpc('admin_reissue_activation_code_v2', {
       p_code_id: String(codeId || ''), p_valid_until: until
     });
     if (error) throw error;
