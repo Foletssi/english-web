@@ -13,7 +13,7 @@ vm.runInContext(fs.readFileSync(new URL('../shared/supabase-client.js',import.me
 const auth=window.EastudyAuth;
 assert.equal(auth.isLearnerProfile({role:'admin'}),true);
 await auth.signInAccount({account:'learner_01',password:'Password123'},'student');
-assert.deepEqual(calls[0].slice(0,3),['fetch','/api/auth/login',{account:'learner_01',password:'Password123'}]);
+assert.deepEqual(calls[0].slice(0,3),['fetch','https://fixture.supabase.co/functions/v1/learner-auth',{action:'login',account:'learner_01',password:'Password123'}]);
 assert.deepEqual(JSON.parse(JSON.stringify(calls[1])),['set-session',{access_token:'access',refresh_token:'refresh'}]);
 await auth.registerWithInvite({account:'new_learner',password:'Password123',displayName:'测试学员',inviteCode:'EAST-TEST-CODE',attemptId:'00000000-0000-4000-8000-000000000001'},'student');
 assert.equal(calls[2][1],'https://fixture.supabase.co/functions/v1/invite-register');

@@ -1,6 +1,4 @@
 import { authenticate, json, requireBucket } from '../../../_lib/auth.js';
-import { cookieValue, openPlaybackTicket } from '../../../_lib/playback-ticket.js';
-import { serviceRpc } from '../../../_lib/supabase-admin.js';
 
 function joinedPath(value) {
   return Array.isArray(value) ? value.join('/') : String(value || '');
@@ -25,21 +23,14 @@ async function handle({ request, env, params, waitUntil }, headOnly) {
   const playbackAsset=/^720p\/(?:index\.m3u8|segment_[0-9]{5}\.ts)$/.test(path);
   let key='';
   if(playbackAsset){
-    let ticket;
-    try{
-      ticket=await openPlaybackTicket(cookieValue(request,'eastudy_playback'),env);
-      if(ticket.job!==job||typeof ticket.sub!=='string'||typeof ticket.prefix!=='string'||!ticket.prefix.endsWith('/'))throw new Error('PLAYBACK_FORBIDDEN');
-    }catch{return json({error:'PLAYBACK_SESSION_REQUIRED'},401)}
-    let current;
-    try{
-      current=await serviceRpc(env,'service_resolve_playback_access_v2',{p_user_id:ticket.sub,p_job_id:job,p_path:path});
-    }catch(error){
-      console.error('current playback access unavailable',error?.code||error?.message||error);
-      return json({error:'PLAYBACK_AUTH_UNAVAILABLE'},503);
-    }
-    if(current?.canPlay!==true)return json({error:current?.reason||'PLAYBACK_FORBIDDEN'},403);
-    key=String(current.objectKey||'');
-    if(!key||key!==ticket.prefix+path||current.prefix!==ticket.prefix)return json({error:'PLAYBACK_FORBIDDEN'},403);
+    const auth = await authenticate(request, env);
+    if (auth.error) return auth.error;
+    const response = await fetch(auth.url + '/rest/v1/rpc/resolve_processing_media', {
+      method: 'POST', headers: { ...auth.headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_job_id: job, p_path: path })
+    });
+    if (!response.ok) return json({ error: response.status===401||response.status===403?'PLAYBACK_FORBIDDEN':'PLAYBACK_AUTH_UNAVAILABLE' }, response.status===401||response.status===403?403:503);
+    key = (await response.json())?.[0]?.object_key || '';
   }else{
     const auth = await authenticate(request, env);
     if (auth.error) return auth.error;

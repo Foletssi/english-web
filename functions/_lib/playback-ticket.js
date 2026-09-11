@@ -14,16 +14,8 @@ function fromBase64Url(value) {
 }
 
 async function key(env) {
-  let raw;
-  if (env.PLAYBACK_TICKET_KEY) {
-    try { raw = fromBase64Url(env.PLAYBACK_TICKET_KEY); }
-    catch { throw new Error('PLAYBACK_TICKET_KEY_INVALID'); }
-    if (raw.byteLength !== 32) throw new Error('PLAYBACK_TICKET_KEY_INVALID');
-  } else {
-    const serviceBytes = encoder.encode(String(env.SUPABASE_SERVICE_ROLE_KEY || ''));
-    if (serviceBytes.byteLength < 32) throw new Error('PLAYBACK_TICKET_KEY_UNAVAILABLE');
-    raw = serviceBytes.slice(serviceBytes.byteLength - 32);
-  }
+  const raw = fromBase64Url(env.PLAYBACK_TICKET_KEY || '');
+  if (raw.byteLength !== 32) throw new Error('PLAYBACK_TICKET_KEY_INVALID');
   return crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt']);
 }
 

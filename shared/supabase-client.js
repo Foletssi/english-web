@@ -120,9 +120,9 @@
 
   async function signInAccount(input, scope = 'student') {
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ account: String(input.account || '').trim(), password: String(input.password || '') })
+      const response = await fetch(`${String(config.url || '').replace(/\/$/, '')}/functions/v1/learner-auth`, {
+        method: 'POST', headers: { apikey: config.publishableKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'login', account: String(input.account || '').trim(), password: String(input.password || '') })
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) return { data: null, error: apiError(payload, 'INVALID_LOGIN', response.status), access: payload.access || null };
@@ -133,9 +133,9 @@
 
   async function activateAndLogin(input, scope = 'student') {
     try {
-      const response = await fetch('/api/auth/activate-and-login', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ account: String(input.account || '').trim(), password: String(input.password || ''), inviteCode: String(input.inviteCode || '').trim() })
+      const response = await fetch(`${String(config.url || '').replace(/\/$/, '')}/functions/v1/learner-auth`, {
+        method: 'POST', headers: { apikey: config.publishableKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'activate', account: String(input.account || '').trim(), password: String(input.password || ''), inviteCode: String(input.inviteCode || '').trim() })
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) return { data: null, error: apiError(payload, 'ACTIVATION_UNAVAILABLE', response.status), access: payload.access || null };
