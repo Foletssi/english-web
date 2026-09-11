@@ -86,8 +86,17 @@ async function createInviteUser({ email, password, nickname, attemptId }) {
   return payload;
 }
 
-function validAccount(value) {
-  return /^[a-z0-9][a-z0-9._-]{3,31}$/.test(String(value || '').trim().toLowerCase());
+function canonicalLoginKey(value) {
+  const input = String(value ?? '');
+  if (/[^ -~\t\r\n]/.test(input)) return '';
+  const raw = input.replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, '').toLowerCase();
+  if (!raw || raw.length > 128) return '';
+  const compact = raw.replace(/[ \t\r\n()-]/g, '');
+  if (/^1\d{10}$/.test(compact)) return compact;
+  if (/^86(1\d{10})$/.test(compact)) return compact.slice(2);
+  if (/^\+86(1\d{10})$/.test(compact)) return compact.slice(3);
+  if (/^\+[1-9]\d{7,14}$/.test(compact)) return compact;
+  return /^[a-z0-9][a-z0-9._-]{3,31}$/.test(raw) ? raw : '';
 }
 
 async function handleRegister(request) {
@@ -97,12 +106,12 @@ async function handleRegister(request) {
   try { input = JSON.parse(text || '{}'); }
   catch { return json({ error: 'REGISTRATION_INPUT_INVALID' }, 400); }
 
-  const account = String(input.account || '').trim().toLowerCase();
+  const account = canonicalLoginKey(input.account);
   const password = String(input.password || '');
   const nickname = String(input.nickname || '').trim().slice(0, 40) || account;
   const inviteCode = String(input.inviteCode || '').trim();
   const attemptId = String(input.attemptId || '');
-  if (!validAccount(account) || password.length < 8 || password.length > 128 ||
+  if (!account || password.length < 8 || password.length > 128 ||
       !/^[0-9a-f-]{36}$/i.test(attemptId) || inviteCode.length < 12 || inviteCode.length > 80) {
     return json({ error: 'REGISTRATION_INPUT_INVALID' }, 400);
   }
@@ -132,7 +141,9 @@ async function handleRegister(request) {
       p_auth_user_id: user.id
     });
     const session = await passwordGrant(reserved.authEmail, password);
-    return json({ account, membership, session }, 201);
+    const access = await serviceRpc('service_get_user_learning_access_v2', { p_user_id: session.user.id });
+    if (access?.canEnterLearning !== true) throw new Error(access?.reason || 'REGISTRATION_UNAVAILABLE');
+    return json({ account, membership, session, access }, 201);
   } catch (error) {
     const raw = String(error?.message || '').toUpperCase();
     const known = ['ACCOUNT_EXISTS', 'INVITE_INVALID', 'ATTEMPT_MISMATCH',

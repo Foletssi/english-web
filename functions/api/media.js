@@ -1,4 +1,4 @@
-import { authenticate, json, requireBucket } from '../_lib/auth.js';
+import { json, requireAdmin, requireBucket } from '../_lib/auth.js';
 
 function validKey(key) {
   return /^videos\/[0-9a-f-]{36}\/[a-z0-9._-]+$/.test(key);
@@ -16,7 +16,7 @@ function rangeFromHeader(value, size) {
 export async function onRequestGet({ request, env }) {
   const bucketError = requireBucket(env);
   if (bucketError) return bucketError;
-  const auth = await authenticate(request, env);
+  const auth = await requireAdmin(request, env);
   if (auth.error) return auth.error;
   const key = new URL(request.url).searchParams.get('key') || '';
   if (!validKey(key)) return json({ error: 'INVALID_MEDIA_KEY' }, 400);

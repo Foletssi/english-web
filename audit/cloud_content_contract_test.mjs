@@ -30,9 +30,9 @@ for (const route of ['/api/session', '/api/admin/uploads/init', '/api/admin/uplo
 }
 assert.ok(client.includes("headers.set('Authorization', 'Bearer ' + token)"), 'admin requests must carry the active Supabase token');
 assert.ok(auth.includes("'/auth/v1/user'"), 'Functions must validate the token with Supabase Auth');
-assert.ok(auth.includes("String(profiles?.[0]?.role || '').toLowerCase() !== 'admin'"), 'upload must be admin-only');
+assert.ok(auth.includes("'/rest/v1/rpc/is_admin'"), 'upload must use the authoritative active-admin decision');
 assert.ok(media.includes("request.headers.get('Range')"), 'video delivery must support byte ranges');
-assert.ok(media.includes("authenticate(request, env)"), 'video delivery must reject anonymous requests');
+assert.ok(media.includes("requireAdmin(request, env)"), 'original video delivery must reject learners and anonymous requests');
 assert.ok(init.includes('createMultipartUpload'), 'large video upload must use multipart R2 upload');
 assert.ok(complete.includes('upload.complete(parts)'), 'multipart upload must be explicitly completed');
 assert.ok(sql.includes('private.validate_content_snapshot(p_snapshot)'), 'draft and publish RPCs must validate content');

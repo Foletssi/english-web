@@ -309,7 +309,7 @@
       "detail": ""
     },
     {
-      "name": "media delivery requires a signed-in Supabase session",
+      "name": "media delivery requires an active administrator",
       "ok": true,
       "detail": ""
     },

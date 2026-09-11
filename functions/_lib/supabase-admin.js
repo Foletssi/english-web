@@ -19,7 +19,29 @@ export async function serviceRpc(env, name, input) {
     body: JSON.stringify(input || {}),
   });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.message || payload.code || `RPC_${response.status}`);
+  if (!response.ok) {
+    const error = new Error(payload.message || payload.code || `RPC_${response.status}`);
+    error.code = payload.code || payload.message || `RPC_${response.status}`;
+    error.upstreamStatus = response.status;
+    throw error;
+  }
+  return Array.isArray(payload) ? payload[0] : payload;
+}
+
+export async function userRpc(env, token, name, input) {
+  const config = supabaseConfig(env);
+  const response = await fetch(`${config.url}/rest/v1/rpc/${name}`, {
+    method: 'POST',
+    headers: { apikey: config.key, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(input || {}),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(payload.message || payload.code || `RPC_${response.status}`);
+    error.code = payload.message || payload.code || `RPC_${response.status}`;
+    error.upstreamStatus = response.status;
+    throw error;
+  }
   return Array.isArray(payload) ? payload[0] : payload;
 }
 
@@ -32,7 +54,12 @@ export async function passwordGrant(env, identity, password) {
     body: JSON.stringify(body),
   });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error_description || payload.msg || 'INVALID_LOGIN');
+  if (!response.ok) {
+    const error = new Error(payload.error_description || payload.msg || 'INVALID_LOGIN');
+    error.code = payload.error_code || payload.code || (response.status === 400 ? 'INVALID_LOGIN' : `AUTH_${response.status}`);
+    error.upstreamStatus = response.status;
+    throw error;
+  }
   return payload;
 }
 

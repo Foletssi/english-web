@@ -43,12 +43,11 @@ export async function authenticate(request, env) {
 export async function requireAdmin(request, env) {
   const auth = await authenticate(request, env);
   if (auth.error) return auth;
-  const profileResponse = await fetch(auth.url + '/rest/v1/profiles?id=eq.' + encodeURIComponent(auth.user.id) + '&select=role', {
-    headers: { ...auth.headers, Accept: 'application/json' }
+  const profileResponse = await fetch(auth.url + '/rest/v1/rpc/is_admin', {
+    method: 'POST', headers: { ...auth.headers, 'Content-Type': 'application/json' }, body: '{}'
   });
   if (!profileResponse.ok) return { error: json({ error: 'PROFILE_LOOKUP_FAILED' }, 502) };
-  const profiles = await profileResponse.json();
-  if (String(profiles?.[0]?.role || '').toLowerCase() !== 'admin') return { error: json({ error: 'ADMIN_REQUIRED' }, 403) };
+  if (await profileResponse.json() !== true) return { error: json({ error: 'ADMIN_REQUIRED' }, 403) };
   return auth;
 }
 

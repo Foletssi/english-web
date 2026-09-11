@@ -157,7 +157,7 @@
     return { data: firstRow(data), error: error || null };
   }
 
-  async function listProcessingJobs(limit = 50) {
+  async function listProcessingJobs(limit = 500) {
     const api = auth('admin');
     if (!api) return { rows: [], error: new Error('SUPABASE_NOT_CONFIGURED') };
     const { data, error } = await api.rpc('admin_list_processing_jobs', { p_limit: Number(limit) || 50 });
@@ -190,10 +190,10 @@
     if(error||!session?.access_token)throw error||new Error('AUTHENTICATION_REQUIRED');
     const match=String(options.mediaUrl||'').match(/\/api\/processing\/media\/([0-9a-f-]{36})\//i),jobId=match?.[1]||'';
     const identity=String(session.user?.id||'session'),cacheKey=key+':'+identity+':'+jobId,now=Math.floor(Date.now()/1000),cached=mediaSessions[cacheKey];
-    if(!options.force&&cached?.token===session.access_token&&cached.expiresAt-now>60)return {expiresAt:cached.expiresAt,jobId};
-    if(mediaSessionRequests[cacheKey])return mediaSessionRequests[cacheKey];
     if(activeMediaSessionKeys[key]!==cacheKey){activeMediaSessionKeys[key]=cacheKey;mediaSessionGeneration[key]+=1;clearTimeout(mediaSessionTimers[key]);mediaSessionTimers[key]=null}
     const ownGeneration=mediaSessionGeneration[key];
+    if(!options.force&&cached?.token===session.access_token&&cached.expiresAt-now>60)return {expiresAt:cached.expiresAt,jobId};
+    if(mediaSessionRequests[cacheKey])return mediaSessionRequests[cacheKey];
     const token=session.access_token;
     const request=(async()=>{
       const response = await fetch('/api/session', { method: 'POST', headers: { Authorization: 'Bearer ' + token,'Content-Type':'application/json' },body:JSON.stringify({jobId:jobId||null}),signal:options.signal });
@@ -206,12 +206,12 @@
         clearTimeout(mediaSessionTimers[key]);
         const remaining=expiresAt*1000-Date.now(),renew=remaining>60000;
         const delay=Math.max(1000,renew?remaining-60000:remaining+1000);
-        mediaSessionTimers[key]=setTimeout(()=>{mediaSessionTimers[key]=null;if(ownGeneration!==mediaSessionGeneration[key]||activeMediaSessionKeys[key]!==cacheKey)return;if(!renew){if(typeof global.dispatchEvent==='function'&&typeof global.CustomEvent==='function')global.dispatchEvent(new global.CustomEvent('eastudy:media-session-error',{detail:{scope:key,jobId,error:'MEMBERSHIP_EXPIRED'}}));return}syncMediaSession(key,{mediaUrl:options.mediaUrl,force:true,background:true}).catch(()=>{if(typeof global.dispatchEvent==='function'&&typeof global.CustomEvent==='function')global.dispatchEvent(new global.CustomEvent('eastudy:media-session-error',{detail:{scope:key,jobId}}))})},delay);
+        mediaSessionTimers[key]=setTimeout(()=>{mediaSessionTimers[key]=null;if(ownGeneration!==mediaSessionGeneration[key]||activeMediaSessionKeys[key]!==cacheKey)return;if(!renew){if(typeof global.dispatchEvent==='function'&&typeof global.CustomEvent==='function')global.dispatchEvent(new global.CustomEvent('eastudy:media-session-error',{detail:{scope:key,jobId,error:'VIP_EXPIRED'}}));return}syncMediaSession(key,{mediaUrl:options.mediaUrl,force:true,background:true}).catch(error=>{if(typeof global.dispatchEvent==='function'&&typeof global.CustomEvent==='function')global.dispatchEvent(new global.CustomEvent('eastudy:media-session-error',{detail:{scope:key,jobId,error:error?.message||'PLAYBACK_AUTH_UNAVAILABLE'}}))})},delay);
       }
       return {expiresAt,jobId};
     })();
     mediaSessionRequests[cacheKey]=request;
-    try{return await request}finally{delete mediaSessionRequests[cacheKey]}
+    try{return await request}finally{if(mediaSessionRequests[cacheKey]===request)delete mediaSessionRequests[cacheKey]}
   }
 
   async function clearMediaSession() {

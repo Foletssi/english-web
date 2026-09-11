@@ -49,6 +49,7 @@ globalThis.fetch=async(url,init={})=>{
   }
   if(String(url).includes('/auth/v1/admin/users'))return new Response(JSON.stringify({id:'00000000-0000-4000-8000-000000000003'}),{status:200,headers:{'Content-Type':'application/json'}});
   if(String(url).includes('/rpc/finalize_invite_registration'))return new Response(JSON.stringify({state:'COMPLETED',durationDays:30}),{status:200,headers:{'Content-Type':'application/json'}});
+  if(String(url).includes('/rpc/service_get_user_learning_access_v2'))return new Response(JSON.stringify({canEnterLearning:true,canPlay:true,reason:'OK',kind:'LEARNER',expiresAt:'2099-01-01T00:00:00Z'}),{status:200,headers:{'Content-Type':'application/json'}});
   if(String(url).includes('/auth/v1/token'))return new Response(JSON.stringify({access_token:'edge-access',refresh_token:'edge-refresh',user:{id:'00000000-0000-4000-8000-000000000003'}}),{status:200,headers:{'Content-Type':'application/json'}});
   throw new Error(`Unexpected edge fetch ${url} ${init.method||'GET'}`);
 };
@@ -66,6 +67,7 @@ assert.equal(edgeResponse.status,201);
 const edgeResult=await edgeResponse.json();
 assert.equal(edgeResult.membership.state,'COMPLETED');
 assert.equal(edgeResult.session.access_token,'edge-access');
+assert.equal(edgeResult.access.canEnterLearning,true);
 console.warn=originalWarn;
 
 console.log(JSON.stringify({ok:true,tests:27},null,2));

@@ -63,7 +63,7 @@ Result: **PASS**  (71/71)
 - PASS — requested mobile priority explanation is removed
 - PASS — web deployment exposes /admin entry
 - PASS — admin supports authenticated R2 multipart upload
-- PASS — media delivery requires a signed-in Supabase session
+- PASS — media delivery requires an active administrator
 - PASS — Cloudflare upload gate checks administrator role
 - PASS — Supabase content publishing is authenticated and atomic
 - PASS — learner goal profile is isolated by Supabase RLS

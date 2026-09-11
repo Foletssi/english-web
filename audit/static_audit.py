@@ -85,7 +85,7 @@ cloud_sql=(root/'supabase/migrations/20260908101008_cloud_content_and_admin.sql'
 function_auth=(root/'functions/_lib/auth.js').read_text(encoding='utf-8')
 media_function=(root/'functions/api/media.js').read_text(encoding='utf-8')
 add('admin supports authenticated R2 multipart upload',all(x in cloud for x in ['/api/admin/uploads/init','/api/admin/uploads/part','/api/admin/uploads/complete','Authorization']))
-add('media delivery requires a signed-in Supabase session',all(x in media_function for x in ['authenticate(request, env)','VIDEO_BUCKET','Range','Content-Range']))
+add('media delivery requires an active administrator',all(x in media_function for x in ['requireAdmin(request, env)','VIDEO_BUCKET','Range','Content-Range']))
 add('Cloudflare upload gate checks administrator role',all(x in function_auth for x in ['requireAdmin','PROFILE_LOOKUP_FAILED','ADMIN_REQUIRED']))
 add('Supabase content publishing is authenticated and atomic',all(x in cloud_sql for x in ['private.content_snapshots','admin_publish_content_snapshot','get_published_content','revision = private.content_snapshots.revision + 1']))
 learning_sql=(root/'supabase/migrations/20260908114654_learning_goal_autoplay.sql').read_text(encoding='utf-8')

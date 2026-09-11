@@ -110,6 +110,14 @@
     return api.auth.setSession({ access_token: session.access_token, refresh_token: session.refresh_token });
   }
 
+  function apiError(payload, fallback, status) {
+    const error = new Error(payload?.error || fallback);
+    error.code = payload?.error || fallback;
+    error.status = Number(status) || 0;
+    error.access = payload?.access || null;
+    return error;
+  }
+
   async function signInAccount(input, scope = 'student') {
     try {
       const response = await fetch('/api/auth/login', {
@@ -117,8 +125,22 @@
         body: JSON.stringify({ account: String(input.account || '').trim(), password: String(input.password || '') })
       });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) return { data: null, error: new Error(payload.error || 'INVALID_LOGIN') };
-      return applyServerSession(payload.session, scope);
+      if (!response.ok) return { data: null, error: apiError(payload, 'INVALID_LOGIN', response.status), access: payload.access || null };
+      const result = await applyServerSession(payload.session, scope);
+      return result.error ? result : { ...result, access: payload.access || null };
+    } catch (error) { return { data: null, error }; }
+  }
+
+  async function activateAndLogin(input, scope = 'student') {
+    try {
+      const response = await fetch('/api/auth/activate-and-login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ account: String(input.account || '').trim(), password: String(input.password || ''), inviteCode: String(input.inviteCode || '').trim() })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) return { data: null, error: apiError(payload, 'ACTIVATION_UNAVAILABLE', response.status), access: payload.access || null };
+      const result = await applyServerSession(payload.session, scope);
+      return result.error ? result : { ...result, access: payload.access || null };
     } catch (error) { return { data: null, error }; }
   }
 
@@ -134,9 +156,9 @@
         })
       });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) return { data: null, error: new Error(payload.error || 'REGISTRATION_UNAVAILABLE') };
+      if (!response.ok) return { data: null, error: apiError(payload, 'REGISTRATION_UNAVAILABLE', response.status) };
       const result = await applyServerSession(payload.session, scope);
-      return result.error ? result : { ...result, membership: payload.membership, account: payload.account };
+      return result.error ? result : { ...result, membership: payload.membership, account: payload.account, access: payload.access || null };
     } catch (error) { return { data: null, error }; }
   }
 
@@ -498,6 +520,13 @@
     return { membership: result.data ? normalizeMembership(result.data) : null, error: null };
   }
 
+  async function getLearningAccess() {
+    const api = client('student');
+    if (!api) return { access: null, error: new Error('SUPABASE_NOT_CONFIGURED') };
+    const { data, error } = await api.rpc('get_my_learning_access_v2');
+    return { access: data || null, error: error || null };
+  }
+
   async function redeemMembership(code) {
     const api = client('student');
     const context = await getContext('student');
@@ -678,6 +707,6 @@
   window.addEventListener?.('online', () => { void flushStudyOutbox(); });
   globalThis.document?.addEventListener?.('visibilitychange', () => { if (!document.hidden) void flushStudyOutbox(); });
 
-  window.EastudyAuth = Object.freeze({ available, client, cleanPhone, isLearnerProfile, getRememberLogin, setRememberLogin, getContext, signInAccount, registerWithInvite, signInPhone, ensureStudentProfile, updatePassword, signOut });
-  window.EastudyData = Object.freeze({ upsertProgress, recordStudyActivity, pendingStudyEvents, flushStudyOutbox, setFavorite, setVocabulary, setCreatorFollow, setCollectionSave, saveLearningPreferences, logStudyEvent, hydrateStudentLearning, getLearningGoalProfile, saveLearningGoalProfile, getMembership, redeemMembership, getAdminAnalytics, generateInviteCodes, listInviteCodes, revokeInviteCode, setInviteBatchDisabled, reissueInviteCode, listLearners, getLearnerDetail, startLearnerActivity, stopLearnerActivity });
+  window.EastudyAuth = Object.freeze({ available, client, cleanPhone, isLearnerProfile, getRememberLogin, setRememberLogin, getContext, signInAccount, activateAndLogin, registerWithInvite, signInPhone, ensureStudentProfile, updatePassword, signOut });
+  window.EastudyData = Object.freeze({ upsertProgress, recordStudyActivity, pendingStudyEvents, flushStudyOutbox, setFavorite, setVocabulary, setCreatorFollow, setCollectionSave, saveLearningPreferences, logStudyEvent, hydrateStudentLearning, getLearningGoalProfile, saveLearningGoalProfile, getMembership, getLearningAccess, redeemMembership, getAdminAnalytics, generateInviteCodes, listInviteCodes, revokeInviteCode, setInviteBatchDisabled, reissueInviteCode, listLearners, getLearnerDetail, startLearnerActivity, stopLearnerActivity });
 })();

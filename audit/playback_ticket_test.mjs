@@ -14,6 +14,10 @@ assert.deepEqual(await openPlaybackTicket(ticket,env),payload);
 await assert.rejects(()=>openPlaybackTicket(ticket.slice(0,-1)+(ticket.endsWith('A')?'B':'A'),env));
 await assert.rejects(async()=>openPlaybackTicket(await sealPlaybackTicket({...payload,exp:now-1},env),env),/EXPIRED/);
 await assert.rejects(()=>sealPlaybackTicket(payload,{PLAYBACK_TICKET_KEY:'invalid'}),/PLAYBACK_TICKET_KEY_INVALID/);
+const fallbackEnv={SUPABASE_SERVICE_ROLE_KEY:'service-role-fixture-that-is-longer-than-32-bytes'};
+const fallbackTicket=await sealPlaybackTicket(payload,fallbackEnv);
+assert.deepEqual(await openPlaybackTicket(fallbackTicket,fallbackEnv),payload,'configured service secret must provide a deterministic production fallback');
+await assert.rejects(()=>sealPlaybackTicket(payload,{}),/PLAYBACK_TICKET_KEY_UNAVAILABLE/);
 const jobId='00000000-0000-4000-8000-000000000001';
 const cleared=await onRequestDelete({request:new Request('https://example.test/api/session',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({jobIds:[jobId,'invalid']})})});
 const setCookies=typeof cleared.headers.getSetCookie==='function'?cleared.headers.getSetCookie():[cleared.headers.get('set-cookie')||''];
@@ -21,5 +25,5 @@ assert.ok(setCookies.some(value=>value.includes('eastudy_media_session=')&&value
 assert.ok(setCookies.some(value=>value.includes('eastudy_playback=')&&value.includes('/api/processing/media/'+jobId+'/')),'logout must clear every issued job-path playback cookie');
 const client=fs.readFileSync('shared/cloud-content.js','utf8');
 assert.ok(client.includes('mediaSessionGeneration'),'late session responses must be fenced by generation');
-assert.ok(client.includes("error:'MEMBERSHIP_EXPIRED'"),'near-expiry membership must stop instead of renewing every second');
+assert.ok(client.includes("error:'VIP_EXPIRED'"),'near-expiry membership must stop instead of renewing every second');
 console.log('Playback ticket and session lifecycle contract passed.');
