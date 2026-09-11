@@ -9,6 +9,7 @@ const init = read('../functions/api/admin/uploads/init.js');
 const complete = read('../functions/api/admin/uploads/complete.js');
 const sql = read('../supabase/migrations/20260908101008_cloud_content_and_admin.sql');
 const trashSql = read('../supabase/migrations/20260908183106_content_video_trash.sql');
+const deletionSql = read('../supabase/migrations/20260911173000_durable_video_deletion_v1.sql');
 const processingSql = read('../supabase/migrations/20260908224149_cloud_video_processing.sql');
 const processingSource = read('../functions/api/processing/source.js');
 const localWorkerSql = read('../supabase/migrations/20260909000631_local_cloud_worker.sql');
@@ -17,6 +18,7 @@ const integritySql = read('../supabase/migrations/20260909150000_content_integri
 const jobTitleSql = read('../supabase/migrations/20260909151000_processing_job_trash_titles.sql');
 const requeueSql = read('../supabase/migrations/20260909221000_requeue_repaired_video_job.sql');
 const learningPublishSql = read('../supabase/migrations/20260910193000_learning_publish_integrity_v4.sql');
+const learningReextractSql = read('../supabase/migrations/20260911170000_learning_reextract_v5.sql');
 const processingOutput = read('../functions/api/processing/output.js');
 const processingMedia = read('../functions/api/processing/media/[[path]].js');
 const edgeWorker = read('../supabase/functions/video-processing/index.ts');
@@ -36,9 +38,9 @@ assert.ok(complete.includes('upload.complete(parts)'), 'multipart upload must be
 assert.ok(sql.includes('private.validate_content_snapshot(p_snapshot)'), 'draft and publish RPCs must validate content');
 assert.ok(sql.includes("where value->>'status' = 'PUBLISHED'"), 'student projection must exclude drafts');
 assert.ok(sql.includes('revision = private.content_snapshots.revision + 1'), 'publish must atomically advance revision');
-for (const rpc of ['admin_list_content_trash', 'admin_trash_content_videos', 'admin_restore_content_video']) {
+for (const rpc of ['admin_list_content_trash_v2', 'admin_trash_content_videos', 'admin_restore_content_video']) {
   assert.ok(client.includes(`'${rpc}'`), `client must call ${rpc}`);
-  assert.ok(trashSql.includes(`public.${rpc}`), `migration must define ${rpc}`);
+  assert.ok((rpc.endsWith('_v2') ? deletionSql : trashSql).includes(`public.${rpc}`), `migration must define ${rpc}`);
 }
 assert.ok(trashSql.includes("where environment = 'production' for update"), 'trash mutations must lock the content row');
 assert.ok(trashSql.includes('CONTENT_REVISION_CONFLICT'), 'trash mutations must reject stale administrator state');
@@ -103,16 +105,19 @@ assert.ok(avatarUpload.includes("requireAdmin(request, env)"),'creator avatar up
 assert.ok(avatarUpload.includes("'RIFF'")&&avatarUpload.includes("'WEBP'"),'creator avatar upload must validate actual WebP signatures');
 assert.ok(avatarRead.includes('authenticate(request, env)'),'creator avatar delivery must require an authenticated session');
 assert.ok(!avatarUpload.toLowerCase().includes('.delete('),'creator avatar changes must not physically delete R2 objects');
-for (const rpc of ['admin_set_video_publication_v4', 'admin_create_learning_repair_job_v4']) {
-  assert.ok(client.includes(`'${rpc}'`), `cloud client must call ${rpc}`);
-  assert.ok(learningPublishSql.includes(`public.${rpc}`), `learning publication migration must define ${rpc}`);
-}
+assert.ok(client.includes("'admin_set_video_publication_v4'"), 'cloud client must call admin_set_video_publication_v4');
+assert.ok(learningPublishSql.includes('public.admin_set_video_publication_v4'), 'learning publication migration must define admin_set_video_publication_v4');
+assert.ok(client.includes("'admin_create_learning_repair_job_v5'"), 'cloud client must call admin_create_learning_repair_job_v5');
+assert.ok(client.includes("p_mode:String(mode||'fill_missing')"), 'cloud client must pass the selected learning repair mode');
+assert.ok(learningReextractSql.includes('public.admin_create_learning_repair_job_v5'), 'v5 migration must define learning repair creation');
+assert.ok(learningReextractSql.includes("p_mode not in ('fill_missing','reextract')"), 'v5 migration must restrict learning repair modes');
 assert.ok(learningPublishSql.includes('private.video_publish_issues_v4(c.draft,p_video_id)'), 'one-video publish must run the server-side learning preflight');
 assert.ok(learningPublishSql.includes("where value->>'id'<>p_video_id"), 'archive must remove only the selected published video');
 assert.ok(learningPublishSql.includes("coalesce(v_published->'sentences','{}'::jsonb)-p_video_id"), 'archive must remove only the selected published subtitle projection');
 assert.ok(learningPublishSql.includes('LEARNING_SOURCE_CHANGED'), 'repair commit must reject stale source text');
 assert.ok(!learningPublishSql.toLowerCase().includes('delete from') && !learningPublishSql.includes('VIDEO_BUCKET'), 'learning repair must never physically delete media');
-assert.ok(edgeWorker.includes("'worker-complete-learning-v4'"), 'Edge worker must expose text-only learning repair completion');
+assert.ok(!learningReextractSql.toLowerCase().includes('delete from') && !learningReextractSql.includes('VIDEO_BUCKET'), 'v5 learning re-extraction must never physically delete media');
+assert.ok(edgeWorker.includes("'worker-complete-learning-v5'"), 'Edge worker must expose v5 text-only learning repair completion');
 for (const method of ['setVideoPublication', 'createLearningRepair']) assert.ok(client.includes(method), `cloud client must expose ${method}`);
 
 console.log(JSON.stringify({ ok: true, tests: 78 }, null, 2));

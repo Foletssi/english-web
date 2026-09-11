@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
-from ai_tools import LEARNING_PROMPT, LEARNING_REPAIR_PROMPT, ai_concurrency, asr_profile, call_json, endpoint, enrich, prepare_asr_model, repair_learning, retry_ai
+from ai_tools import LEARNING_PROMPT, LEARNING_REPAIR_PROMPT, LEARNING_REEXTRACT_PROMPT, ai_concurrency, asr_profile, call_json, endpoint, enrich, prepare_asr_model, repair_learning, retry_ai
 from contracts import StudioError
 
 
@@ -17,6 +17,18 @@ class FakeResponse:
         return False
     def read(self):
         return json.dumps(self.value).encode()
+
+
+def v5_payload(payload):
+    value = json.loads(json.dumps(payload))
+    value['teachingSchemaVersion'] = 3
+    for sentence in value.get('sentences', []):
+        for expression in sentence.get('expressions', []):
+            expression.setdefault('lemma', expression.get('surface', '').lower())
+            expression.setdefault('expressionType', 'collocation')
+            expression.setdefault('selectionReasonZh', '可迁移的常用表达。')
+            expression.setdefault('needsReview', False)
+    return value
 
 
 class AiTools(unittest.TestCase):
@@ -73,11 +85,11 @@ class AiTools(unittest.TestCase):
 
     def test_enrichment_reuses_validated_batches(self):
         rows = [{'id': 'v-1', 'english': 'Good morning', 'startTime': 0, 'endTime': 1}]
-        learning = {'sentences': [{'id': 'v-1', 'chinese': '早上好',
+        learning = v5_payload({'sentences': [{'id': 'v-1', 'chinese': '早上好',
             'keyWords': ['Good morning'], 'expressions': [{'surface': 'Good morning',
                 'coreMeaningZh': '早上好', 'contextMeaningZh': '这里是清晨问候。',
                 'usageNoteZh': '用于上午见面问候。'}], 'grammar': '问候语'}],
-            'batchSummary': {'summary': '日常问候', 'evidenceIds': ['v-1']}}
+            'batchSummary': {'summary': '日常问候', 'evidenceIds': ['v-1']}})
         metadata = {'titleZh': '我的清晨日常',
             'descriptionZh': '跟着视频积累真实自然的清晨问候表达，并练习日常英语听力和口语。',
             'level': 'A2', 'levelReason': '短句为主', 'topicIds': ['daily'],
@@ -109,8 +121,8 @@ class AiTools(unittest.TestCase):
                     'keyWords': [item['english']], 'expressions': [{'surface': item['english'],
                         'coreMeaningZh': '本句表达', 'contextMeaningZh': '当前句中的表达。',
                         'usageNoteZh': '结合上下文使用。'}], 'grammar': '句子'} for item in payload['sentences']]
-                return {'sentences': sentences, 'batchSummary': {
-                    'summary': '分批摘要', 'evidenceIds': [sentences[0]['id']]}}, {'requestId': sentences[0]['id']}
+                return v5_payload({'sentences': sentences, 'batchSummary': {
+                    'summary': '分批摘要', 'evidenceIds': [sentences[0]['id']]}}), {'requestId': sentences[0]['id']}
             return {'titleZh': '我的日常', 'descriptionZh': '通过真实生活视频积累自然英语表达，同时练习听力、词汇和日常口语。',
                 'level': 'A2', 'levelReason': '短句为主', 'topicIds': ['daily'],
                 'tags': [{'tagId': tag, 'sentenceIds': ['v-0'], 'reasonZh': '字幕证据'}
@@ -125,10 +137,10 @@ class AiTools(unittest.TestCase):
         rows = [{'id': 'v-1', 'english': "I've been doing this", 'chinese': '',
                  'keyWords': ["I've been doing"], 'startTime': 1.25, 'endTime': 2.75,
                  'wordTimings': [{'text': "I've", 'start': 1.25, 'end': 1.6}]}]
-        payload = {'sentences': [{'id': 'v-1', 'chinese': '我一直在做这件事',
+        payload = v5_payload({'sentences': [{'id': 'v-1', 'chinese': '我一直在做这件事',
             'keyWords': ["I've been doing"], 'expressions': [{'surface': "I've been doing",
                 'coreMeaningZh': '一直在做', 'contextMeaningZh': '表示此前持续进行的事情。',
-                'usageNoteZh': '现在完成进行时。'}], 'grammar': '现在完成进行时'}]}
+                'usageNoteZh': '现在完成进行时。'}], 'grammar': '现在完成进行时'}]})
         with tempfile.TemporaryDirectory() as folder, patch('ai_tools.call_json', return_value=(payload, {'requestId': 'repair'})) as mocked:
             learned, evidence = repair_learning(rows, {'model': 'fixture', 'baseUrl': 'https://api.example.com', 'apiKey': 'secret'}, cache_dir=Path(folder))
         self.assertEqual(mocked.call_args.args[1], LEARNING_REPAIR_PROMPT)
@@ -141,11 +153,11 @@ class AiTools(unittest.TestCase):
         rows = [{'id': 'v-1', 'english': 'We were launching at 11 a.m. today',
                  'keyWords': ['launching at a m'], 'startTime': 1.25, 'endTime': 2.75,
                  'wordTimings': []}]
-        payload = {'sentences': [{'id': 'v-1', 'chinese': '我们今天上午十一点发布。',
+        payload = v5_payload({'sentences': [{'id': 'v-1', 'chinese': '我们今天上午十一点发布。',
                     'keyWords': ['launching at a m'], 'expressions': [{
                         'surface': 'launching at a m', 'coreMeaningZh': '在某时发布',
                         'contextMeaningZh': '本句指上午十一点发布。', 'usageNoteZh': 'launch at + 时间'}],
-                    'grammar': '过去进行时。'}]}
+                    'grammar': '过去进行时。'}]})
         with tempfile.TemporaryDirectory() as folder, patch('ai_tools.call_json', return_value=(payload, {'requestId': 'repair'})):
             learned, _ = repair_learning(rows, {'model': 'fixture', 'baseUrl': 'https://api.example.com', 'apiKey': 'secret'}, cache_dir=Path(folder))
         self.assertEqual(learned[0]['keyWords'], ['launching at a m'])
@@ -153,13 +165,27 @@ class AiTools(unittest.TestCase):
     def test_learning_repair_rejects_changed_requested_keywords(self):
         rows = [{'id': 'v-1', 'english': 'Good morning guys', 'keyWords': ['Good morning'],
                  'startTime': 0, 'endTime': 2}]
-        payload = {'sentences': [{'id': 'v-1', 'chinese': '大家早上好',
+        payload = v5_payload({'sentences': [{'id': 'v-1', 'chinese': '大家早上好',
             'keyWords': ['morning guys'], 'expressions': [{'surface': 'morning guys',
                 'coreMeaningZh': '早上的大家', 'contextMeaningZh': '错误替换', 'usageNoteZh': '测试'}],
-            'grammar': '问候'}]}
+            'grammar': '问候'}]})
         with tempfile.TemporaryDirectory() as folder, patch('ai_tools.call_json', return_value=(payload, {'requestId': 'changed'})):
             with self.assertRaisesRegex(StudioError, 'AI_REPAIR_KEYWORDS_CHANGED'):
                 repair_learning(rows, {'model': 'fixture', 'baseUrl': 'https://api.example.com', 'apiKey': 'secret'}, cache_dir=Path(folder))
+
+    def test_learning_reextract_can_replace_unlocked_ai_selection(self):
+        rows = [{'id': 'v-1', 'english': 'Okay, my makeup is done.',
+                 'keyWords': ['my makeup', 'is done'], 'selectionLocked': False,
+                 'startTime': 0, 'endTime': 2}]
+        payload = v5_payload({'sentences': [{'id': 'v-1', 'chinese': '好了，我的妆化好了。',
+            'keyWords': ['makeup'], 'expressions': [{'surface': 'makeup',
+                'coreMeaningZh': '妆容；化妆品', 'contextMeaningZh': '这里指已经完成的妆容。',
+                'usageNoteZh': '这里是不可数名词。'}], 'grammar': ''}]})
+        with tempfile.TemporaryDirectory() as folder, patch('ai_tools.call_json', return_value=(payload, {'requestId': 'reextract'})) as mocked:
+            learned, _ = repair_learning(rows, {'model': 'fixture', 'baseUrl': 'https://api.example.com', 'apiKey': 'secret'}, cache_dir=Path(folder), mode='reextract')
+        self.assertEqual(mocked.call_args.args[1], LEARNING_REEXTRACT_PROMPT)
+        self.assertEqual(learned[0]['keyWords'], ['makeup'])
+        self.assertEqual(mocked.call_args.args[2]['sentences'][0]['requestedKeyWords'], [])
 
 
 if __name__ == '__main__':

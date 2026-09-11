@@ -3,10 +3,12 @@ from contracts import StudioError, strict_json, validate_learning, validate_meta
 
 
 SOURCE = [{'id': 'v:1', 'english': 'I am going to the market.', 'startTime': 0, 'endTime': 3}]
-GOOD = {'sentences': [{'id': 'v:1', 'chinese': '我要去市场。', 'keyWords': ['going to'],
+GOOD = {'teachingSchemaVersion': 3, 'sentences': [{'id': 'v:1', 'chinese': '我要去市场。', 'keyWords': ['going to'],
                        'expressions': [{'surface': 'going to', 'coreMeaningZh': '将要；打算',
                                        'contextMeaningZh': '这里表示去市场的计划。',
-                                       'usageNoteZh': 'be going to 后接动词原形。'}],
+                                       'usageNoteZh': 'be going to 后接动词原形。',
+                                       'lemma': 'be going to', 'expressionType': 'pattern',
+                                       'selectionReasonZh': '可迁移的计划表达。', 'needsReview': False}],
                        'grammar': 'be going to 表示计划。'}]}
 
 
@@ -20,8 +22,28 @@ class Contracts(unittest.TestCase):
         self.assertEqual(result[0]['startTime'], 0)
         self.assertEqual(result[0]['reviewStatus'], 'REVIEW')
 
+    def test_teaching_v3_requires_professional_selection_fields(self):
+        value = {'teachingSchemaVersion': 3, 'sentences': [{
+            **GOOD['sentences'][0], 'expressions': [{
+                **GOOD['sentences'][0]['expressions'][0], 'lemma': 'be going to',
+                'expressionType': 'pattern', 'selectionReasonZh': '常用计划表达，能够迁移使用。',
+                'needsReview': False}]}]}
+        result = validate_learning(SOURCE, value)
+        self.assertEqual(result[0]['learningContractVersion'], 5)
+        self.assertEqual(result[0]['expressions'][0]['lemma'], 'be going to')
+
+        missing_expression = {key: value for key, value in GOOD['sentences'][0]['expressions'][0].items() if key != 'expressionType'}
+        missing = {'teachingSchemaVersion': 3, 'sentences': [{**GOOD['sentences'][0], 'expressions': [missing_expression]}]}
+        with self.assertRaisesRegex(StudioError, 'AI_EXPRESSION_TYPE'):
+            validate_learning(SOURCE, missing)
+
+    def test_missing_teaching_version_cannot_downgrade_validation(self):
+        missing_version = {key: value for key, value in GOOD.items() if key != 'teachingSchemaVersion'}
+        with self.assertRaisesRegex(StudioError, 'AI_TEACHING_SCHEMA'):
+            validate_learning(SOURCE, missing_version)
+
     def test_hallucinated_phrase_is_error(self):
-        wrong = {'sentences': [{**GOOD['sentences'][0], 'keyWords': ['rocket science']}]}
+        wrong = {'teachingSchemaVersion': 3, 'sentences': [{**GOOD['sentences'][0], 'keyWords': ['rocket science']}]}
         with self.assertRaisesRegex(StudioError, 'AI_PHRASE_NOT_FOUND'):
             validate_learning(SOURCE, wrong)
 

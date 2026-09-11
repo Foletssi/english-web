@@ -55,6 +55,21 @@
       .sort((a, b) => b.videoCount - a.videoCount || String(a.id).localeCompare(String(b.id)));
   }
 
+  function uniqueTagPage(tags, offset = 0, pageSize = 10) {
+    const unique = [...new Map((Array.isArray(tags) ? tags : [])
+      .filter(tag => tag && tag.id != null)
+      .map(tag => [String(tag.id), tag])).values()];
+    const count = unique.length;
+    const requested = Number(pageSize);
+    const limit = Number.isFinite(requested) ? Math.max(0, Math.trunc(requested)) : 10;
+    const size = Math.min(limit, count);
+    if (!size) return [];
+    const raw = Number(offset);
+    const safeOffset = Number.isFinite(raw) ? Math.trunc(raw) : 0;
+    const start = ((safeOffset % count) + count) % count;
+    return Array.from({ length: size }, (_, index) => unique[(start + index) % count]);
+  }
+
   function collectionMembers(videos, collectionId) {
     return queryVideos(videos, { collectionId });
   }
@@ -82,6 +97,6 @@
 
   global.EastudyCatalog = Object.freeze({
     TOPIC_CATEGORIES, uniqueStrings, publishedVideos, topicIds, categoryLabel, tagIds,
-    queryVideos, availableTags, collectionMembers, collectionStats
+    queryVideos, availableTags, uniqueTagPage, collectionMembers, collectionStats
   });
 })(window);

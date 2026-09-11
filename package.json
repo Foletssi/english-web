@@ -1,20 +1,20 @@
 {
   "name": "zospeak-composite-v1-beta6",
   "private": true,
-  "version": "1.0.0-beta.6.34.0",
+  "version": "1.0.0-beta.6.35.0",
   "scripts": {
     "serve": "python -m http.server 8080",
     "audit": "python audit/static_audit.py",
-    "contract-test": "node audit/runtime_contract_test.mjs && node audit/content_integrity_test.mjs",
-    "deletion-test": "node audit/content_deletion_test.mjs && node audit/studio_deletion_test.mjs",
+    "contract-test": "node audit/runtime_contract_test.mjs && node audit/content_integrity_test.mjs && node audit/hot_tags_uniqueness_test.mjs",
+    "deletion-test": "node audit/content_deletion_test.mjs && node audit/studio_deletion_test.mjs && node audit/video_permanent_deletion_test.mjs",
     "deletion-browser-test": "node audit/content_deletion_browser_test.cjs",
     "cloud-deletion-browser-test": "node audit/cloud_video_trash_browser_test.cjs",
     "admin-intake-ui-test": "node audit/admin_intake_ui_test.cjs",
     "auth-test": "node audit/auth_contract_test.mjs && node audit/single_720_invite_contract_test.mjs && node audit/invite_admin_contract_test.mjs && node audit/playback_ticket_test.mjs",
-    "cloud-test": "node audit/cloud_content_contract_test.mjs && node audit/cloud_video_processing_test.mjs && py -3.14 -m unittest discover -s services/cloud-worker -p \"test_*.py\" -v",
+    "cloud-test": "node audit/cloud_content_contract_test.mjs && node audit/cloud_video_processing_test.mjs && py -3.12 -m unittest discover -s services/cloud-worker -p \"test_*.py\" -v",
     "learning-test": "node audit/learning_content_contract_test.mjs && node audit/learning_queue_contract_test.mjs && node audit/study_outbox_contract_test.mjs",
     "learner-admin-test": "node audit/player_loop_contract_test.mjs && node audit/invite_admin_ui_test.mjs",
-    "studio-test": "node audit/studio_client_contract_test.mjs && node audit/studio_v2_contract_test.mjs && node audit/media_player_contract_test.mjs && py -3.14 -m unittest discover -s services/local-studio -p \"test_*.py\" -v"
+    "studio-test": "node audit/studio_client_contract_test.mjs && node audit/studio_v2_contract_test.mjs && node audit/media_player_contract_test.mjs && py -3.12 -m unittest discover -s services/local-studio -p \"test_*.py\" -v"
   },
   "description": "Eastudy Student Web + Chinese Admin Studio + sentence-aware learning analysis"
 }

@@ -4,7 +4,12 @@
 
   const MAX_FILE_BYTES = 2 * 1024 * 1024 * 1024;
   const PART_BYTES = 8 * 1024 * 1024;
-  const mediaSessions = { student: null, admin: null };
+  const mediaSessions = Object.create(null);
+  const mediaSessionRequests = Object.create(null);
+  const mediaSessionTimers = { student: null, admin: null };
+  const activeMediaSessionKeys = { student: '', admin: '' };
+  const mediaSessionGeneration = { student: 0, admin: 0 };
+  const usedMediaJobIds = new Set();
 
   function auth(scope) {
     return global.EastudyAuth?.client(scope);
@@ -76,12 +81,12 @@
     return {data:firstRow(data),error:error||null};
   }
 
-  async function createLearningRepair(videoId, expectedRevision) {
+  async function createLearningRepair(videoId, expectedRevision, mode = 'fill_missing') {
     if(global.ZoContent?.localOnly)return {error:new Error('LOCAL_CONTENT_CLOUD_WRITE_DISABLED')};
     const api=auth('admin');
     if(!api)return {error:new Error('SUPABASE_NOT_CONFIGURED')};
-    const {data,error}=await api.rpc('admin_create_learning_repair_job_v4',{
-      p_video_id:String(videoId||''),p_expected_revision:Number(expectedRevision)
+    const {data,error}=await api.rpc('admin_create_learning_repair_job_v5',{
+      p_video_id:String(videoId||''),p_expected_revision:Number(expectedRevision),p_mode:String(mode||'fill_missing')
     });
     return {data:firstRow(data),error:error||null};
   }
@@ -89,7 +94,7 @@
   async function listTrash() {
     const api = auth('admin');
     if (!api) return { rows: [], error: new Error('SUPABASE_NOT_CONFIGURED') };
-    const { data, error } = await api.rpc('admin_list_content_trash');
+    const { data, error } = await api.rpc('admin_list_content_trash_v2');
     return { rows: Array.isArray(data) ? data : [], error: error || null };
   }
 
@@ -112,6 +117,24 @@
       p_expected_revision: Number(expectedRevision)
     });
     return { data: firstRow(data), error: error || null };
+  }
+
+  async function planPermanentVideoDeletion(videoId, expectedRevision) {
+    return apiRequest('/api/admin/video-deletions/plan', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ videoId: String(videoId), expectedRevision: Number(expectedRevision) })
+    });
+  }
+
+  async function confirmPermanentVideoDeletion(planId, expectedRevision) {
+    return apiRequest('/api/admin/video-deletions/confirm', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ planId: String(planId), expectedRevision: Number(expectedRevision), confirmation: 'PERMANENT_DELETE' })
+    });
+  }
+
+  async function getVideoDeletion(deletionId) {
+    return apiRequest('/api/admin/video-deletions/status?id=' + encodeURIComponent(deletionId), { method: 'GET' });
   }
 
   async function processingHealth() {
@@ -166,19 +189,37 @@
     const session=data?.session;
     if(error||!session?.access_token)throw error||new Error('AUTHENTICATION_REQUIRED');
     const match=String(options.mediaUrl||'').match(/\/api\/processing\/media\/([0-9a-f-]{36})\//i),jobId=match?.[1]||'';
-    const cacheKey=key+':'+jobId,now=Math.floor(Date.now()/1000),cached=mediaSessions[cacheKey];
-    if(!options.force&&cached?.token===session.access_token&&cached.expiresAt-now>60)return true;
+    const identity=String(session.user?.id||'session'),cacheKey=key+':'+identity+':'+jobId,now=Math.floor(Date.now()/1000),cached=mediaSessions[cacheKey];
+    if(!options.force&&cached?.token===session.access_token&&cached.expiresAt-now>60)return {expiresAt:cached.expiresAt,jobId};
+    if(mediaSessionRequests[cacheKey])return mediaSessionRequests[cacheKey];
+    if(activeMediaSessionKeys[key]!==cacheKey){activeMediaSessionKeys[key]=cacheKey;mediaSessionGeneration[key]+=1;clearTimeout(mediaSessionTimers[key]);mediaSessionTimers[key]=null}
+    const ownGeneration=mediaSessionGeneration[key];
     const token=session.access_token;
-    const response = await fetch('/api/session', { method: 'POST', headers: { Authorization: 'Bearer ' + token,'Content-Type':'application/json' },body:JSON.stringify({jobId:jobId||null}) });
-    if(!response.ok){const payload=await response.json().catch(()=>({})),failure=new Error(payload.error||('MEDIA_SESSION_HTTP_'+response.status));failure.stage='session';failure.status=response.status;throw failure}
-    const payload=await response.json().catch(()=>({}));
-    mediaSessions[cacheKey]={token,expiresAt:Number(payload.expiresAt)||Number(session.expires_at)||now+300};
-    return true;
+    const request=(async()=>{
+      const response = await fetch('/api/session', { method: 'POST', headers: { Authorization: 'Bearer ' + token,'Content-Type':'application/json' },body:JSON.stringify({jobId:jobId||null}),signal:options.signal });
+      if(!response.ok){const payload=await response.json().catch(()=>({})),failure=new Error(payload.error||('MEDIA_SESSION_HTTP_'+response.status));failure.stage='session';failure.status=response.status;throw failure}
+      const payload=await response.json().catch(()=>({})),expiresAt=Number(payload.expiresAt)||Number(session.expires_at)||now+300;
+      if(jobId)usedMediaJobIds.add(jobId);
+      if(ownGeneration!==mediaSessionGeneration[key]||activeMediaSessionKeys[key]!==cacheKey)return {expiresAt,jobId,stale:true};
+      mediaSessions[cacheKey]={token,expiresAt};
+      if(jobId){
+        clearTimeout(mediaSessionTimers[key]);
+        const remaining=expiresAt*1000-Date.now(),renew=remaining>60000;
+        const delay=Math.max(1000,renew?remaining-60000:remaining+1000);
+        mediaSessionTimers[key]=setTimeout(()=>{mediaSessionTimers[key]=null;if(ownGeneration!==mediaSessionGeneration[key]||activeMediaSessionKeys[key]!==cacheKey)return;if(!renew){if(typeof global.dispatchEvent==='function'&&typeof global.CustomEvent==='function')global.dispatchEvent(new global.CustomEvent('eastudy:media-session-error',{detail:{scope:key,jobId,error:'MEMBERSHIP_EXPIRED'}}));return}syncMediaSession(key,{mediaUrl:options.mediaUrl,force:true,background:true}).catch(()=>{if(typeof global.dispatchEvent==='function'&&typeof global.CustomEvent==='function')global.dispatchEvent(new global.CustomEvent('eastudy:media-session-error',{detail:{scope:key,jobId}}))})},delay);
+      }
+      return {expiresAt,jobId};
+    })();
+    mediaSessionRequests[cacheKey]=request;
+    try{return await request}finally{delete mediaSessionRequests[cacheKey]}
   }
 
   async function clearMediaSession() {
-    Object.keys(mediaSessions).forEach(key=>{mediaSessions[key]=null});
-    await fetch('/api/session', { method: 'DELETE' }).catch(() => {});
+    Object.keys(mediaSessions).forEach(key=>{delete mediaSessions[key]});
+    Object.keys(mediaSessionRequests).forEach(key=>{delete mediaSessionRequests[key]});
+    for(const key of ['student','admin']){mediaSessionGeneration[key]+=1;clearTimeout(mediaSessionTimers[key]);mediaSessionTimers[key]=null;activeMediaSessionKeys[key]=''}
+    const jobIds=[...usedMediaJobIds];usedMediaJobIds.clear();
+    await fetch('/api/session', { method: 'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({jobIds}) }).catch(() => {});
   }
 
   async function apiRequest(path, init) {
@@ -235,7 +276,7 @@
     return { key: payload.key, url: payload.url, size: Number(payload.size) || file.size, type: 'image/webp' };
   }
 
-  global.EastudyCloudContent = Object.freeze({ pullPublished, pullAdmin, saveDraft, publish, publishEntity, setVideoPublication, createLearningRepair, listTrash, trashVideos, restoreVideo,
+  global.EastudyCloudContent = Object.freeze({ pullPublished, pullAdmin, saveDraft, publish, publishEntity, setVideoPublication, createLearningRepair, listTrash, trashVideos, restoreVideo,planPermanentVideoDeletion,confirmPermanentVideoDeletion,getVideoDeletion,
     processingHealth, createProcessingJob, listProcessingJobs, retryProcessingJob,
     syncMediaSession, clearMediaSession, uploadVideo, uploadCreatorAvatar });
 })(window);

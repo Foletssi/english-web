@@ -44,7 +44,7 @@ def validate_transcript(rows, duration):
     return rows
 
 
-def validate_learning(source, payload):
+def validate_learning(source, payload, minimum_schema_version=3):
     output = payload.get('sentences') if isinstance(payload, dict) else None
     if not isinstance(output, list) or len(output) != len(source):
         raise StudioError('AI_SENTENCE_COUNT', 'AI 返回的字幕数量不一致。', True)
@@ -52,6 +52,12 @@ def validate_learning(source, payload):
     if {row.get('id') for row in output if isinstance(row, dict)} != expected:
         raise StudioError('AI_SENTENCE_IDS', 'AI 返回了错误的字幕编号。', True)
     by_id = {row['id']: row for row in output}
+    try:
+        schema_version = int(payload.get('teachingSchemaVersion', 0))
+    except (TypeError, ValueError):
+        raise StudioError('AI_TEACHING_SCHEMA', 'AI 教学内容版本无效。', True)
+    if schema_version < minimum_schema_version:
+        raise StudioError('AI_TEACHING_SCHEMA', 'AI 教学内容版本过旧或缺失。', True)
     merged = []
     for original in source:
         row = by_id[original['id']]
@@ -78,6 +84,14 @@ def validate_learning(source, payload):
             core = str(expression.get('coreMeaningZh', '')).strip()
             context = str(expression.get('contextMeaningZh', '')).strip()
             usage = str(expression.get('usageNoteZh', '')).strip()
+            if schema_version >= 3:
+                expression_type = str(expression.get('expressionType', '')).strip()
+                lemma = str(expression.get('lemma', '')).strip()
+                reason = str(expression.get('selectionReasonZh', '')).strip()
+                if expression_type not in {'word', 'phrasal_verb', 'collocation', 'idiom', 'pattern'}:
+                    raise StudioError('AI_EXPRESSION_TYPE', 'AI 重点表达类型无效。', True)
+                if not lemma or not reason or not isinstance(expression.get('needsReview'), bool):
+                    raise StudioError('AI_TEACHING_FIELDS', 'AI 重点表达缺少教学判断字段。', True)
             if not core or not context or len(core) > 300 or len(context) > 500 or len(usage) > 500:
                 raise StudioError('AI_EXPRESSION_MEANING', 'AI 重点表达释义为空或过长。', True)
             by_surface[surface] = {**expression, 'surface': str(expression['surface']).strip(),
@@ -87,7 +101,11 @@ def validate_learning(source, payload):
                        'keyWords': key_words,
                        'expressions': [by_surface[normalize_words(x)] for x in key_words],
                        'reviewStatus': 'REVIEW',
-                       'learningAnalysis': {'method': 'server-ai', 'requiresReview': True}})
+                       'selectionSource': 'manual' if original.get('selectionLocked') else 'ai',
+                       'selectionLocked': bool(original.get('selectionLocked')),
+                       'learningContractVersion': 5 if schema_version >= 3 else 4,
+                       'learningAnalysis': {'method': 'server-ai', 'requiresReview': True,
+                                            'teachingSchemaVersion': schema_version}})
     return merged
 
 

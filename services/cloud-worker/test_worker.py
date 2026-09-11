@@ -13,6 +13,12 @@ SPEC.loader.exec_module(worker)
 
 
 class WorkerTests(unittest.TestCase):
+    def test_worker_reports_v5_protocol_version(self):
+        self.assertEqual(worker.VERSION, '2.3.0')
+        source = MODULE.read_text(encoding='utf-8')
+        self.assertIn("'learningRepairV5': True", source)
+        self.assertIn("'teachingSchemaVersion': 3", source)
+
     def test_upload_concurrency_is_bounded(self):
         with patch.dict('os.environ', {'EASTUDY_UPLOAD_CONCURRENCY': '99'}):
             self.assertEqual(worker.upload_concurrency(), 8)
@@ -128,7 +134,7 @@ class WorkerTests(unittest.TestCase):
         download_mock.assert_not_called()
         process_mock.assert_not_called()
         upload_mock.assert_not_called()
-        self.assertEqual(calls[-1][0], 'worker-complete-learning-v4')
+        self.assertEqual(calls[-1][0], 'worker-complete-learning-v5')
         self.assertEqual(calls[-1][1]['result']['sentences'], repaired)
 
 

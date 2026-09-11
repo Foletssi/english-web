@@ -26,7 +26,7 @@ equal(utils.allocateSeconds(600, [4, 3, 2, 1]), [240, 180, 120, 60], 'ten-minute
 equal(utils.mergeWatchRanges([[0, 10]], [[5, 15]], 100), [[0, 15]], 'overlapping ranges merge once');
 equal(learningContract.normalizeSurface('  Don’t—stop  '), "don't-stop", 'surface normalization matches cloud rules');
 const validSentence = { id: '1-1', english: "Don't stop", chinese: '不要停。', keyWords: ["Don't stop"], reviewStatus: 'APPROVED', expressions: [
-  { surface: "don't stop", coreMeaningZh: '不要停', contextMeaningZh: '在本句中用于鼓励继续', reviewStatus: 'APPROVED' }
+  { surface: "don't stop", lemma: "don't stop", expressionType: 'pattern', coreMeaningZh: '不要停', contextMeaningZh: '在本句中用于鼓励继续', selectionReasonZh: '常用祈使表达', needsReview: false, reviewStatus: 'APPROVED' }
 ] };
 equal(learningContract.sentenceIssues(validSentence, { forPublish: true }), [], 'approved complete learning content can publish');
 equal(learningContract.sentenceIssues({...validSentence, expressions: [{...validSentence.expressions[0], coreMeaningZh: '释义待生成'}]}).map(x=>x.code), ['CORE_MEANING_MISSING'], 'placeholder meanings are rejected');

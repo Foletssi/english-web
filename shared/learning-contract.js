@@ -48,6 +48,12 @@
         add('CORE_MEANING_MISSING', `expressions.${key}.coreMeaningZh`, `${key} 缺少核心释义`);
       if (!meaningful(expression.contextMeaningZh, 500))
         add('CONTEXT_MEANING_MISSING', `expressions.${key}.contextMeaningZh`, `${key} 缺少本句语境释义`);
+      if (!['word','phrasal_verb','collocation','idiom','pattern'].includes(String(expression.expressionType || '')))
+        add('EXPRESSION_TYPE_INVALID', `expressions.${key}.expressionType`, `${key} 缺少正确的表达类型`);
+      if (!meaningful(expression.lemma, 160))
+        add('EXPRESSION_LEMMA_MISSING', `expressions.${key}.lemma`, `${key} 缺少词头或可迁移结构`);
+      if (!meaningful(expression.selectionReasonZh, 300) || typeof expression.needsReview !== 'boolean')
+        add('EXPRESSION_TEACHING_FIELDS_MISSING', `expressions.${key}`, `${key} 缺少教学选择依据`);
       if (options.forPublish && expression.reviewStatus !== 'APPROVED' && expression.approved !== true)
         add('EXPRESSION_REVIEW_REQUIRED', `expressions.${key}.reviewStatus`, `${key} 的释义尚未确认`);
     }
@@ -100,7 +106,7 @@
   }
 
   global.EastudyLearningContract = Object.freeze({
-    VERSION: 4, ALLOWED_TAGS, normalizeSurface, meaningful, sentenceIssues,
+    VERSION: 5, TEACHING_SCHEMA_VERSION: 3, ALLOWED_TAGS, normalizeSurface, meaningful, sentenceIssues,
     tagIssues, videoPublishIssues, firstMessage
   });
 })(window);

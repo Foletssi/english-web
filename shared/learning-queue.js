@@ -10,10 +10,11 @@
 
   function eligibleVideos(videos, goalId) {
     const target = String(goalId || 'general');
+    const compatible = target === 'ielts' ? new Set(['ielts', 'ielts_academic', 'ielts_general']) : new Set([target]);
     return (Array.isArray(videos) ? videos : []).filter(video => {
       if (!video || video.status !== 'PUBLISHED') return false;
       if (!video.mediaUrl) return false;
-      return target === 'general' || mappedGoalIds(video).includes(target);
+      return target === 'general' || mappedGoalIds(video).some(id => compatible.has(id));
     });
   }
 

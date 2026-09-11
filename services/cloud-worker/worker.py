@@ -23,7 +23,7 @@ from ai_tools import prepare_asr_model, repair_learning  # noqa: E402
 from checkpoint import atomic_json  # noqa: E402
 
 
-VERSION = '2.2.0'
+VERSION = '2.3.0'
 DEFAULT_ENDPOINT = 'https://ehxqtgakjgqgmghhdmjg.supabase.co/functions/v1/video-processing'
 STAGE_MAP = {'probe': 'PROBE', 'transcode': 'TRANSCODE', 'asr': 'ASR', 'enrich': 'ENRICH'}
 
@@ -235,6 +235,7 @@ def capabilities():
     return {'ffmpeg': bool(shutil.which('ffmpeg') and shutil.which('ffprobe')),
             'whisper': whisper, 'asr': whisper_detail,
             'deepseek': bool(deepseek), 'learningRepairV4': True,
+            'learningRepairV5': True, 'teachingSchemaVersion': 3,
             'platform': platform.system().lower()}
 
 
@@ -402,12 +403,14 @@ def process_lease(client, lease):
                 if cancelled.is_set():
                     raise ApiError('JOB_LEASE_LOST_OR_CANCELLED')
                 report_progress(client, lease, 'ENRICH', min(99, int(progress)), message, metrics)
-            repaired, provenance = repair_learning(rows, {}, repair_progress, work / 'learning-repair-cache')
+            repair_mode = str(job_input.get('mode') or 'fill_missing')
+            repaired, provenance = repair_learning(rows, {}, repair_progress,
+                                                   work / 'learning-repair-cache', repair_mode)
             if cancelled.is_set():
                 raise ApiError('JOB_LEASE_LOST_OR_CANCELLED')
-            client.call('worker-complete-learning-v4', jobId=job_id, token=lease['token'],
-                        runId=run_id(lease), result={'sentences': repaired,
-                        'evidence': {'kind': 'learning-repair-v4', 'provenance': provenance}})
+            client.call('worker-complete-learning-v5', jobId=job_id, token=lease['token'],
+                        runId=run_id(lease), result={'teachingSchemaVersion': 3, 'sentences': repaired,
+                        'evidence': {'kind': 'learning-repair-v5', 'teachingSchemaVersion': 3, 'provenance': provenance}})
             print(f'[complete-learning-repair] {job_id}', flush=True)
             return
         source = work / Path(lease['job']['source_key']).name

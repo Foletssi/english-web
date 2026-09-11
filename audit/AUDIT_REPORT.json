@@ -351,7 +351,7 @@
     {
       "name": "student OTP and password contract regression",
       "ok": true,
-      "detail": "{\n  \"ok\": true,\n  \"tests\": 18\n}"
+      "detail": "{\n  \"ok\": true,\n  \"tests\": 27\n}"
     },
     {
       "name": "learning queue and countdown contract regression",

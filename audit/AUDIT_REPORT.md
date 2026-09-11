@@ -82,6 +82,6 @@ Result: **PASS**  (71/71)
 }
 - PASS — student OTP and password contract regression — {
   "ok": true,
-  "tests": 18
+  "tests": 27
 }
 - PASS — learning queue and countdown contract regression — Learning queue contract: 11/11 checks passed.

@@ -35,8 +35,14 @@ export async function onRequestPost({ request, env }) {
   });
 }
 
-export async function onRequestDelete() {
-  return json({ ok: true }, 200, {
-    'Set-Cookie': 'eastudy_media_session=; Path=/api; Max-Age=0; HttpOnly; Secure; SameSite=Strict'
-  });
+export async function onRequestDelete({ request }) {
+  const input = await readJson(request).catch(() => ({}));
+  const jobIds = [...new Set((Array.isArray(input.jobIds) ? input.jobIds : [])
+    .map(String).filter(id => /^[0-9a-f-]{36}$/i.test(id)))];
+  const headers = new Headers({ 'Content-Type':'application/json; charset=utf-8', 'Cache-Control':'no-store' });
+  headers.append('Set-Cookie', 'eastudy_media_session=; Path=/api; Max-Age=0; HttpOnly; Secure; SameSite=Strict');
+  for (const jobId of jobIds) {
+    headers.append('Set-Cookie', 'eastudy_playback=; Path=/api/processing/media/' + jobId + '/; Max-Age=0; HttpOnly; Secure; SameSite=Strict');
+  }
+  return new Response(JSON.stringify({ ok:true,clearedPlaybackPaths:jobIds.length }), { status:200,headers });
 }

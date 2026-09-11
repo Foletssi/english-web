@@ -8,7 +8,7 @@
 - The fixed production order is: run and verify the Supabase migration; fast-forward `main`; push GitHub; wait for Cloudflare Pages; verify student and administrator URLs in Chrome.
 - Do not merge or push `main` when the required Supabase migration has not succeeded.
 - Preserve untracked `tmp/` and `supabase/.temp/` content. Never add them to a deployment commit.
-- Content deletion is logical only. Never physically delete Cloudflare R2 media objects during rollout or verification.
+- Rollout and verification must never physically delete Cloudflare R2 media objects. Physical deletion is allowed only after an administrator explicitly confirms one already-trashed video through the durable permanent-deletion workflow; the cleanup worker must use server-derived exact keys and preserve shared objects.
 
 ## Production references
 
