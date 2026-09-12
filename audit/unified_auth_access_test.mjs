@@ -27,10 +27,12 @@ assert.equal(canonicalLoginKey('账号'),'');
 }
 
 {
+  let discarded=0;
   globalThis.fetch=async(url)=>{
     if(String(url).includes('/resolve_account_login_v2'))return response({state:'FOUND',userId:'u',identity:{email:'u@test.invalid'}});
     if(String(url).includes('/auth/v1/token'))return response({user:{id:'u'},access_token:'a',refresh_token:'r'});
     if(String(url).includes('/service_get_user_learning_access_v2'))return response({canEnterLearning:false,reason:'VIP_EXPIRED',expiresAt:'2026-01-01T00:00:00Z'});
+    if(String(url).includes('/auth/v1/logout')){discarded++;return new Response(null,{status:204})}
     throw new Error('unexpected '+url);
   };
   const result=await login({request:request('/api/auth/login',{account:'12345678',password:'111111'}),env});
@@ -38,6 +40,7 @@ assert.equal(canonicalLoginKey('账号'),'');
   const payload=await result.json();
   assert.equal(payload.error,'VIP_EXPIRED');
   assert.equal(payload.session,undefined);
+  assert.equal(discarded,1,'rejected login must revoke only its undelivered refresh session');
 }
 
 {
@@ -64,18 +67,20 @@ assert.equal(canonicalLoginKey('账号'),'');
 }
 
 {
-  let redeems=0;
+  let redeems=0,discarded=0;
   globalThis.fetch=async(url)=>{
     const value=String(url);
     if(value.includes('/resolve_account_login_v2'))return response({state:'FOUND',userId:'admin',identity:{email:'admin@test.invalid'}});
     if(value.includes('/auth/v1/token'))return response({user:{id:'admin'},access_token:'a',refresh_token:'r'});
     if(value.includes('/service_get_user_learning_access_v2'))return response({canEnterLearning:true,reason:'OK',kind:'ADMIN'});
+    if(value.includes('/auth/v1/logout')){discarded++;return new Response(null,{status:204})}
     if(value.includes('/redeem_activation_code')){redeems++;return response({})}
     throw new Error('unexpected '+url);
   };
   const result=await activate({request:request('/api/auth/activate-and-login',{account:'admin1',password:'111111',inviteCode:'EAST-AAAA-BBBB-CCCC'}),env});
   assert.equal(result.status,409);
   assert.equal(redeems,0);
+  assert.equal(discarded,1);
 }
 
 console.log('unified auth and access tests passed');

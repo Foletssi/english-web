@@ -1,8 +1,11 @@
 from pathlib import Path
 from html.parser import HTMLParser
-import json, subprocess, re, sys
+import json, os, subprocess, re, sys
 root=Path.cwd()
 checks=[]
+def checked_run(args):
+    environment={**os.environ,'NODE_NO_WARNINGS':'1'}
+    return subprocess.run(args,capture_output=True,text=True,encoding='utf-8',errors='replace',env=environment)
 def add(name,ok,detail=''):
     checks.append({'name':name,'ok':bool(ok),'detail':detail})
 class P(HTMLParser):
@@ -24,7 +27,7 @@ for rel in ['index.html','admin/index.html']:
         if not target.exists():missing.append(ref)
     add(f'{rel}: local script/css refs exist',not missing,','.join(missing))
 for rel in ['assets/js/app.js','admin/assets/admin.js','shared/content-store.js','shared/supabase-client.js','shared/cloud-content.js','functions/_lib/auth.js','functions/api/session.js','functions/api/media.js','functions/api/admin/uploads/init.js','functions/api/admin/uploads/part.js','functions/api/admin/uploads/complete.js','functions/api/admin/uploads/abort.js']:
-    r=subprocess.run(['node','--check',str(root/rel)],capture_output=True,text=True)
+    r=checked_run(['node','--check',str(root/rel)])
     add(f'{rel}: JavaScript syntax',r.returncode==0,(r.stderr or '').strip())
 student=(root/'index.html').read_text(encoding='utf-8')
 app=(root/'assets/js/app.js').read_text(encoding='utf-8')
@@ -93,13 +96,13 @@ learning_queue=(root/'shared/learning-queue.js').read_text(encoding='utf-8')
 add('learner goal profile is isolated by Supabase RLS',all(x in learning_sql for x in ['learner_goal_profiles','user_id = auth.uid()','primary_goal_id','onboarding_version']))
 add('student exposes goal onboarding and explicit autoplay controls',all(x in student for x in ['goalOnboarding','homeGoalStart','nextLessonCountdown','cancelNextLesson','queueLoopToggle']) and all(x in app for x in ['maybeShowGoalOnboarding','playNextQueueLesson','ensurePlaybackCountdown']))
 add('autoplay queue filters reviewed target content and supports fixed collections',all(x in learning_queue for x in ['mappedGoalIds','eligibleVideos','collectionId','queue?.loop']))
-cloud_run=subprocess.run(['node',str(root/'audit/cloud_content_contract_test.mjs')],capture_output=True,text=True)
+cloud_run=checked_run(['node',str(root/'audit/cloud_content_contract_test.mjs')])
 add('cloud content and R2 contract regression',cloud_run.returncode==0,(cloud_run.stdout+cloud_run.stderr).strip())
-run=subprocess.run(['node',str(root/'audit/runtime_contract_test.mjs')],capture_output=True,text=True)
+run=checked_run(['node',str(root/'audit/runtime_contract_test.mjs')])
 add('runtime shared-contract regression',run.returncode==0,(run.stdout+run.stderr).strip())
-auth_run=subprocess.run(['node',str(root/'audit/auth_contract_test.mjs')],capture_output=True,text=True)
+auth_run=checked_run(['node',str(root/'audit/auth_contract_test.mjs')])
 add('student OTP and password contract regression',auth_run.returncode==0,(auth_run.stdout+auth_run.stderr).strip())
-learning_run=subprocess.run(['node',str(root/'audit/learning_queue_contract_test.mjs')],capture_output=True,text=True)
+learning_run=checked_run(['node',str(root/'audit/learning_queue_contract_test.mjs')])
 add('learning queue and countdown contract regression',learning_run.returncode==0,(learning_run.stdout+learning_run.stderr).strip())
 report={'ok':all(c['ok'] for c in checks),'passed':sum(c['ok'] for c in checks),'total':len(checks),'checks':checks}
 (root/'audit/AUDIT_REPORT.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')

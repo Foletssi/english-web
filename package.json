@@ -10,11 +10,17 @@
     "deletion-browser-test": "node audit/content_deletion_browser_test.cjs",
     "cloud-deletion-browser-test": "node audit/cloud_video_trash_browser_test.cjs",
     "admin-intake-ui-test": "node audit/admin_intake_ui_test.cjs",
-    "auth-test": "node audit/auth_contract_test.mjs && node audit/single_720_invite_contract_test.mjs && node audit/invite_admin_contract_test.mjs && node audit/playback_ticket_test.mjs",
+    "auth-test": "node audit/auth_contract_test.mjs && node audit/unified_auth_access_test.mjs && node audit/single_720_invite_contract_test.mjs && node audit/invite_admin_contract_test.mjs && node audit/playback_ticket_test.mjs && node audit/playback_route_contract_test.mjs",
     "cloud-test": "node audit/cloud_content_contract_test.mjs && node audit/cloud_video_processing_test.mjs && py -3.12 -m unittest discover -s services/cloud-worker -p \"test_*.py\" -v",
     "learning-test": "node audit/learning_content_contract_test.mjs && node audit/learning_queue_contract_test.mjs && node audit/study_outbox_contract_test.mjs",
     "learner-admin-test": "node audit/player_loop_contract_test.mjs && node audit/invite_admin_ui_test.mjs",
-    "studio-test": "node audit/studio_client_contract_test.mjs && node audit/studio_v2_contract_test.mjs && node audit/media_player_contract_test.mjs && py -3.12 -m unittest discover -s services/local-studio -p \"test_*.py\" -v"
+    "studio-test": "node audit/studio_client_contract_test.mjs && node audit/studio_v2_contract_test.mjs && node audit/media_player_contract_test.mjs && py -3.12 -m unittest discover -s services/local-studio -p \"test_*.py\" -v",
+    "test:module-boundaries": "node audit/functional_module_boundaries_test.mjs",
+    "test:m01": "node audit/unified_auth_access_test.mjs && node audit/auth_contract_test.mjs && node audit/access_guard_contract_test.mjs",
+    "test:m04": "node audit/playback_ticket_test.mjs && node audit/playback_route_contract_test.mjs && node audit/media_player_contract_test.mjs",
+    "test:m08": "node audit/processing_truth_contract_test.mjs && node audit/processing_group_contract_test.mjs && node audit/learning_queue_contract_test.mjs",
+    "test:m10": "node audit/relative_time_contract_test.mjs && node audit/functional_module_boundaries_test.mjs",
+    "test:all": "npm run audit && npm run contract-test && npm run auth-test && npm run learning-test && npm run learner-admin-test && npm run deletion-test && npm run cloud-test && npm run studio-test && npm run test:module-boundaries && npm run test:m08 && npm run test:m10"
   },
   "description": "Eastudy Student Web + Chinese Admin Studio + sentence-aware learning analysis"
 }

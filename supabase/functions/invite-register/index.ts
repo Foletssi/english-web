@@ -86,20 +86,19 @@ async function createInviteUser({ email, password, nickname, attemptId }) {
   return payload;
 }
 
-function canonicalLoginKey(value) {
-  const input = String(value ?? '');
-  if (/[^ -~\t\r\n]/.test(input)) return '';
-  const raw = input.replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, '').toLowerCase();
-  if (!raw || raw.length > 128) return '';
-  const compact = raw.replace(/[ \t\r\n()-]/g, '');
-  if (/^1\d{10}$/.test(compact)) return compact;
-  if (/^86(1\d{10})$/.test(compact)) return compact.slice(2);
-  if (/^\+86(1\d{10})$/.test(compact)) return compact.slice(3);
-  if (/^\+[1-9]\d{7,14}$/.test(compact)) return compact;
-  return /^[a-z0-9][a-z0-9._-]{3,31}$/.test(raw) ? raw : '';
+async function discardSession(session) {
+  const token = String(session?.access_token || '');
+  if (!token) return;
+  const response = await fetch(`${required('SUPABASE_URL')}/auth/v1/logout?scope=local`, {
+    method: 'POST',
+    headers: { apikey: required('SUPABASE_SERVICE_ROLE_KEY'), Authorization: `Bearer ${token}` }
+  });
+  if (!response.ok && response.status !== 401) throw new Error(`AUTH_LOGOUT_${response.status}`);
 }
 
 async function handleRegister(request) {
+  let session = null;
+  let delivered = false;
   const text = await request.text();
   if (text.length > 8192) return json({ error: 'REGISTRATION_INPUT_INVALID' }, 400);
   let input;
@@ -140,9 +139,10 @@ async function handleRegister(request) {
       p_fence: reserved.fence,
       p_auth_user_id: user.id
     });
-    const session = await passwordGrant(reserved.authEmail, password);
+    session = await passwordGrant(reserved.authEmail, password);
     const access = await serviceRpc('service_get_user_learning_access_v2', { p_user_id: session.user.id });
     if (access?.canEnterLearning !== true) throw new Error(access?.reason || 'REGISTRATION_UNAVAILABLE');
+    delivered = true;
     return json({ account, membership, session, access }, 201);
   } catch (error) {
     const raw = String(error?.message || '').toUpperCase();
@@ -151,6 +151,10 @@ async function handleRegister(request) {
     console.warn('Invite registration failed', known || raw.replace(/[^A-Z0-9_:-]/g, '').slice(0, 120));
     if (known === 'REGISTRATION_INPUT_INVALID') return json({ error: known }, 400);
     return json({ error: known || 'REGISTRATION_UNAVAILABLE' }, known ? 409 : 503);
+  } finally {
+    if (session && !delivered) {
+      await discardSession(session).catch((error) => console.warn('registration session cleanup failed', String(error?.message || error)));
+    }
   }
 }
 
@@ -159,3 +163,4 @@ Deno.serve((request) => {
   if (request.method !== 'POST') return json({ error: 'METHOD_NOT_ALLOWED' }, 405);
   return handleRegister(request);
 });
+import { canonicalLoginKey } from '../_shared/login-identity.js';

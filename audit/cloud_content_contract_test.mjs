@@ -86,7 +86,8 @@ assert.ok(!requeueSql.toLowerCase().includes('delete from') && !requeueSql.inclu
 assert.ok(processingOutput.includes('resolve_processing_output'), 'R2 output writes must use a scoped database token');
 assert.ok(processingOutput.includes('MAX_ASSET_BYTES'), 'R2 output writes must be bounded');
 assert.ok(processingOutput.includes("crypto.subtle.digest('SHA-256'"), 'R2 output writes must hash actual bytes');
-assert.ok(processingMedia.includes('authenticate(request, env)'), 'processed media must require an authenticated session');
+assert.ok(processingMedia.includes("openPlaybackTicket(cookieValue(request,'eastudy_playback')"), 'processed media must require an opaque job-scoped playback ticket');
+assert.ok(!processingMedia.includes('authenticate(request, env)'), 'HLS requests must not repeat full Supabase authentication per segment');
 assert.ok(processingMedia.includes("request.headers.get('Range')"), 'processed media must support byte ranges');
 for (const action of ['worker-heartbeat', 'worker-claim', 'worker-job-heartbeat', 'worker-progress', 'worker-fail', 'worker-complete']) {
   assert.ok(edgeWorker.includes(`'${action}'`), `Edge worker must expose ${action}`);

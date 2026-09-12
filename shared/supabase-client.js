@@ -187,6 +187,7 @@
     const api = client(scope);
     if (api) await api.auth.signOut();
     if (scope !== 'admin') {
+      window.EastudyAccessGuard?.stop();
       stopLearnerActivity();
       observeStudentIdentity(null);
     }

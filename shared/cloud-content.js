@@ -157,21 +157,31 @@
     return { data: firstRow(data), error: error || null };
   }
 
-  async function listProcessingJobs(limit = 500) {
+  function normalizeProcessingJob(job) {
+    const stageStep = { LOCAL_DOWNLOAD: 'download', PROBE: 'probe', TRANSCODE: 'transcode', ASR: 'asr', ENRICH: 'enrich', LOCAL_UPLOAD: 'output', REVIEW: 'review' };
+    const learningRepair=job.type==='LEARNING_REPAIR',order=learningRepair?['enrich','review']:['download','probe','transcode','asr','enrich','output','review'];
+    const currentStep = stageStep[job.stage] || (learningRepair?'enrich':'download');
+    const current = order.indexOf(currentStep);
+    const status = String(job.status || 'WAITING').toUpperCase();
+    const telemetry = job.telemetry && typeof job.telemetry === 'object' ? job.telemetry : {};
+    return { ...job, ...telemetry, telemetry, videoId: Number(job.videoId), rawStatus: status, status, currentStep,
+      steps: order.map((step, index) => [step, index < current ? 'SUCCESS' : index === current ? (status === 'ERROR' ? 'ERROR' : status === 'REVIEW' || status === 'QUEUED' || status === 'WAITING' ? 'WAITING' : 'RUNNING') : 'WAITING']) };
+  }
+
+  async function listProcessingJobs(page = 1, pageSize = 50) {
     const api = auth('admin');
     if (!api) return { rows: [], error: new Error('SUPABASE_NOT_CONFIGURED') };
-    const { data, error } = await api.rpc('admin_list_processing_jobs', { p_limit: Number(limit) || 50 });
-    const stageStep = { LOCAL_DOWNLOAD: 'download', PROBE: 'probe', TRANSCODE: 'transcode', ASR: 'asr', ENRICH: 'enrich', LOCAL_UPLOAD: 'output', REVIEW: 'review' };
-    const rows = (Array.isArray(data) ? data : []).map((row) => row.job || row).map((job) => {
-      const learningRepair=job.type==='LEARNING_REPAIR',order=learningRepair?['enrich','review']:['download','probe','transcode','asr','enrich','output','review'];
-      const currentStep = stageStep[job.stage] || (learningRepair?'enrich':'download');
-      const current = order.indexOf(currentStep);
-      const status = String(job.status || 'WAITING').toUpperCase();
-      const telemetry = job.telemetry && typeof job.telemetry === 'object' ? job.telemetry : {};
-      return { ...job, ...telemetry, telemetry, videoId: Number(job.videoId), rawStatus: status, status, currentStep,
-        steps: order.map((step, index) => [step, index < current ? 'SUCCESS' : index === current ? (status === 'ERROR' ? 'ERROR' : status === 'REVIEW' || status === 'QUEUED' || status === 'WAITING' ? 'WAITING' : 'RUNNING') : 'WAITING']) };
+    const { data, error } = await api.rpc('admin_list_processing_video_groups_v1', {
+      p_page: Math.max(1, Number(page) || 1), p_page_size: Math.max(1, Math.min(100, Number(pageSize) || 50))
     });
-    return { rows, error: error || null };
+    if (error) return { rows: [], groups: [], error };
+    if (!data || !Array.isArray(data.items)) return { rows: [], groups: [], error: new Error('INVALID_PROCESSING_GROUP_RESPONSE') };
+    const groups=data.items.map(group=>{
+      const records=(Array.isArray(group.records)?group.records:[]).map(normalizeProcessingJob);
+      const current=records.find(job=>['RUNNING','QUEUED','WAITING'].includes(job.rawStatus))||records.find(job=>job.rawStatus!=='CANCELLED')||records[0]||null;
+      return {videoId:String(group.videoId),video:group.video||null,recordCount:Number(group.recordCount)||records.length,current,records};
+    }).filter(group=>group.current);
+    return { rows: groups.flatMap(group=>group.records), groups, total:Number(data.total)||0, page:Number(data.page)||1, pageSize:Number(data.pageSize)||50, error:null };
   }
 
   async function retryProcessingJob(jobId) {

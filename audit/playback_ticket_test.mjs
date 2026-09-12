@@ -18,6 +18,7 @@ const jobId='00000000-0000-4000-8000-000000000001';
 const cleared=await onRequestDelete({request:new Request('https://example.test/api/session',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({jobIds:[jobId,'invalid']})})});
 const setCookies=typeof cleared.headers.getSetCookie==='function'?cleared.headers.getSetCookie():[cleared.headers.get('set-cookie')||''];
 assert.ok(setCookies.some(value=>value.includes('eastudy_media_session=')&&value.includes('Path=/api')));
+assert.ok(setCookies.some(value=>value.includes('eastudy_catalog=')&&value.includes('Path=/api/processing/media/')));
 assert.ok(setCookies.some(value=>value.includes('eastudy_playback=')&&value.includes('/api/processing/media/'+jobId+'/')),'logout must clear every issued job-path playback cookie');
 const client=fs.readFileSync('shared/cloud-content.js','utf8');
 assert.ok(client.includes('mediaSessionGeneration'),'late session responses must be fenced by generation');

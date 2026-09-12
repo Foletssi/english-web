@@ -1,4 +1,6 @@
-import { authenticate, json, requireBucket } from '../../../_lib/auth.js';
+import { json, requireBucket } from '../../../_lib/auth.js';
+import { cookieValue, openPlaybackTicket } from '../../../_lib/playback-ticket.js';
+import { serviceRpc } from '../../../_lib/supabase-admin.js';
 
 function joinedPath(value) {
   return Array.isArray(value) ? value.join('/') : String(value || '');
@@ -23,23 +25,24 @@ async function handle({ request, env, params, waitUntil }, headOnly) {
   const playbackAsset=/^720p\/(?:index\.m3u8|segment_[0-9]{5}\.ts)$/.test(path);
   let key='';
   if(playbackAsset){
-    const auth = await authenticate(request, env);
-    if (auth.error) return auth.error;
-    const response = await fetch(auth.url + '/rest/v1/rpc/resolve_processing_media', {
-      method: 'POST', headers: { ...auth.headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ p_job_id: job, p_path: path })
-    });
-    if (!response.ok) return json({ error: response.status===401||response.status===403?'PLAYBACK_FORBIDDEN':'PLAYBACK_AUTH_UNAVAILABLE' }, response.status===401||response.status===403?403:503);
-    key = (await response.json())?.[0]?.object_key || '';
+    try {
+      const ticket=await openPlaybackTicket(cookieValue(request,'eastudy_playback'),env);
+      if(ticket.job!==job||typeof ticket.sub!=='string'||!ticket.sub||typeof ticket.prefix!=='string'||!ticket.prefix.startsWith('videos/')||ticket.prefix.includes('..'))return json({error:'PLAYBACK_FORBIDDEN'},403);
+      key=ticket.prefix+path;
+    } catch {
+      return json({error:'PLAYBACK_SESSION_REQUIRED'},401);
+    }
   }else{
-    const auth = await authenticate(request, env);
-    if (auth.error) return auth.error;
-    const response = await fetch(auth.url + '/rest/v1/rpc/resolve_processing_media', {
-      method: 'POST', headers: { ...auth.headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ p_job_id: job, p_path: path })
-    });
-    if (!response.ok) return json({ error: 'MEDIA_AUTH_FAILED' }, 502);
-    key = (await response.json())?.[0]?.object_key || '';
+    if(path!=='cover.webp')return json({error:'MEDIA_PATH_INVALID'},400);
+    try {
+      const ticket=await openPlaybackTicket(cookieValue(request,'eastudy_catalog'),env,'eastudy-catalog');
+      const access=await serviceRpc(env,'service_resolve_playback_access_v2',{p_user_id:ticket.sub,p_job_id:job,p_path:path});
+      if(access?.canPlay!==true)return json({error:access?.reason||'PLAYBACK_FORBIDDEN'},403);
+      key=String(access.objectKey||'');
+    } catch (error) {
+      console.error('cover authorization unavailable',error?.message||error);
+      return json({error:'PLAYBACK_AUTH_UNAVAILABLE'},503);
+    }
   }
   if (!key) return json({ error: 'MEDIA_NOT_FOUND' }, 404);
   const requested = request.headers.get('Range');

@@ -37,10 +37,12 @@ assert.ok(migration.includes('gen_random_bytes(16)'));
 assert.ok(html.includes('id="signinInviteCode"'));
 assert.ok(html.includes('id="signinPasswordConfirm"'));
 assert.ok(!html.includes('id="authGetCode"'));
-assert.ok(session.includes("eastudy_media_session='+encodeURIComponent(token)"));
+assert.ok(session.includes("eastudy_playback='+encodeURIComponent(ticket)"));
+assert.ok(session.includes("'eastudy_catalog=' + encodeURIComponent(ticket)"));
+assert.ok(!session.includes("encodeURIComponent(token)+'; Path=/api"));
 assert.ok(session.includes("Path=/api/processing/media/"));
-assert.ok(mediaRoute.includes('authenticate(request, env)'));
-assert.ok(mediaRoute.includes("p_path: path"));
+assert.ok(mediaRoute.includes("openPlaybackTicket(cookieValue(request,'eastudy_playback')"));
+assert.ok(!mediaRoute.includes('authenticate(request, env)'));
 assert.ok(mediaRoute.includes("typeof waitUntil==='function'"));
 
 assert.ok(html.includes('id="learningPlanEditor" hidden'));

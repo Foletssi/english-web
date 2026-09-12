@@ -26,14 +26,14 @@ export async function sealPlaybackTicket(payload, env) {
   return `${base64Url(iv)}.${base64Url(new Uint8Array(encrypted))}`;
 }
 
-export async function openPlaybackTicket(value, env) {
+export async function openPlaybackTicket(value, env, audience = 'eastudy-playback') {
   const [ivPart, dataPart, extra] = String(value || '').split('.');
   if (!ivPart || !dataPart || extra) throw new Error('PLAYBACK_TICKET_INVALID');
   const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromBase64Url(ivPart) },
     await key(env), fromBase64Url(dataPart));
   const payload = JSON.parse(decoder.decode(plain));
   const now = Math.floor(Date.now() / 1000);
-  if (!payload || payload.aud !== 'eastudy-playback' || !Number.isFinite(payload.exp) || payload.exp <= now) {
+  if (!payload || payload.aud !== audience || !Number.isFinite(payload.exp) || payload.exp <= now) {
     throw new Error('PLAYBACK_TICKET_EXPIRED');
   }
   return payload;

@@ -1,5 +1,6 @@
 import { authenticate, json, readJson } from '../_lib/auth.js';
-import { userRpc } from '../_lib/supabase-admin.js';
+import { sealPlaybackTicket } from '../_lib/playback-ticket.js';
+import { serviceRpc, userRpc } from '../_lib/supabase-admin.js';
 
 export async function onRequestPost({ request, env }) {
   const auth = await authenticate(request, env);
@@ -18,15 +19,23 @@ export async function onRequestPost({ request, env }) {
   if (!jobId) {
     const expires = Date.parse(access.expiresAt || '') / 1000;
     const maxAge = access.kind === 'ADMIN' ? 300 : Math.max(1, Math.min(300, Math.floor(expires - Date.now() / 1000)));
-    return json({ ok: true, access }, 200, {
-      'Set-Cookie': 'eastudy_media_session=' + encodeURIComponent(token) + '; Path=/api; Max-Age=' + maxAge + '; HttpOnly; Secure; SameSite=Strict'
-    });
+    const exp = Math.floor(Date.now() / 1000) + maxAge;
+    try {
+      const ticket = await sealPlaybackTicket({ aud: 'eastudy-catalog', sub: auth.user.id, exp }, env);
+      return json({ ok: true, access, expiresAt: exp }, 200, {
+        'Set-Cookie': 'eastudy_catalog=' + encodeURIComponent(ticket) + '; Path=/api/processing/media/; Max-Age=' + maxAge + '; HttpOnly; Secure; SameSite=Strict'
+      });
+    } catch (error) {
+      console.error('catalog ticket unavailable', error?.message || error);
+      return json({ error: 'PLAYBACK_TICKET_UNAVAILABLE' }, 503);
+    }
   }
   if (!/^[0-9a-f-]{36}$/i.test(jobId)) return json({ error: 'MEDIA_JOB_INVALID' }, 400);
   let playback;
   try {
-    const object = await userRpc(env, token, 'resolve_processing_media', { p_job_id: jobId, p_path: '720p/index.m3u8' });
-    playback = { ...access, canPlay: Boolean(object?.object_key), objectKey: object?.object_key || '' };
+    playback = await serviceRpc(env, 'service_resolve_playback_access_v2', {
+      p_user_id: auth.user.id, p_job_id: jobId, p_path: '720p/index.m3u8'
+    });
   } catch (error) {
     console.error('playback authorization unavailable', error?.code || error?.message || error);
     return json({ error: 'PLAYBACK_AUTH_UNAVAILABLE' }, 503);
@@ -37,9 +46,15 @@ export async function onRequestPost({ request, env }) {
   const entitlementExpiry=Date.parse(playback.expiresAt||'')/1000;
   const now = Math.floor(Date.now() / 1000),exp=playback.kind==='ADMIN'?now+300:Number.isFinite(entitlementExpiry)?Math.min(now+300,Math.floor(entitlementExpiry)):now;
   if(exp<=now)return json({error:'MEMBERSHIP_EXPIRED'},403);
-  return json({ ok:true,expiresAt:exp },200,{
-    'Set-Cookie':'eastudy_media_session='+encodeURIComponent(token)+'; Path=/api/processing/media/'+jobId+'/; Max-Age='+(exp-now)+'; HttpOnly; Secure; SameSite=Strict'
-  });
+  try {
+    const ticket = await sealPlaybackTicket({ aud:'eastudy-playback',sub:auth.user.id,job:jobId,prefix:String(playback.prefix||''),exp },env);
+    return json({ ok:true,expiresAt:exp },200,{
+      'Set-Cookie':'eastudy_playback='+encodeURIComponent(ticket)+'; Path=/api/processing/media/'+jobId+'/; Max-Age='+(exp-now)+'; HttpOnly; Secure; SameSite=Strict'
+    });
+  } catch (error) {
+    console.error('playback ticket unavailable', error?.message || error);
+    return json({ error:'PLAYBACK_TICKET_UNAVAILABLE' },503);
+  }
 }
 
 export async function onRequestDelete({ request }) {
@@ -48,6 +63,7 @@ export async function onRequestDelete({ request }) {
     .map(String).filter(id => /^[0-9a-f-]{36}$/i.test(id)))];
   const headers = new Headers({ 'Content-Type':'application/json; charset=utf-8', 'Cache-Control':'no-store' });
   headers.append('Set-Cookie', 'eastudy_media_session=; Path=/api; Max-Age=0; HttpOnly; Secure; SameSite=Strict');
+  headers.append('Set-Cookie', 'eastudy_catalog=; Path=/api/processing/media/; Max-Age=0; HttpOnly; Secure; SameSite=Strict');
   for (const jobId of jobIds) {
     headers.append('Set-Cookie', 'eastudy_media_session=; Path=/api/processing/media/' + jobId + '/; Max-Age=0; HttpOnly; Secure; SameSite=Strict');
     headers.append('Set-Cookie', 'eastudy_playback=; Path=/api/processing/media/' + jobId + '/; Max-Age=0; HttpOnly; Secure; SameSite=Strict');
