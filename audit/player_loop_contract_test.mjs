@@ -56,6 +56,14 @@ function loadLoop(video) {
 }
 
 const state = loadPlayerState();
+for (const code of ['PLAYBACK_AUTH_UNAVAILABLE','PLAYBACK_TICKET_UNAVAILABLE','SESSION_TIMEOUT','']) {
+  const message=state.sessionMessage(code).join(' ');
+  assert.match(message,/播放服务暂时不可用/);
+  assert.doesNotMatch(message,/检查登录|重新登录/,'server failures must not blame the learner session');
+}
+assert.match(state.sessionMessage('INVALID_SESSION').join(' '),/重新登录/);
+assert.match(state.sessionMessage('VIP_EXPIRED').join(' '),/续期/);
+assert.match(state.sessionMessage('PLAYBACK_FORBIDDEN').join(' '),/管理员/);
 const sentences = [
   { id: 'a', s: 1, e: 2, en: 'First' },
   { id: 'b', s: 3, e: 5, en: 'Second' }

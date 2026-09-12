@@ -5,6 +5,19 @@ function initial(){
   return {catalog:'loading',session:'loading',media:'idle',captions:'loading',playRequested:false,firstFramePresented:false,error:null};
 }
 
+function sessionMessage(code){
+  if(['AUTHENTICATION_REQUIRED','AUTH_REQUIRED','INVALID_SESSION','PLAYBACK_SESSION_REQUIRED'].includes(String(code||''))){
+    return ['登录状态已失效','请重新登录后继续观看。',true];
+  }
+  if(['VIP_EXPIRED','MEMBERSHIP_EXPIRED'].includes(String(code||''))){
+    return ['会员已到期','请续期后继续观看，学习进度已保留。',true];
+  }
+  if(['PLAYBACK_FORBIDDEN','ROLE_FORBIDDEN','VIP_REQUIRED','VIP_REVOKED','ACCOUNT_UNAVAILABLE'].includes(String(code||''))){
+    return ['暂时无法观看','请联系管理员确认账号或视频的可用状态。',true];
+  }
+  return ['播放服务暂时不可用','请稍后重试，当前学习位置已经保留。',true];
+}
+
 function buildCaptionTimeline(rows){
   return (rows||[]).map((sentence,index)=>({
     sentence,index,
@@ -45,5 +58,5 @@ function activeSlice(previous,current){
   return {activeSeconds:wall,watchRange:[previous.mediaTime,current.mediaTime]};
 }
 
-global.EastudyPlayerState=Object.freeze({initial,buildCaptionTimeline,selectCaption,captionView,activeSlice});
+global.EastudyPlayerState=Object.freeze({initial,sessionMessage,buildCaptionTimeline,selectCaption,captionView,activeSlice});
 })(window);

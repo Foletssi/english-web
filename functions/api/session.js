@@ -1,6 +1,23 @@
-import { authenticate, json, readJson } from '../_lib/auth.js';
+import { authenticate, json, readJson, requireAdmin } from '../_lib/auth.js';
 import { sealPlaybackTicket } from '../_lib/playback-ticket.js';
 import { serviceRpc, userRpc } from '../_lib/supabase-admin.js';
+
+// Administrator-only readiness check. Never return credentials or ticket values.
+export async function onRequestGet({ request, env }) {
+  const auth = await requireAdmin(request, env);
+  if (auth.error) return auth.error;
+  const checks = {
+    mediaBucket: Boolean(env.VIDEO_BUCKET),
+    authorizationCredential: Boolean(String(env.SUPABASE_SERVICE_ROLE_KEY || '').trim()),
+    ticketEncryption: false
+  };
+  try {
+    await sealPlaybackTicket({ aud: 'eastudy-readiness', exp: 0 }, env);
+    checks.ticketEncryption = true;
+  } catch { /* Configuration failure is reported without revealing its value. */ }
+  const ready = Object.values(checks).every(Boolean);
+  return json({ ready, checks }, ready ? 200 : 503);
+}
 
 export async function onRequestPost({ request, env }) {
   const auth = await authenticate(request, env);
