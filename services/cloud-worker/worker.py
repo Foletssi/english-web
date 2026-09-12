@@ -392,6 +392,11 @@ def process_lease(client, lease):
         if not work.resolve().is_relative_to(worker_root()):
             raise ApiError('WORK_PATH_INVALID')
         job_input = lease['job'].get('input') or {}
+        if job_input.get('kind') == 'MEDIA_REENCODE':
+            # A generic admin retry must never send a media-only job through AI.
+            report_failure(client, lease, {'code': 'MEDIA_REENCODE_OPERATOR_REQUIRED',
+                'message': '请通过媒体维护命令继续此任务，现有视频与学习内容保持不变。'}, False)
+            return
         if job_input.get('kind') == 'LEARNING_REPAIR':
             if not run_id(lease):
                 raise ApiError('LEARNING_REPAIR_PROTOCOL_REQUIRED')

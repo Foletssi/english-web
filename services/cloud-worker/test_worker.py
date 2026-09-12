@@ -13,6 +13,18 @@ SPEC.loader.exec_module(worker)
 
 
 class WorkerTests(unittest.TestCase):
+    def test_generic_retry_cannot_reprocess_media_maintenance_learning(self):
+        lease = {'job': {'id': '00000000-0000-0000-0000-000000000001',
+                        'input': {'kind': 'MEDIA_REENCODE'}}, 'token': 'fixture'}
+        with tempfile.TemporaryDirectory() as folder, patch.object(worker, 'worker_root', return_value=Path(folder)), \
+             patch.object(worker, 'heartbeat_loop'), patch.object(worker, 'report_failure') as failed, \
+             patch.object(worker, 'download') as download, patch.object(worker, 'process_job') as pipeline:
+            worker.process_lease(object(), lease)
+            self.assertEqual(failed.call_args.args[2]['code'], 'MEDIA_REENCODE_OPERATOR_REQUIRED')
+            self.assertFalse(failed.call_args.args[3])
+            download.assert_not_called()
+            pipeline.assert_not_called()
+
     def test_worker_reports_v5_protocol_version(self):
         self.assertEqual(worker.VERSION, '2.3.1')
         source = MODULE.read_text(encoding='utf-8')
