@@ -9,7 +9,9 @@
 - 不带 jobId 的目录签票：HTTP 503、`PLAYBACK_TICKET_UNAVAILABLE`。
 - 通过 Supabase 官方 CLI、只读 SQL，使用 service_role 声明执行忙碌一天视频的 `service_resolve_playback_access_v2`：成功，`canPlay=true`，返回 720P 清单的真实对象键。
 
-因此已排除本次复现账号的密码/VIP拒绝和该视频数据库授权函数执行失败；故障位于 Cloudflare 播放授权调用、票据签发环节。尚需读取 Cloudflare 配置以区分密钥缺失、格式错误或无效。不得仅凭 503 推断视频文件已丢失。
+因此已排除本次复现账号的密码/VIP拒绝和该视频数据库授权函数执行失败；故障位于 Cloudflare 播放授权调用、票据签发环节。不得仅凭 503 推断视频文件已丢失。
+
+2026-09-12 后续生产实测：部署 `7690adf` 后，管理员调用 `GET /api/session` 返回 HTTP 503：`mediaBucket=true`、`authorizationCredential=false`、`ticketEncryption=false`。已确认 R2 绑定存在、`SUPABASE_SERVICE_ROLE_KEY` 未配置或为空、`PLAYBACK_TICKET_KEY` 缺失或不可用于 AES 加密。这是本次播放中断的直接配置原因。
 
 ## 本次代码修改边界
 
@@ -47,5 +49,7 @@
 
 ## 当前状态与恢复
 
-本地上述专项测试通过；尚未补齐 Cloudflare 配置，尚不能宣告播放恢复。
-Wrangler 已确认无已登录会话，首次官方 Pages 授权等待超时，需要用户完成新的授权。数据库迁移列表与远端一致，dry-run确认没有待执行迁移。Git远端查询曾遇连接重置，尚未提交或推送本次修改。Git基线可用于代码回退，但基线本身存在本次播放故障，不应把回退当作播放恢复。
+本地上述专项测试通过。`7690adf` 已提交并推送 main，Cloudflare 页面资源及新增配置检查已确认上线。
+用户已通过 Chrome 授权并提供成功截图。官方 Wrangler 4.131.0 的回调服务器在授权交换完成、跳转成功页后等待一个 Chrome 本机连接关闭，导致凭据保存延迟。用户退出 Chrome 后官方 CLI 确认登录成功，无需再次授权。
+已通过 Cloudflare Pages API 在生产环境补齐 `SUPABASE_SERVICE_ROLE_KEY` 和 `PLAYBACK_TICKET_KEY`，两者均为 `secret_text`；前者取自本 Supabase 项目的官方 CLI，已用真实 RPC 验证有效；后者为新生成的随机 32 字节 Base64URL 密钥。整个过程不输出或提交密钥。更新后确认 R2 绑定与 Preview 环境均未变化。下一步通过 main 推送重新构建，再做真实视频清单和分片验证；配置存在不能替代播放验收。
+数据库迁移列表与远端一致，dry-run确认没有待执行迁移。Git连接曾重置，使用 HTTP/1.1 重试后正常推送。Git基线可用于代码回退，但基线本身存在本次播放故障，不应把回退当作播放恢复。
