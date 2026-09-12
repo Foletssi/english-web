@@ -164,13 +164,13 @@
       stageStartedAt:job.stageStartedAt||job.stage_started_at,attemptStartedAt:job.attemptStartedAt||job.attempt_started_at,
       leaseUntil:job.leaseUntil||job.lease_until,nextRunAt:job.nextRunAt||job.next_run_at,telemetry:job.telemetry||job.work?.telemetry};
     const stageStep = { LOCAL_DOWNLOAD: 'download', PROBE: 'probe', TRANSCODE: 'transcode', ASR: 'asr', ENRICH: 'enrich', LOCAL_UPLOAD: 'output', REVIEW: 'review' };
-    const learningRepair=job.type==='LEARNING_REPAIR',order=learningRepair?['enrich','review']:['download','probe','transcode','asr','enrich','output','review'];
-    const currentStep = stageStep[job.stage] || (learningRepair?'enrich':'download');
+    const learningRepair=job.type==='LEARNING_REPAIR',mediaOnly=job.type==='MEDIA_REENCODE',order=learningRepair?['enrich','review']:mediaOnly?['download','probe','transcode','output']:['download','probe','transcode','asr','enrich','output','review'];
+    const currentStep = mediaOnly&&job.stage==='REVIEW'?'output':stageStep[job.stage] || (learningRepair?'enrich':'download');
     const current = order.indexOf(currentStep);
     const status = String(job.status || 'WAITING').toUpperCase();
     const telemetry = job.telemetry && typeof job.telemetry === 'object' ? job.telemetry : {};
     return { ...job, ...telemetry, telemetry, videoId: Number(job.videoId), rawStatus: status, status, currentStep,
-      steps: order.map((step, index) => [step, index < current ? 'SUCCESS' : index === current ? (status === 'ERROR' ? 'ERROR' : status === 'REVIEW' || status === 'QUEUED' || status === 'WAITING' ? 'WAITING' : 'RUNNING') : 'WAITING']) };
+      steps: order.map((step, index) => [step, mediaOnly&&status==='REVIEW'||index < current ? 'SUCCESS' : index === current ? (status === 'ERROR' ? 'ERROR' : status === 'REVIEW' || status === 'QUEUED' || status === 'WAITING' ? 'WAITING' : 'RUNNING') : 'WAITING']) };
   }
 
   async function listProcessingJobs(page = 1, pageSize = 50) {
