@@ -247,14 +247,19 @@
     try{return await request}finally{if(mediaSessionRequests[cacheKey]===request)delete mediaSessionRequests[cacheKey]}
   }
 
-  async function clearMediaSession() {
+  async function clearMediaSession(waitMs = 1500) {
     const pending=Object.values(mediaSessionRequests);
     for(const key of ['student','admin']){mediaSessionGeneration[key]+=1;clearTimeout(mediaSessionTimers[key]);mediaSessionTimers[key]=null;activeMediaSessionKeys[key]=''}
-    await Promise.allSettled(pending);
+    const pendingSettled=Promise.allSettled(pending);
+    let pendingFinished=true,timer=null;
+    if(pending.length)pendingFinished=await Promise.race([pendingSettled.then(()=>true),new Promise(resolve=>{timer=setTimeout(()=>resolve(false),Math.max(0,Number(waitMs)||0))})]);
+    clearTimeout(timer);
     Object.keys(mediaSessions).forEach(key=>{delete mediaSessions[key]});
     Object.keys(mediaSessionRequests).forEach(key=>{delete mediaSessionRequests[key]});
     const jobIds=[...usedMediaJobIds];usedMediaJobIds.clear();
-    await fetch('/api/session', { method: 'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({jobIds}) }).catch(() => {});
+    const clearCookie=()=>fetch('/api/session', { method: 'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({jobIds}) }).catch(() => {});
+    await clearCookie();
+    if(!pendingFinished)void pendingSettled.then(clearCookie);
   }
 
   async function apiRequest(path, init) {

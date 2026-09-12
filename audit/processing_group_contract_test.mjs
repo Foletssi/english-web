@@ -11,6 +11,8 @@ assert.match(migration,/where\s+\w+\.video_id\s*=\s*p\.video_id/);
 assert.ok(migration.includes("content_video_trash"));
 assert.ok(migration.includes('admin_list_processing_video_history_v1'));
 assert.ok(migration.includes('admin_get_processing_job_v1'));
+assert.ok(migration.includes('processing_job_admin_summary_v1'));
+assert.equal(/jsonb_agg\s*\(\s*to_jsonb/i.test(migration),false,'history must not expose complete processing rows');
 assert.ok(migration.includes('limit 5'));
 assert.ok(client.includes("api.rpc('admin_list_processing_video_groups_v1'"));
 assert.ok(client.includes("api.rpc('admin_get_processing_job_v1'"));

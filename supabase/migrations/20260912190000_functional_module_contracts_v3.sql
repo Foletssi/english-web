@@ -55,6 +55,24 @@ begin
 end;
 $$;
 
+create or replace function private.processing_job_admin_summary_v1(p_job public.processing_jobs,p_video jsonb)
+returns jsonb language sql stable set search_path='' as $$
+  select jsonb_build_object(
+    'id',p_job.id,'videoId',p_job.video_id,'type',coalesce(p_job.input->>'kind','CLOUD_PIPELINE'),'mode',p_job.input->>'mode',
+    'title',coalesce(p_video->>'title',p_video->>'titleZh',p_job.input->>'title',p_job.input->>'titleZh',p_job.result->'video'->>'title'),
+    'inputTitle',coalesce(p_job.input->>'title',p_job.input->>'titleZh'),'cover',coalesce(p_video->>'cover',p_job.input->>'cover',p_job.result->'video'->>'cover'),
+    'videoState','ACTIVE','canOpenVideo',true,'canRetry',p_job.status='ERROR',
+    'resultSentenceCount',case when jsonb_typeof(p_job.result->'sentences')='array' then jsonb_array_length(p_job.result->'sentences') else 0 end,
+    'outputReceiptCount',(select count(*) from private.processing_output_receipts r where r.job_id=p_job.id),
+    'status',p_job.status,'stage',p_job.stage,'progress',p_job.progress,'attempt',p_job.attempt,'provider',p_job.provider,'error',p_job.error,
+    'runId',p_job.run_id,'message',p_job.work->>'message','telemetry',p_job.work->'telemetry','attemptStartedAt',p_job.attempt_started_at,
+    'stageStartedAt',p_job.stage_started_at,'lastHeartbeatAt',p_job.last_heartbeat_at,'lastProgressAt',p_job.last_progress_at,
+    'metricsReportedAt',p_job.metrics_reported_at,'leaseUntil',p_job.lease_until,'nextRunAt',p_job.next_run_at,
+    'automaticRecoveryCount',p_job.automatic_recovery_count,'maxAutomaticRecoveries',p_job.max_automatic_recoveries,
+    'createdAt',p_job.created_at,'updatedAt',p_job.updated_at,'completedAt',p_job.completed_at,'serverNow',clock_timestamp()
+  );
+$$;
+
 create or replace function public.admin_list_processing_video_groups_v1(p_page integer default 1,p_page_size integer default 50)
 returns jsonb language plpgsql stable security definer set search_path='' as $$
 declare v_page integer:=greatest(coalesce(p_page,1),1); v_size integer:=least(greatest(coalesce(p_page_size,50),1),100); v_total bigint; v_items jsonb;
@@ -92,18 +110,7 @@ begin
   )
   select coalesce(jsonb_agg(jsonb_build_object(
     'videoId',p.video_id,'video',p.video,'recordCount',(select count(*) from public.processing_jobs c where c.video_id=p.video_id),
-    'records',coalesce((select jsonb_agg(jsonb_build_object(
-      'id',j.id,'videoId',j.video_id,'type',coalesce(j.input->>'kind','CLOUD_PIPELINE'),'mode',j.input->>'mode',
-      'title',coalesce(p.video->>'title',p.video->>'titleZh',j.input->>'title',j.input->>'titleZh',j.result->'video'->>'title'),
-      'inputTitle',coalesce(j.input->>'title',j.input->>'titleZh'),'cover',coalesce(p.video->>'cover',j.input->>'cover',j.result->'video'->>'cover'),
-      'videoState','ACTIVE','canOpenVideo',true,'canRetry',j.status='ERROR',
-      'resultSentenceCount',case when jsonb_typeof(j.result->'sentences')='array' then jsonb_array_length(j.result->'sentences') else 0 end,
-      'outputReceiptCount',(select count(*) from private.processing_output_receipts r where r.job_id=j.id),
-      'status',j.status,'stage',j.stage,'progress',j.progress,'attempt',j.attempt,'provider',j.provider,'error',j.error,'runId',j.run_id,'message',j.work->>'message',
-      'telemetry',j.work->'telemetry','attemptStartedAt',j.attempt_started_at,'stageStartedAt',j.stage_started_at,'lastHeartbeatAt',j.last_heartbeat_at,
-      'lastProgressAt',j.last_progress_at,'metricsReportedAt',j.metrics_reported_at,'leaseUntil',j.lease_until,'nextRunAt',j.next_run_at,
-      'automaticRecoveryCount',j.automatic_recovery_count,'maxAutomaticRecoveries',j.max_automatic_recoveries,'createdAt',j.created_at,'updatedAt',j.updated_at,
-      'completedAt',j.completed_at,'serverNow',clock_timestamp()) order by j.updated_at desc,j.id)
+    'records',coalesce((select jsonb_agg(private.processing_job_admin_summary_v1(j,p.video) order by j.updated_at desc,j.id)
       from (select x.* from public.processing_jobs x where x.video_id=p.video_id order by (x.status in ('RUNNING','QUEUED','WAITING')) desc,x.updated_at desc,x.id limit 5) j),'[]'::jsonb)
   ) order by p.newest desc,p.video_id),'[]'::jsonb) into v_items from page_videos p;
 
@@ -113,17 +120,16 @@ $$;
 
 create or replace function public.admin_list_processing_video_history_v1(p_video_id text,p_page integer default 1,p_page_size integer default 25)
 returns jsonb language plpgsql stable security definer set search_path='' as $$
-declare v_page integer:=greatest(coalesce(p_page,1),1); v_size integer:=least(greatest(coalesce(p_page_size,25),1),100); v_total bigint; v_items jsonb;
+declare v_page integer:=greatest(coalesce(p_page,1),1); v_size integer:=least(greatest(coalesce(p_page_size,25),1),100); v_total bigint; v_items jsonb; v_video jsonb;
 begin
   if not public.is_admin() then raise exception 'ADMIN_REQUIRED'; end if;
   if coalesce(p_video_id,'') !~ '^[0-9]+$' then raise exception 'VIDEO_ID_INVALID'; end if;
-  if not exists(
-    select 1 from private.content_snapshots c,
-      jsonb_array_elements(coalesce(c.draft->'videos','[]'::jsonb)) v
-    where c.environment='production' and v->>'id'=p_video_id
-  ) then raise exception 'VIDEO_NOT_FOUND'; end if;
+  select value into v_video from private.content_snapshots c,
+    jsonb_array_elements(coalesce(c.draft->'videos','[]'::jsonb)) value
+    where c.environment='production' and value->>'id'=p_video_id limit 1;
+  if v_video is null then raise exception 'VIDEO_NOT_FOUND'; end if;
   select count(*) into v_total from public.processing_jobs j where j.video_id=p_video_id;
-  select coalesce(jsonb_agg(to_jsonb(j) order by j.updated_at desc,j.id),'[]'::jsonb) into v_items
+  select coalesce(jsonb_agg(private.processing_job_admin_summary_v1(j,v_video) order by j.updated_at desc,j.id),'[]'::jsonb) into v_items
   from (
     select * from public.processing_jobs
     where video_id=p_video_id
@@ -139,14 +145,14 @@ returns jsonb language plpgsql stable security definer set search_path='' as $$
 declare v_item jsonb;
 begin
   if not public.is_admin() then raise exception 'ADMIN_REQUIRED'; end if;
-  select to_jsonb(j) into v_item
+  select private.processing_job_admin_summary_v1(j,v.video) into v_item
   from public.processing_jobs j
-  where j.id=p_job_id
-    and exists(
-      select 1 from private.content_snapshots c,
-        jsonb_array_elements(coalesce(c.draft->'videos','[]'::jsonb)) v
-      where c.environment='production' and v->>'id'=j.video_id
-    )
+  cross join private.content_snapshots c
+  join lateral (
+    select value video from jsonb_array_elements(coalesce(c.draft->'videos','[]'::jsonb)) value
+    where value->>'id'=j.video_id limit 1
+  ) v on true
+  where j.id=p_job_id and c.environment='production'
     and not exists(
       select 1 from private.content_video_trash t
       where t.environment='production' and t.video_id=j.video_id and t.restored_at is null
@@ -157,6 +163,7 @@ end;
 $$;
 
 revoke all on function private.learning_access_v2(uuid) from public,anon,authenticated;
+revoke all on function private.processing_job_admin_summary_v1(public.processing_jobs,jsonb) from public,anon,authenticated;
 revoke all on function public.service_resolve_playback_access_v2(uuid,uuid,text) from public,anon,authenticated;
 revoke all on function public.admin_list_processing_video_groups_v1(integer,integer) from public,anon;
 revoke all on function public.admin_list_processing_video_history_v1(text,integer,integer) from public,anon;
