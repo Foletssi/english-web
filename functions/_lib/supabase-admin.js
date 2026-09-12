@@ -63,21 +63,6 @@ export async function passwordGrant(env, identity, password) {
   return payload;
 }
 
-export async function discardUndeliveredSession(env, session) {
-  const token = String(session?.access_token || '');
-  if (!token) return;
-  const config = supabaseConfig(env);
-  const response = await fetch(`${config.url}/auth/v1/logout?scope=local`, {
-    method: 'POST',
-    headers: { apikey: config.key, Authorization: `Bearer ${token}` },
-  });
-  if (!response.ok && response.status !== 401) {
-    const error = new Error(`AUTH_LOGOUT_${response.status}`);
-    error.upstreamStatus = response.status;
-    throw error;
-  }
-}
-
 export async function createInviteUser(env, input) {
   const config = adminConfig(env);
   const response = await fetch(`${config.url}/auth/v1/admin/users`, {

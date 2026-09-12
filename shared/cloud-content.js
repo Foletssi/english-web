@@ -158,6 +158,11 @@
   }
 
   function normalizeProcessingJob(job) {
+    job={...job,videoId:job.videoId??job.video_id,type:job.type||job.input?.kind||'CLOUD_PIPELINE',inputTitle:job.inputTitle||job.input?.title||job.input?.titleZh,
+      createdAt:job.createdAt||job.created_at,updatedAt:job.updatedAt||job.updated_at,completedAt:job.completedAt||job.completed_at,
+      lastHeartbeatAt:job.lastHeartbeatAt||job.last_heartbeat_at,lastProgressAt:job.lastProgressAt||job.last_progress_at,
+      stageStartedAt:job.stageStartedAt||job.stage_started_at,attemptStartedAt:job.attemptStartedAt||job.attempt_started_at,
+      leaseUntil:job.leaseUntil||job.lease_until,nextRunAt:job.nextRunAt||job.next_run_at,telemetry:job.telemetry||job.work?.telemetry};
     const stageStep = { LOCAL_DOWNLOAD: 'download', PROBE: 'probe', TRANSCODE: 'transcode', ASR: 'asr', ENRICH: 'enrich', LOCAL_UPLOAD: 'output', REVIEW: 'review' };
     const learningRepair=job.type==='LEARNING_REPAIR',order=learningRepair?['enrich','review']:['download','probe','transcode','asr','enrich','output','review'];
     const currentStep = stageStep[job.stage] || (learningRepair?'enrich':'download');
@@ -182,6 +187,24 @@
       return {videoId:String(group.videoId),video:group.video||null,recordCount:Number(group.recordCount)||records.length,current,records};
     }).filter(group=>group.current);
     return { rows: groups.flatMap(group=>group.records), groups, total:Number(data.total)||0, page:Number(data.page)||1, pageSize:Number(data.pageSize)||50, error:null };
+  }
+
+  async function listProcessingHistory(videoId, page = 1, pageSize = 25) {
+    const api=auth('admin');
+    if(!api)throw new Error('SUPABASE_NOT_CONFIGURED');
+    const {data,error}=await api.rpc('admin_list_processing_video_history_v1',{p_video_id:String(videoId),p_page:Math.max(1,Number(page)||1),p_page_size:Math.max(1,Math.min(100,Number(pageSize)||25))});
+    if(error)throw error;
+    if(!data||!Array.isArray(data.items))throw new Error('INVALID_PROCESSING_HISTORY_RESPONSE');
+    return {rows:data.items.map(normalizeProcessingJob),total:Number(data.total)||0,page:Number(data.page)||1,pageSize:Number(data.pageSize)||25};
+  }
+
+  async function getProcessingJob(jobId) {
+    const api=auth('admin');
+    if(!api)throw new Error('SUPABASE_NOT_CONFIGURED');
+    const {data,error}=await api.rpc('admin_get_processing_job_v1',{p_job_id:String(jobId)});
+    if(error)throw error;
+    if(!data?.id)throw new Error('INVALID_PROCESSING_JOB_RESPONSE');
+    return normalizeProcessingJob(data);
   }
 
   async function retryProcessingJob(jobId) {
@@ -225,9 +248,11 @@
   }
 
   async function clearMediaSession() {
+    const pending=Object.values(mediaSessionRequests);
+    for(const key of ['student','admin']){mediaSessionGeneration[key]+=1;clearTimeout(mediaSessionTimers[key]);mediaSessionTimers[key]=null;activeMediaSessionKeys[key]=''}
+    await Promise.allSettled(pending);
     Object.keys(mediaSessions).forEach(key=>{delete mediaSessions[key]});
     Object.keys(mediaSessionRequests).forEach(key=>{delete mediaSessionRequests[key]});
-    for(const key of ['student','admin']){mediaSessionGeneration[key]+=1;clearTimeout(mediaSessionTimers[key]);mediaSessionTimers[key]=null;activeMediaSessionKeys[key]=''}
     const jobIds=[...usedMediaJobIds];usedMediaJobIds.clear();
     await fetch('/api/session', { method: 'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({jobIds}) }).catch(() => {});
   }
@@ -287,6 +312,6 @@
   }
 
   global.EastudyCloudContent = Object.freeze({ pullPublished, pullAdmin, saveDraft, publish, publishEntity, setVideoPublication, createLearningRepair, listTrash, trashVideos, restoreVideo,planPermanentVideoDeletion,confirmPermanentVideoDeletion,getVideoDeletion,
-    processingHealth, createProcessingJob, listProcessingJobs, retryProcessingJob,
+    processingHealth, createProcessingJob, listProcessingJobs, listProcessingHistory, getProcessingJob, retryProcessingJob,
     syncMediaSession, clearMediaSession, uploadVideo, uploadCreatorAvatar });
 })(window);

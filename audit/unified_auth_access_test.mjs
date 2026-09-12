@@ -1,86 +1,67 @@
 import assert from 'node:assert/strict';
-import { onRequestPost as login } from '../functions/api/auth/login.js';
-import { onRequestPost as activate } from '../functions/api/auth/activate-and-login.js';
-import { canonicalLoginKey } from '../functions/_lib/login-identity.js';
+import { canonicalLoginKey } from '../supabase/functions/_shared/login-identity.js';
+import { publicAuthFailure } from '../supabase/functions/_shared/auth-errors.js';
 
-const env={SUPABASE_URL:'https://project.test',SUPABASE_PUBLISHABLE_KEY:'public',SUPABASE_SERVICE_ROLE_KEY:'service'};
-const request=(path,body)=>new Request('https://site.test'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-const response=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json'}});
+let edgeHandler;
+globalThis.Deno={env:{get:name=>({SUPABASE_URL:'https://project.test',SUPABASE_SERVICE_ROLE_KEY:'service'})[name]||''},serve:handler=>{edgeHandler=handler}};
+await import('../supabase/functions/learner-auth/index.ts');
+const request=body=>new Request('https://project.test/functions/v1/learner-auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+const response=(body,status=200)=>new Response(status===204?null:JSON.stringify(body),{status,headers:status===204?{}:{'Content-Type':'application/json'}});
 
 assert.equal(canonicalLoginKey('198 8256 8394'),'19882568394');
 assert.equal(canonicalLoginKey('+86 198 8256 8394'),'19882568394');
 assert.equal(canonicalLoginKey('00123456'),'00123456');
 assert.equal(canonicalLoginKey('Alpha.User'),'alpha.user');
 assert.equal(canonicalLoginKey('账号'),'');
+assert.deepEqual(publicAuthFailure({message:'ACTIVATION_CODE_EXPIRED',status:400}),[409,'ACTIVATION_CODE_EXPIRED']);
 
-{
-  let grantBody;
-  globalThis.fetch=async(url,init={})=>{
-    if(String(url).includes('/resolve_account_login_v2'))return response({state:'FOUND',userId:'user-1',identity:{email:'mapped@test.invalid'}});
-    if(String(url).includes('/auth/v1/token')){grantBody=JSON.parse(init.body);return response({user:{id:'user-1'},access_token:'a',refresh_token:'r'})}
-    if(String(url).includes('/service_get_user_learning_access_v2'))return response({canEnterLearning:true,canPlay:true,reason:'OK',kind:'LEARNER',expiresAt:'2099-01-01T00:00:00Z'});
-    throw new Error('unexpected '+url);
-  };
-  const result=await login({request:request('/api/auth/login',{account:'19882568394',password:'111111'}),env});
-  assert.equal(result.status,200);
-  assert.deepEqual(grantBody,{email:'mapped@test.invalid',password:'111111'},'11 digit mapped account must use its registered identity');
-}
+let mode='success',accessReads=0,discarded=0,redeems=0,grantBody=null;
+globalThis.fetch=async(url,init={})=>{
+  const value=String(url);
+  if(value.includes('/resolve_account_login_v2')){
+    if(mode==='service-error')return response({message:'database unavailable'},503);
+    return response({state:'FOUND',userId:mode==='admin'?'admin':'user-1',identity:{email:'mapped@test.invalid'}});
+  }
+  if(value.includes('/auth/v1/token')){grantBody=JSON.parse(init.body);return response({user:{id:mode==='admin'?'admin':'user-1'},access_token:'access',refresh_token:'refresh'})}
+  if(value.includes('/service_get_user_learning_access_v2')){
+    accessReads+=1;
+    if(mode==='expired'||mode==='activate-invalid')return response({canEnterLearning:false,canPlay:false,reason:'VIP_EXPIRED',kind:'LEARNER',expiresAt:'2026-01-01T00:00:00Z'});
+    if(mode==='activate')return response(accessReads===1?{canEnterLearning:false,reason:'VIP_EXPIRED',kind:'LEARNER'}:{canEnterLearning:true,canPlay:true,reason:'OK',kind:'LEARNER',expiresAt:'2099-01-01T00:00:00Z'});
+    if(mode==='role')return response({canEnterLearning:false,canPlay:false,reason:'ROLE_FORBIDDEN',kind:'NONE'});
+    if(mode==='admin')return response({canEnterLearning:true,canPlay:true,reason:'OK',kind:'ADMIN'});
+    return response({canEnterLearning:true,canPlay:true,reason:'OK',kind:'LEARNER',expiresAt:'2099-01-01T00:00:00Z'});
+  }
+  if(value.includes('/redeem_activation_code')){redeems+=1;return mode==='activate-invalid'?response({message:'ACTIVATION_CODE_EXPIRED'},400):response([{product_id:'eastudy_pro'}])}
+  if(value.includes('/auth/v1/logout')){discarded+=1;return response(null,204)}
+  throw new Error('unexpected '+url);
+};
 
-{
-  let discarded=0;
-  globalThis.fetch=async(url)=>{
-    if(String(url).includes('/resolve_account_login_v2'))return response({state:'FOUND',userId:'u',identity:{email:'u@test.invalid'}});
-    if(String(url).includes('/auth/v1/token'))return response({user:{id:'u'},access_token:'a',refresh_token:'r'});
-    if(String(url).includes('/service_get_user_learning_access_v2'))return response({canEnterLearning:false,reason:'VIP_EXPIRED',expiresAt:'2026-01-01T00:00:00Z'});
-    if(String(url).includes('/auth/v1/logout')){discarded++;return new Response(null,{status:204})}
-    throw new Error('unexpected '+url);
-  };
-  const result=await login({request:request('/api/auth/login',{account:'12345678',password:'111111'}),env});
-  assert.equal(result.status,403);
-  const payload=await result.json();
-  assert.equal(payload.error,'VIP_EXPIRED');
-  assert.equal(payload.session,undefined);
-  assert.equal(discarded,1,'rejected login must revoke only its undelivered refresh session');
-}
+let result=await edgeHandler(request({account:'19882568394',password:'111111'}));
+assert.equal(result.status,200);
+assert.deepEqual(grantBody,{email:'mapped@test.invalid',password:'111111'});
 
-{
-  globalThis.fetch=async(url)=>String(url).includes('/resolve_account_login_v2')?response({message:'database unavailable'},503):response({});
-  const result=await login({request:request('/api/auth/login',{account:'12345678',password:'111111'}),env});
-  assert.equal(result.status,503);
-  assert.equal((await result.json()).error,'LOGIN_SERVICE_UNAVAILABLE');
-}
+mode='expired';accessReads=discarded=0;
+result=await edgeHandler(request({account:'12345678',password:'111111'}));
+assert.equal(result.status,403);assert.equal((await result.json()).error,'VIP_EXPIRED');assert.equal(discarded,1);
 
-{
-  let accessReads=0,redeems=0;
-  globalThis.fetch=async(url,init={})=>{
-    const value=String(url);
-    if(value.includes('/resolve_account_login_v2'))return response({state:'FOUND',userId:'u',identity:{email:'u@test.invalid'}});
-    if(value.includes('/auth/v1/token'))return response({user:{id:'u'},access_token:'user-token',refresh_token:'r'});
-    if(value.includes('/service_get_user_learning_access_v2'))return response(++accessReads===1?{canEnterLearning:false,reason:'VIP_EXPIRED',kind:'LEARNER'}:{canEnterLearning:true,canPlay:true,reason:'OK',kind:'LEARNER',expiresAt:'2099-01-01T00:00:00Z'});
-    if(value.includes('/redeem_activation_code')){redeems++;assert.equal(init.headers.Authorization,'Bearer user-token');return response([{product_id:'eastudy_pro'}])}
-    throw new Error('unexpected '+url);
-  };
-  const result=await activate({request:request('/api/auth/activate-and-login',{account:'12345678',password:'111111',inviteCode:'EAST-AAAA-BBBB-CCCC'}),env});
-  assert.equal(result.status,200);
-  assert.equal(redeems,1);
-  assert.equal(accessReads,2);
-}
+mode='service-error';discarded=0;
+result=await edgeHandler(request({account:'12345678',password:'111111'}));
+assert.equal(result.status,503);assert.equal((await result.json()).error,'LOGIN_SERVICE_UNAVAILABLE');assert.equal(discarded,0);
 
-{
-  let redeems=0,discarded=0;
-  globalThis.fetch=async(url)=>{
-    const value=String(url);
-    if(value.includes('/resolve_account_login_v2'))return response({state:'FOUND',userId:'admin',identity:{email:'admin@test.invalid'}});
-    if(value.includes('/auth/v1/token'))return response({user:{id:'admin'},access_token:'a',refresh_token:'r'});
-    if(value.includes('/service_get_user_learning_access_v2'))return response({canEnterLearning:true,reason:'OK',kind:'ADMIN'});
-    if(value.includes('/auth/v1/logout')){discarded++;return new Response(null,{status:204})}
-    if(value.includes('/redeem_activation_code')){redeems++;return response({})}
-    throw new Error('unexpected '+url);
-  };
-  const result=await activate({request:request('/api/auth/activate-and-login',{account:'admin1',password:'111111',inviteCode:'EAST-AAAA-BBBB-CCCC'}),env});
-  assert.equal(result.status,409);
-  assert.equal(redeems,0);
-  assert.equal(discarded,1);
-}
+mode='activate';accessReads=redeems=discarded=0;
+result=await edgeHandler(request({action:'activate',account:'12345678',password:'111111',inviteCode:'EAST-AAAA-BBBB-CCCC'}));
+assert.equal(result.status,200);assert.equal(redeems,1);assert.equal(accessReads,2);assert.equal(discarded,0);
 
-console.log('unified auth and access tests passed');
+mode='activate-invalid';accessReads=redeems=discarded=0;
+result=await edgeHandler(request({action:'activate',account:'12345678',password:'111111',inviteCode:'EAST-AAAA-BBBB-CCCC'}));
+assert.equal(result.status,409);assert.equal((await result.json()).error,'ACTIVATION_CODE_EXPIRED');assert.equal(discarded,1);
+
+mode='admin';accessReads=redeems=discarded=0;
+result=await edgeHandler(request({action:'activate',account:'admin1',password:'111111',inviteCode:'EAST-AAAA-BBBB-CCCC'}));
+assert.equal(result.status,409);assert.equal(redeems,0);assert.equal(discarded,1);
+
+mode='role';accessReads=discarded=0;
+result=await edgeHandler(request({account:'staff1',password:'111111'}));
+assert.equal(result.status,403);assert.equal((await result.json()).error,'ROLE_FORBIDDEN');assert.equal(discarded,1);
+
+console.log('Production learner auth and access tests passed.');

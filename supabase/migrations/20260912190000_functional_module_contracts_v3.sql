@@ -104,17 +104,68 @@ begin
       'lastProgressAt',j.last_progress_at,'metricsReportedAt',j.metrics_reported_at,'leaseUntil',j.lease_until,'nextRunAt',j.next_run_at,
       'automaticRecoveryCount',j.automatic_recovery_count,'maxAutomaticRecoveries',j.max_automatic_recoveries,'createdAt',j.created_at,'updatedAt',j.updated_at,
       'completedAt',j.completed_at,'serverNow',clock_timestamp()) order by j.updated_at desc,j.id)
-      from public.processing_jobs j where j.video_id=p.video_id),'[]'::jsonb)
+      from (select x.* from public.processing_jobs x where x.video_id=p.video_id order by (x.status in ('RUNNING','QUEUED','WAITING')) desc,x.updated_at desc,x.id limit 5) j),'[]'::jsonb)
   ) order by p.newest desc,p.video_id),'[]'::jsonb) into v_items from page_videos p;
 
   return jsonb_build_object('items',v_items,'total',v_total,'page',v_page,'pageSize',v_size,'serverNow',clock_timestamp());
 end;
 $$;
 
+create or replace function public.admin_list_processing_video_history_v1(p_video_id text,p_page integer default 1,p_page_size integer default 25)
+returns jsonb language plpgsql stable security definer set search_path='' as $$
+declare v_page integer:=greatest(coalesce(p_page,1),1); v_size integer:=least(greatest(coalesce(p_page_size,25),1),100); v_total bigint; v_items jsonb;
+begin
+  if not public.is_admin() then raise exception 'ADMIN_REQUIRED'; end if;
+  if coalesce(p_video_id,'') !~ '^[0-9]+$' then raise exception 'VIDEO_ID_INVALID'; end if;
+  if not exists(
+    select 1 from private.content_snapshots c,
+      jsonb_array_elements(coalesce(c.draft->'videos','[]'::jsonb)) v
+    where c.environment='production' and v->>'id'=p_video_id
+  ) then raise exception 'VIDEO_NOT_FOUND'; end if;
+  select count(*) into v_total from public.processing_jobs j where j.video_id=p_video_id;
+  select coalesce(jsonb_agg(to_jsonb(j) order by j.updated_at desc,j.id),'[]'::jsonb) into v_items
+  from (
+    select * from public.processing_jobs
+    where video_id=p_video_id
+    order by updated_at desc,id
+    offset (v_page-1)*v_size limit v_size
+  ) j;
+  return jsonb_build_object('items',v_items,'total',v_total,'page',v_page,'pageSize',v_size,'serverNow',clock_timestamp());
+end;
+$$;
+
+create or replace function public.admin_get_processing_job_v1(p_job_id uuid)
+returns jsonb language plpgsql stable security definer set search_path='' as $$
+declare v_item jsonb;
+begin
+  if not public.is_admin() then raise exception 'ADMIN_REQUIRED'; end if;
+  select to_jsonb(j) into v_item
+  from public.processing_jobs j
+  where j.id=p_job_id
+    and exists(
+      select 1 from private.content_snapshots c,
+        jsonb_array_elements(coalesce(c.draft->'videos','[]'::jsonb)) v
+      where c.environment='production' and v->>'id'=j.video_id
+    )
+    and not exists(
+      select 1 from private.content_video_trash t
+      where t.environment='production' and t.video_id=j.video_id and t.restored_at is null
+    );
+  if v_item is null then raise exception 'PROCESSING_JOB_NOT_FOUND'; end if;
+  return v_item;
+end;
+$$;
+
 revoke all on function private.learning_access_v2(uuid) from public,anon,authenticated;
 revoke all on function public.service_resolve_playback_access_v2(uuid,uuid,text) from public,anon,authenticated;
 revoke all on function public.admin_list_processing_video_groups_v1(integer,integer) from public,anon;
+revoke all on function public.admin_list_processing_video_history_v1(text,integer,integer) from public,anon;
+revoke all on function public.admin_get_processing_job_v1(uuid) from public,anon;
 grant execute on function public.service_resolve_playback_access_v2(uuid,uuid,text) to service_role;
 grant execute on function public.admin_list_processing_video_groups_v1(integer,integer) to authenticated;
+grant execute on function public.admin_list_processing_video_history_v1(text,integer,integer) to authenticated;
+grant execute on function public.admin_get_processing_job_v1(uuid) to authenticated;
 
-comment on function public.admin_list_processing_video_groups_v1(integer,integer) is 'Pages valid videos first, then returns all processing records for each video on that page.';
+comment on function public.admin_list_processing_video_groups_v1(integer,integer) is 'Pages valid videos first, then returns a bounded current record summary for each video.';
+comment on function public.admin_list_processing_video_history_v1(text,integer,integer) is 'Pages processing history independently for one active video.';
+comment on function public.admin_get_processing_job_v1(uuid) is 'Returns one processing record for an active video so paged history links remain addressable.';

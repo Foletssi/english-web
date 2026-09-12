@@ -9,14 +9,17 @@ const jobId='00000000-0000-4000-8000-000000000001';
 const userId='00000000-0000-4000-8000-000000000002';
 const prefix=`videos/00000000-0000-4000-8000-000000000003/processed/${jobId}/runs/00000000-0000-4000-8000-000000000004/`;
 const env={SUPABASE_URL:'https://project.test',SUPABASE_PUBLISHABLE_KEY:'public',SUPABASE_SERVICE_ROLE_KEY:'service',PLAYBACK_TICKET_KEY:Buffer.alloc(32,9).toString('base64url')};
-let upstreamCalls=0;
+let upstreamCalls=0,serviceAvailable=true;
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json'}});
 globalThis.fetch=async url=>{
   upstreamCalls+=1;
   const value=String(url);
   if(value.includes('/auth/v1/user'))return json({id:userId});
   if(value.includes('/get_my_learning_access_v2'))return json([{canPlay:true,canEnterLearning:true,kind:'LEARNER',reason:'OK',expiresAt:'2099-01-01T00:00:00Z'}]);
-  if(value.includes('/service_resolve_playback_access_v2'))return json([{canPlay:true,canEnterLearning:true,kind:'LEARNER',reason:'OK',expiresAt:'2099-01-01T00:00:00Z',objectKey:prefix+'720p/index.m3u8',prefix}]);
+  if(value.includes('/service_resolve_playback_access_v2')){
+    if(!serviceAvailable)throw new Error('service unavailable');
+    return json([{canPlay:true,canEnterLearning:true,kind:'LEARNER',reason:'OK',expiresAt:'2099-01-01T00:00:00Z',objectKey:prefix+'720p/index.m3u8',prefix}]);
+  }
   throw new Error('unexpected '+url);
 };
 
@@ -37,7 +40,12 @@ const callsBeforeMedia=upstreamCalls;
 const mediaResponse=await readMedia({request:new Request(`https://site.test/api/processing/media/${jobId}/720p/index.m3u8`,{headers:{Cookie:`eastudy_playback=${encodeURIComponent(ticket)}`}}),env:mediaEnv,params:{path:[jobId,'720p','index.m3u8']}});
 assert.equal(mediaResponse.status,200);
 assert.equal(await mediaResponse.text(),'#EXTM3U\n');
-assert.equal(upstreamCalls,callsBeforeMedia,'HLS reads must validate the short ticket without repeating Auth/RPC calls');
+assert.equal(upstreamCalls,callsBeforeMedia+1,'HLS reads must recheck current entitlement without repeating full Auth');
+
+serviceAvailable=false;
+const unavailable=await readMedia({request:new Request(`https://site.test/api/processing/media/${jobId}/720p/index.m3u8`,{headers:{Cookie:`eastudy_playback=${encodeURIComponent(ticket)}`}}),env:mediaEnv,params:{path:[jobId,'720p','index.m3u8']}});
+assert.equal(unavailable.status,503,'entitlement service failures must not be reported as an invalid login session');
+serviceAvailable=true;
 
 const wrongJob='00000000-0000-4000-8000-000000000009';
 const rejected=await readMedia({request:new Request(`https://site.test/api/processing/media/${wrongJob}/720p/index.m3u8`,{headers:{Cookie:`eastudy_playback=${encodeURIComponent(ticket)}`}}),env:mediaEnv,params:{path:[wrongJob,'720p','index.m3u8']}});

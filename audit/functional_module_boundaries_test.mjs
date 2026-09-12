@@ -11,6 +11,7 @@ assert.ok(edgeLogin.includes("../_shared/login-identity.js"));
 assert.ok(edgeRegister.includes("../_shared/login-identity.js"));
 assert.ok(!edgeLogin.includes('function canonicalLoginKey('));
 assert.ok(!edgeRegister.includes('function canonicalLoginKey('));
+assert.equal(fs.existsSync('functions/api/auth/login.js'),false,'unused Pages auth duplicate must stay removed');
 
 const session=read('functions/api/session.js');
 const media=read('functions/api/processing/media/[[path]].js');
@@ -25,5 +26,8 @@ const admin=read('admin/assets/admin.js');
 assert.ok(client.includes('admin_list_processing_video_groups_v1'));
 assert.ok(!client.includes("api.rpc('admin_list_processing_jobs'"));
 assert.ok(admin.includes('pipelineVideoGroups()'));
+assert.ok(admin.includes('changeProcessingPage('));
+assert.ok(admin.includes('renderPipelineHistory('));
+assert.ok(read('assets/js/app.js').includes("onUnavailable:error=>{console.warn")&&read('assets/js/app.js').includes("handleLearningAccessDenied({reason:'LOGIN_SERVICE_UNAVAILABLE'})"));
 
 console.log('Functional module boundary contracts passed.');
