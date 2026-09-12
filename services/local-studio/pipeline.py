@@ -41,7 +41,7 @@ def process_job(store, job_id, source_path, cover_path, ai_config, media_root,
             save_json_checkpoint(checkpoints / 'probe.json', probe_key, info)
         else:
             progress('probe', 10, '已复用素材检查结果')
-        progress('transcode', 18, '正在生成节省空间的单档 720P 标准视频')
+        progress('transcode', 18, '正在生成单档均衡 720P 视频')
         variants = transcode(source_path, output, info, progress=transcode_progress)
         cover = make_cover(source_path, output / 'cover.webp', info['duration'], cover_path)
         progress('asr', 48, '正在提取英语音轨')
@@ -98,5 +98,5 @@ def process_job(store, job_id, source_path, cover_path, ai_config, media_root,
                                    'retryable': error.retryable})
     except Exception as error:
         return store.update(job_id, status='ERROR', progress=min(99, store.get(job_id)['progress']),
-                            message='后台处理发生异常，请查看本地服务窗口', retryable=True,
+                            message='后台处理发生异常，请查看任务详情或处理服务日志', retryable=True,
                             error={'code': 'PIPELINE_INTERNAL', 'message': str(error), 'retryable': True})

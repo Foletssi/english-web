@@ -1,0 +1,54 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import vm from 'node:vm';
+const read = path => fs.readFileSync(path, 'utf8');
+const task = read('services/cloud-worker/install-autostart.ps1');
+const launch = read('services/cloud-worker/start-worker.ps1');
+const vbs = read('START_EASTUDY_CLOUD_WORKER.vbs');
+assert.match(task, /-AtLogOn/);
+assert.match(task, /-RepetitionInterval \(New-TimeSpan -Minutes 1\)/);
+assert.match(task, /-MultipleInstances IgnoreNew/);
+assert.match(task, /-LogonType Interactive -RunLevel Limited/);
+assert.match(task, /wscript\.exe/);
+assert.match(vbs, /, 0, True\)/);
+assert.match(vbs, /WScript.Quit exitCode/);
+assert.match(launch, /Global\\EastudyCloudWorker/);
+assert.match(launch, /-WindowStyle Hidden/);
+assert.match(launch, /-RedirectStandardOutput/);
+assert.ok(!read('START_EASTUDY_CLOUD_WORKER.bat').includes('pip install'));
+const sql = read('supabase/migrations/20260912203000_balanced_media_reencode.sql');
+assert.match(sql, /auth.role\(\) is distinct from 'service_role'/);
+assert.match(sql, /private.processing_lock_run/);
+assert.match(sql, /OUTPUT_MANIFEST_MISMATCH/);
+assert.match(sql, /MEDIA_SOURCE_CHANGED/);
+assert.match(sql, /next_run_at='infinity'/);
+assert.ok(!/delete from/i.test(sql));
+assert.ok(!sql.includes("array['sentences'"));
+assert.ok(!sql.includes('processing_commit_result('));
+assert.match(sql, /from public,anon,authenticated/);
+const operation = read('services/cloud-worker/reencode-existing.py');
+assert.ok(!operation.includes('repair_learning(') && !operation.includes('process_job('));
+assert.match(operation, /download\(lease\['downloadUrl'\], source\)/);
+const admin = read('admin/assets/admin.js');
+const replacement = admin.slice(admin.indexOf('async function queueVideoReplacement('), admin.indexOf("$('#videoForm').onsubmit"));
+assert.ok(replacement.includes('createProcessingJob'));
+assert.ok(!replacement.includes('Cloud.publish') && !replacement.includes('Store.saveVideo'));
+const calls = [];
+const box = { Date, crypto: { randomUUID: () => 'fixture-request' }, automaticTags: () => ['daily-life'],
+  flushCloudDraftSync: async () => {}, cancelCloudDraftSync: () => {}, CloudState: { revision: 9 },
+  Cloud: { createProcessingJob: async (...args) => { calls.push(args); return {data:{job:{id:'queued'}}}; } },
+  importCloudMutation: () => {}, closeModal: () => {}, toast: () => {}, location: {} };
+vm.runInNewContext(replacement + ';this.queue=queueVideoReplacement;', box);
+await box.queue({id:4,status:'PUBLISHED',doTranscript:'off'}, {id:4,creator:'Alice',collectionIds:['one']}, null,
+  {key:'videos/fixture/source.mp4',size:100,url:'/raw-original'}, 60);
+assert.equal(calls[0][0].status, 'DRAFT');
+assert.equal(calls[0][0].playback, null);
+assert.equal(calls[0][0].mediaUrl, '');
+assert.equal(calls[0][0].processingOptions.transcript, true);
+assert.equal(calls[0][0].doTranscript, undefined);
+assert.equal(calls[0][0].id, 4);
+assert.equal(calls[0][3], 9);
+assert.equal(box.location.hash, '#/pipeline');
+box.Cloud.createProcessingJob = async () => ({error:new Error('queue unavailable')});
+await assert.rejects(() => box.queue({}, {id:4}, null, {key:'source'}, 60), /queue unavailable/);
+console.log('Balanced media, replacement intake and hidden worker contracts passed.');

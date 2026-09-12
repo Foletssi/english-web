@@ -18,7 +18,7 @@
     "test:module-boundaries": "node audit/functional_module_boundaries_test.mjs",
     "test:m01": "node audit/unified_auth_access_test.mjs && node audit/auth_contract_test.mjs && node audit/access_guard_contract_test.mjs",
     "test:m04": "node audit/playback_ticket_test.mjs && node audit/playback_route_contract_test.mjs && node audit/media_session_race_contract_test.mjs && node audit/media_player_contract_test.mjs",
-    "test:m08": "node audit/processing_truth_contract_test.mjs && node audit/processing_group_contract_test.mjs && node audit/learning_queue_contract_test.mjs",
+    "test:m08": "node audit/processing_truth_contract_test.mjs && node audit/processing_group_contract_test.mjs && node audit/learning_queue_contract_test.mjs && node audit/balanced_worker_contract_test.mjs",
     "test:m10": "node audit/relative_time_contract_test.mjs && node audit/functional_module_boundaries_test.mjs",
     "test:all": "npm run audit && npm run contract-test && npm run auth-test && npm run learning-test && npm run learner-admin-test && npm run deletion-test && npm run cloud-test && npm run studio-test && npm run test:module-boundaries && npm run test:m01 && npm run test:m08 && npm run test:m10"
   },

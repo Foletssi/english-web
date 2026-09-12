@@ -14,7 +14,7 @@ SPEC.loader.exec_module(worker)
 
 class WorkerTests(unittest.TestCase):
     def test_worker_reports_v5_protocol_version(self):
-        self.assertEqual(worker.VERSION, '2.3.0')
+        self.assertEqual(worker.VERSION, '2.3.1')
         source = MODULE.read_text(encoding='utf-8')
         self.assertIn("'learningRepairV5': True", source)
         self.assertIn("'teachingSchemaVersion': 3", source)

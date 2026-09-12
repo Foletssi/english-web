@@ -7,7 +7,7 @@ const assert=require('node:assert/strict');
 const root=path.resolve(__dirname,'..');
 const legacy=JSON.parse(fs.readFileSync(path.join(__dirname,'fixtures/legacy-content.json'),'utf8'));
 const snapshot={...legacy,videos:[{...legacy.videos[0],id:7001,title:'A week in my life — a long video title to verify table layout '.repeat(5),mediaUrl:'/fixture.mp4'}],jobs:[]};
-const authFixture=`window.EastudyAuth={getContext:async()=>({user:{id:'fixture-admin'},profile:{role:'admin'}}),signOut:async()=>({}),client:()=>({auth:{getSession:async()=>({data:{session:{access_token:'fixture'}}})},rpc:async name=>({error:null,data:name==='admin_get_content_snapshot'?[{snapshot:${JSON.stringify(snapshot)},revision:1}]:[]})})};`;
+const authFixture=`window.EastudyAuth={getContext:async()=>({user:{id:'fixture-admin'},profile:{role:'admin'}}),signOut:async()=>({}),client:()=>({auth:{getSession:async()=>({data:{session:{access_token:'fixture'}}})},rpc:async name=>({error:null,data:name==='admin_get_content_snapshot'?[{snapshot:${JSON.stringify(snapshot)},revision:1}]:name==='admin_list_processing_video_groups_v1'?{items:[],total:0,page:1,pageSize:50}:[]})})};`;
 const types={'.js':'text/javascript','.css':'text/css','.html':'text/html','.png':'image/png','.svg':'image/svg+xml'};
 (async()=>{
  const browser=await chromium.launch({channel:'chrome',headless:true});
@@ -27,7 +27,9 @@ const types={'.js':'text/javascript','.css':'text/css','.html':'text/html','.png
    });
    const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
    await page.goto(`${mode==='cloud'?'https://eastudy.test':'http://localhost'}/admin/#/videos`);
-   await page.waitForSelector('#videoTableBody');
+   try{await page.waitForSelector('#videoTableBody')}catch(error){
+    console.error('Admin fixture diagnostic',JSON.stringify({mode,errors,body:(await page.locator('body').innerText()).slice(0,1800)}));throw error;
+   }
    if(mode==='cloud'){
     await page.waitForSelector('[data-row-video="7001"]');
     for(const theme of ['light','dark'])for(const width of [320,768,1024,1440,1920]){

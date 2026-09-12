@@ -21,9 +21,10 @@ sys.path.insert(0, str(LOCAL_STUDIO))
 from pipeline import process_job  # noqa: E402
 from ai_tools import prepare_asr_model, repair_learning  # noqa: E402
 from checkpoint import atomic_json  # noqa: E402
+from media_tools import ladder  # noqa: E402
 
 
-VERSION = '2.3.0'
+VERSION = '2.3.1'
 DEFAULT_ENDPOINT = 'https://ehxqtgakjgqgmghhdmjg.supabase.co/functions/v1/video-processing'
 STAGE_MAP = {'probe': 'PROBE', 'transcode': 'TRANSCODE', 'asr': 'ASR', 'enrich': 'ENRICH'}
 
@@ -236,7 +237,7 @@ def capabilities():
             'whisper': whisper, 'asr': whisper_detail,
             'deepseek': bool(deepseek), 'learningRepairV4': True,
             'learningRepairV5': True, 'teachingSchemaVersion': 3,
-            'platform': platform.system().lower()}
+            'platform': platform.system().lower(), 'mediaProfile': ladder(1280, 720)[0]['profileVersion']}
 
 
 def configure_ai_environment():

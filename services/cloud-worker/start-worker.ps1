@@ -12,9 +12,12 @@ Set-Location $repository
 $runtime = Join-Path $repository 'tmp\cloud-worker-runtime'
 New-Item -ItemType Directory -Force -Path $runtime | Out-Null
 $logPath = Join-Path $runtime 'worker.log'
-if ((Test-Path -LiteralPath $logPath) -and (Get-Item -LiteralPath $logPath).Length -gt 5MB) {
-    $archive = Join-Path $runtime ("worker-{0}.log" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
-    Move-Item -LiteralPath $logPath -Destination $archive
+foreach ($name in @('worker.log', 'worker-error.log')) {
+    $currentLog = Join-Path $runtime $name
+    if ((Test-Path -LiteralPath $currentLog) -and (Get-Item -LiteralPath $currentLog).Length -gt 0) {
+        $archive = Join-Path $runtime ("{0}-{1}.log" -f [IO.Path]::GetFileNameWithoutExtension($name), (Get-Date -Format 'yyyyMMdd-HHmmss-fff'))
+        Move-Item -LiteralPath $currentLog -Destination $archive
+    }
 }
 
 if (-not $env:EASTUDY_ASR_DEVICE) { $env:EASTUDY_ASR_DEVICE = 'cuda' }
@@ -24,8 +27,13 @@ if (-not $env:EASTUDY_AI_ATTEMPTS) { $env:EASTUDY_AI_ATTEMPTS = '3' }
 if (-not $env:EASTUDY_UPLOAD_CONCURRENCY) { $env:EASTUDY_UPLOAD_CONCURRENCY = '6' }
 
 try {
-    & py -3.12 services\cloud-worker\worker.py 2>&1 | Tee-Object -FilePath $logPath -Append
-    $workerExitCode = $LASTEXITCODE
+    $python = (& py -3.12 -c 'import sys; print(sys.executable)').Trim()
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $python)) { throw 'Python 3.12 is unavailable.' }
+    $env:PYTHONUNBUFFERED = '1'
+    $process = Start-Process -FilePath $python -ArgumentList @('-u', 'services\cloud-worker\worker.py') `
+        -WorkingDirectory $repository -WindowStyle Hidden -PassThru -Wait `
+        -RedirectStandardOutput $logPath -RedirectStandardError (Join-Path $runtime 'worker-error.log')
+    $workerExitCode = $process.ExitCode
     Add-Content -LiteralPath $logPath -Value ("[{0}] worker exit code: {1}" -f (Get-Date -Format o), $workerExitCode)
     exit $workerExitCode
 }

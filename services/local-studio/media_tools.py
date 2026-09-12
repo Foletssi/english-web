@@ -20,7 +20,8 @@ def require_tools():
 def run(args, timeout=7200):
     require_tools()
     try:
-        result = subprocess.run(args, check=True, capture_output=True, timeout=timeout)
+        result = subprocess.run(args, check=True, capture_output=True, timeout=timeout,
+                                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
         return result.stdout
     except subprocess.TimeoutExpired as error:
         raise StudioError('MEDIA_TIMEOUT', '视频处理超时。', True) from error
@@ -35,7 +36,8 @@ def run_progress(args, duration, progress=None, timeout=7200):
     command = list(args[:-1]) + ['-progress', 'pipe:1', '-stats_period', '1', '-nostats', args[-1]]
     errors, reader_errors, latest = deque(maxlen=80), [], [None]
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                               text=True, encoding='utf-8', errors='replace')
+                               text=True, encoding='utf-8', errors='replace',
+                               creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
 
     def stdout_reader():
         record = {}
@@ -137,7 +139,7 @@ def ladder(width, height, source_fps=30):
     # playback tier/path (`720p`) so lower-tier database references never
     # reappear.
     encoded_size = min(720, max(2, short // 2 * 2))
-    rate = 1200 if encoded_size == 720 else 700
+    rate = 1000 if encoded_size == 720 else 700
     values = [(encoded_size, rate, 30, 96)]
     try:
         source_fps = float(source_fps)
@@ -147,8 +149,8 @@ def ladder(width, height, source_fps=30):
         source_fps = 30.0
     return [{'label': '720p', 'size': size, 'rateK': rate, 'crf': 25,
              'fps': min(source_fps, fps), 'audioRateK': audio,
-             'preset': 'veryfast', 'segmentSeconds': 4,
-             'profileVersion': 'single-720-v2'}
+             'preset': 'medium', 'segmentSeconds': 4,
+             'profileVersion': 'balanced-720-v3'}
             for size, rate, fps, audio in values]
 
 
