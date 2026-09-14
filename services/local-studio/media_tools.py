@@ -7,6 +7,7 @@ import threading
 import time
 import uuid
 from collections import deque
+from fractions import Fraction
 from pathlib import Path
 from contracts import StudioError
 
@@ -115,48 +116,50 @@ def probe(source):
     if not math.isfinite(duration) or not 0 < duration <= 7200:
         raise StudioError('VIDEO_DURATION_INVALID', '视频必须在 2 小时以内。')
     width, height = int(video['width']), int(video['height'])
+    try:
+        sar = Fraction(str(video.get('sample_aspect_ratio', '1:1')).replace(':', '/'))
+        if sar > 0:
+            width = float(width * sar)
+    except (ValueError, ZeroDivisionError):
+        pass
     rotation = next((x.get('rotation', 0) for x in video.get('side_data_list', []) if 'rotation' in x), 0)
     if round(abs(float(rotation))) % 180 == 90:
         width, height = height, width
-    fps = 0.0
+    fps = Fraction(0)
     for value in (video.get('avg_frame_rate'), video.get('r_frame_rate')):
         try:
-            numerator, denominator = str(value).split('/', 1)
-            fps = float(numerator) / float(denominator)
+            fps = Fraction(str(value))
         except (TypeError, ValueError, ZeroDivisionError):
             continue
         if math.isfinite(fps) and fps > 0:
             break
     if not math.isfinite(fps) or fps <= 0:
-        fps = 30.0
-    return {'duration': duration, 'width': width, 'height': height, 'fps': fps}
+        fps = Fraction(30)
+    return {'duration': duration, 'width': width, 'height': height,
+            'fps': float(fps), 'fpsExpression': str(fps)}
 
 
 def ladder(width, height, source_fps=30):
-    short = min(width, height)
-    # Eastudy publishes one browser-compatible rendition. Sources below 720p
-    # keep their real encoded resolution, but still use the one canonical
-    # playback tier/path (`720p`) so lower-tier database references never
-    # reappear.
-    encoded_size = min(720, max(2, short // 2 * 2))
-    rate = 1000 if encoded_size == 720 else 700
-    values = [(encoded_size, rate, 30, 96)]
+    scale = min(1, 540 / min(width, height), 960 / max(width, height))
+    encoded_width = max(2, math.floor(width * scale / 2) * 2)
+    encoded_height = max(2, math.floor(height * scale / 2) * 2)
     try:
-        source_fps = float(source_fps)
-    except (TypeError, ValueError):
-        source_fps = 30.0
+        source_fps = Fraction(str(source_fps))
+    except (TypeError, ValueError, ZeroDivisionError):
+        source_fps = Fraction(30)
     if not math.isfinite(source_fps) or source_fps <= 0:
-        source_fps = 30.0
-    return [{'label': '720p', 'size': size, 'rateK': rate, 'crf': 25,
-             'fps': min(source_fps, fps), 'audioRateK': audio,
+        source_fps = Fraction(30)
+    fps = source_fps / max(1, math.ceil(source_fps / 30))
+    return [{'label': '540p', 'size': min(encoded_width, encoded_height),
+             'width': encoded_width, 'height': encoded_height, 'rateK': 800, 'crf': 25,
+             'fps': float(fps), 'fpsExpression': str(fps), 'audioRateK': 96,
              'preset': 'medium', 'segmentSeconds': 4,
-             'profileVersion': 'balanced-720-v3'}
-            for size, rate, fps, audio in values]
+             'profileVersion': 'balanced-540-v1'}]
 
 
 def _profile_signature(level):
-    fps = f"{level['fps']:.3f}".rstrip('0').rstrip('.')
-    return (f"{level['profileVersion']}-h264-crf{level['crf']}-{level['label']}-s{level['size']}-"
+    fps = level['fpsExpression']
+    return (f"{level['profileVersion']}-h264-crf{level['crf']}-{level['label']}-{level['width']}x{level['height']}-"
             f"{fps}fps-v{level['rateK']}-a{level['audioRateK']}-"
             f"{level['preset']}-seg{level['segmentSeconds']}")
 
@@ -180,19 +183,33 @@ def _valid_hls(folder, expected_profile=None):
         return None
 
 
+def _hls_bandwidth(folder):
+    """Include TS/audio overhead and measured segment peaks, not codec limits."""
+    duration, samples = None, []
+    for line in (folder / 'index.m3u8').read_text(encoding='utf-8').splitlines():
+        if line.startswith('#EXTINF:'):
+            duration = float(line.split(':', 1)[1].split(',')[0])
+        elif line and not line.startswith('#') and duration:
+            samples.append(((folder / line).stat().st_size * 8, duration))
+            duration = None
+    if not samples:
+        raise StudioError('HLS_OUTPUT_INVALID', '视频分片时长无效。')
+    return (math.ceil(max(bits / seconds for bits, seconds in samples)),
+            math.ceil(sum(bits for bits, _ in samples) / sum(seconds for _, seconds in samples)))
+
+
 def transcode(source, output, info, progress=None):
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
-    vertical = info['height'] > info['width']
     master = ['#EXTM3U', '#EXT-X-VERSION:3', '#EXT-X-INDEPENDENT-SEGMENTS']
     variants = []
-    levels = ladder(info['width'], info['height'], info.get('fps', 30))
+    levels = ladder(info['width'], info['height'], info.get('fpsExpression', info.get('fps', 30)))
     for level_index, level in enumerate(levels):
         folder = output / level['label']
-        scale = f"{level['size']}:-2" if vertical else f"-2:{level['size']}"
+        scale = f"{level['width']}:{level['height']}"
         rate = level['rateK']
         audio_rate = level['audioRateK']
-        fps = f"{level['fps']:.3f}".rstrip('0').rstrip('.')
+        fps = level['fpsExpression']
         segment_seconds = level['segmentSeconds']
         gop = max(1, round(level['fps'] * segment_seconds))
         profile_signature = _profile_signature(level)
@@ -234,12 +251,13 @@ def transcode(source, output, info, progress=None):
         if not video:
             raise StudioError('HLS_OUTPUT_INVALID', f"{level['label']} 无法解码。")
         width, height = int(video['width']), int(video['height'])
-        bandwidth = (rate + audio_rate) * 1000
-        master.extend([f'#EXT-X-STREAM-INF:BANDWIDTH={bandwidth},RESOLUTION={width}x{height},FRAME-RATE={level["fps"]:.3f}',
+        bandwidth, average_bandwidth = _hls_bandwidth(folder)
+        master.extend([f'#EXT-X-STREAM-INF:BANDWIDTH={bandwidth},AVERAGE-BANDWIDTH={average_bandwidth},RESOLUTION={width}x{height},FRAME-RATE={level["fps"]:.3f}',
                        f"{level['label']}/index.m3u8"])
         variants.append({'label': level['label'], 'path': f"{level['label']}/index.m3u8",
                          'width': width, 'height': height, 'bandwidth': bandwidth,
-                         'frameRate': round(level['fps'], 3)})
+                         'frameRate': float(level['fps']), 'fpsExpression': fps,
+                         'averageBandwidth': average_bandwidth, 'profileVersion': level['profileVersion']})
     (output / 'master.m3u8').write_text('\n'.join(master) + '\n', encoding='utf-8')
     return variants
 

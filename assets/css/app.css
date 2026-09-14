@@ -399,7 +399,7 @@ body.session-signed-out .account-shell{opacity:.65}
   .ctl-left{order:3!important;display:grid!important;grid-template-columns:repeat(3,1fr)!important;gap:7px!important;width:100%}.ctl-left #abBtn{display:none!important}.ctl-left .ctl{height:36px!important;border:1px solid var(--line)!important;background:var(--panel)!important;border-radius:10px!important;font-size:11px!important}.ctl-left .ctl.on{background:var(--accentSoft)!important;border-color:rgba(124,92,255,.22)!important}
   .sentence-insight{display:none!important}
   .transcript-wrap{order:4;display:block!important;height:auto!important;min-height:0!important;margin:0!important;border:0!important;border-radius:0!important;overflow:visible!important;background:transparent!important}
-  .transcript-head{display:none!important}
+  .transcript-head{display:flex!important}
   .transcript{height:auto!important;max-height:none!important;overflow:visible!important;padding:2px 12px 40px!important;background:transparent}
   .line{opacity:.72;padding:15px 13px!important;margin:6px 0;border:1px solid transparent;border-radius:15px;transition:background .16s ease,border-color .16s ease,opacity .16s ease,transform .16s ease}
   .line:hover{opacity:.9}.line.active{opacity:1;background:linear-gradient(90deg,rgba(245,158,11,.10),rgba(124,92,255,.055));border-color:rgba(245,158,11,.15)}
@@ -1265,7 +1265,7 @@ body.session-signed-out{overflow:hidden}.signin-backdrop{z-index:1200!important;
 .video-page .media-state[data-kind="captions"] span{color:var(--muted)}
 .collection-v2.is-unavailable .collection-v2-cover,.collection-v2.is-unavailable .collection-meta-chips,.collection-v2.is-unavailable .collection-progress-block,.collection-v2.is-unavailable .collection-summary{display:none}
 .collection-v2.is-unavailable .collection-v2-hero{grid-template-columns:1fr}.collection-v2.is-unavailable .collection-v2-copy{padding:34px;text-align:center}
-.creator-orb img+span,.creator-big-orb img+span,.creator-profile-avatar img+span,.entity-avatar img+span{display:none}
+.creator-orb img:not([hidden])+span,.creator-big-orb img:not([hidden])+span,.creator-profile-avatar img:not([hidden])+span,.entity-avatar img:not([hidden])+span{display:none}
 @media(max-width:760px){.study-stat-grid>button{padding:6px 4px}}
 
 /* Beta 6.22 — trusted membership, complete account names, pronunciation and plans. */
@@ -1315,8 +1315,27 @@ body.session-signed-out{overflow:hidden}.signin-backdrop{z-index:1200!important;
 .video-page .player{display:grid!important;place-items:center!important;flex:0 0 auto!important;width:100%!important;height:auto!important;min-height:0!important;max-height:58dvh!important;aspect-ratio:var(--media-ratio,16/9)!important;background:#000!important}
 .video-page .player video{display:block!important;width:100%!important;height:100%!important;max-height:58dvh!important;aspect-ratio:auto!important;object-fit:contain!important;background:#000!important}
 .home-muted-note{display:block;color:var(--muted);font-size:12px;line-height:1.6}.tag-cloud button small{margin-left:4px;color:var(--muted);font-size:9px}
-@media(max-width:850px){.video-page{min-height:100dvh!important;height:auto!important;overflow:visible!important}.video-page .study-grid{display:flex!important;flex-direction:column!important;height:auto!important;overflow:visible!important}.video-page .study-left{height:auto!important;max-height:none!important;overflow:visible!important}.video-page .player{position:static!important;top:auto!important;margin:0 -12px!important;max-height:50dvh!important}.video-page .player video{max-height:50dvh!important}.video-page .sentence-insight{display:block!important}.video-page .transcript{height:auto!important;max-height:none!important;overflow:visible!important}}
-@media(min-width:851px) and (max-height:740px){.video-page{height:auto!important;overflow:auto!important}.video-page .study-grid,.video-page .study-left{height:auto!important;max-height:none!important;overflow:visible!important}.video-page .transcript-wrap,.video-page .transcript{height:auto!important;max-height:none!important;overflow:visible!important}}
+/* This block owns the mobile transcript viewport; the page can still scroll. */
+@media(max-width:850px){
+ .video-page{min-height:100dvh!important;height:auto!important;overflow:visible!important}
+ .video-page .study-grid{display:flex!important;flex-direction:column!important;height:auto!important;overflow:visible!important}
+ .video-page .study-left{height:auto!important;max-height:none!important;overflow:visible!important;min-width:0}
+ .video-page .player{position:static!important;top:auto!important;margin:0 -12px!important;max-height:40dvh!important}
+ .video-page .player video{max-height:40dvh!important;object-fit:contain}
+ .video-page .sentence-insight{display:block!important}
+ .video-page[data-mobile-pane="transcript"] .transcript-wrap{display:flex!important;flex-direction:column;height:clamp(240px,45dvh,600px)!important;min-height:0!important;max-height:none!important;overflow:hidden!important;margin-bottom:env(safe-area-inset-bottom,0px)!important}
+ .video-page .transcript-head{display:flex!important;position:static;flex:0 0 auto;min-height:44px;height:auto;padding:6px 12px}
+ .video-page .transcript-head>div{min-width:0}
+ .video-page .transcript-head>div span{display:none}
+ .video-page .transcript-head>button[hidden]{display:none}
+ .video-page[data-mobile-pane="transcript"] .transcript{flex:1 1 0;min-height:0;height:auto!important;max-height:none!important;overflow-y:auto!important;overflow-x:hidden!important;padding:8px 12px 24px!important;overscroll-behavior-y:contain}
+ .video-page .line-en,.video-page .current-en{overflow-wrap:anywhere;word-break:normal}
+}
+@media(min-width:851px) and (max-height:740px){
+ .video-page{height:auto!important;overflow:auto!important}
+ .video-page .study-grid,.video-page .study-left{height:auto!important;max-height:none!important;overflow:visible!important}
+ .video-page .transcript-wrap{height:calc(100dvh - 58px)!important;min-height:240px!important;position:sticky;top:0}
+}
 
 /* beta6.31: auth hydration, deliberate mobile seeking, and compact playback controls. */
 .auth-recovery{position:fixed;inset:0;z-index:1201;display:grid;place-items:center;align-content:center;gap:14px;padding:24px;background:#f5fbfd;color:#173349;text-align:center}

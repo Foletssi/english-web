@@ -51,7 +51,7 @@ export async function onRequestPost({ request, env }) {
   let playback;
   try {
     playback = await serviceRpc(env, 'service_resolve_playback_access_v2', {
-      p_user_id: auth.user.id, p_job_id: jobId, p_path: '720p/index.m3u8'
+      p_user_id: auth.user.id, p_job_id: jobId, p_path: 'master.m3u8'
     });
   } catch (error) {
     console.error('playback authorization unavailable', error?.code || error?.message || error);
@@ -59,7 +59,7 @@ export async function onRequestPost({ request, env }) {
   }
   if (playback?.canPlay !== true) return json({ error: playback?.reason || 'PLAYBACK_FORBIDDEN' }, 403);
   const objectKey = String(playback.objectKey || '');
-  if (!objectKey.endsWith('/720p/index.m3u8')) return json({ error: 'PLAYBACK_FORBIDDEN' }, 403);
+  if (!/\/(?:540|720)p\/index\.m3u8$/.test(objectKey)) return json({ error: 'PLAYBACK_FORBIDDEN' }, 403);
   const entitlementExpiry=Date.parse(playback.expiresAt||'')/1000;
   const now = Math.floor(Date.now() / 1000),exp=playback.kind==='ADMIN'?now+300:Number.isFinite(entitlementExpiry)?Math.min(now+300,Math.floor(entitlementExpiry)):now;
   if(exp<=now)return json({error:'MEMBERSHIP_EXPIRED'},403);

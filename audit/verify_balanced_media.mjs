@@ -26,13 +26,13 @@ try{
  const tickets=[];
  for(const id of [1788926081632,1789024924932]){
   const video=snapshot.videos.find(row=>Number(row.id)===id);
-  assert.ok(video);assert.equal(video.status,'PUBLISHED');assert.equal(video.mediaEncodingProfile,'balanced-720-v3');
-  assert.deepEqual(video.playback.variants.map(row=>row.label),['720p']);
+  assert.ok(video);assert.equal(video.status,'PUBLISHED');assert.equal(video.mediaEncodingProfile,'balanced-540-v1');
+  assert.deepEqual(video.playback.variants.map(row=>row.label),['540p']);
   const response=await checked(site+'/api/session',{method:'POST',headers,body:JSON.stringify({jobId:video.processingJobId})});
   const cookies=[...catalogCookies,...response.headers.getSetCookie().map(value=>value.split(';')[0])].join('; ');
   const url=new URL(video.playback.masterUrl,site);
   const manifest=await (await checked(url,{headers:{Cookie:cookies}})).text();
-  assert.ok(manifest.includes('#EASTUDY-PROFILE:balanced-720-v3-'));
+  assert.ok(manifest.includes('#EASTUDY-PROFILE:balanced-540-v1-'));
   assert.ok(manifest.includes('-a96-medium-seg4'));assert.ok(manifest.includes('#EXT-X-ENDLIST'));
   const names=manifest.split(/\r?\n/).filter(line=>line&&!line.startsWith('#'));
   const segments=[];

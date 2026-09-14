@@ -20,13 +20,22 @@ async function handle({ request, env }, headOnly = false) {
   if (!/^[0-9a-f-]{36}$/i.test(job) || token.length < 32 || token.length > 256) {
     return json({ error: 'SOURCE_TOKEN_INVALID' }, 401);
   }
-  const response = await fetch(SUPABASE_URL + '/rest/v1/rpc/resolve_processing_source', {
-    method: 'POST',
-    headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ p_job_id: job, p_token: token })
-  });
-  if (!response.ok) return json({ error: 'SOURCE_AUTH_FAILED' }, 502);
-  const rows = await response.json();
+  const asset = url.searchParams.get('asset') || 'source';
+  if (!['source', 'cover'].includes(asset)) return json({ error: 'SOURCE_ASSET_INVALID' }, 400);
+  const resolver = asset === 'cover' ? 'resolve_processing_reencode_cover' : 'resolve_processing_source';
+  let rows;
+  try {
+    const response = await fetch(SUPABASE_URL + '/rest/v1/rpc/' + resolver, {
+      method: 'POST',
+      headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_job_id: job, p_token: token }),
+      signal: AbortSignal.timeout(15000)
+    });
+    if (!response.ok) return json({ error: 'SOURCE_AUTH_FAILED' }, 502);
+    rows = await response.json();
+  } catch {
+    return json({ error: 'SOURCE_AUTH_UNAVAILABLE' }, 503);
+  }
   const key = rows?.[0]?.source_key;
   if (!key) return json({ error: 'SOURCE_NOT_FOUND' }, 404);
   const head = await env.VIDEO_BUCKET.head(key);

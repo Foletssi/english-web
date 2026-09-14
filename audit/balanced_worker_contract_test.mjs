@@ -60,4 +60,4 @@ const completed = scope.normalize({type:'MEDIA_REENCODE',stage:'REVIEW',status:'
 assert.equal(completed.steps.length,4);
 assert.ok(completed.steps.every(([,status])=>status==='SUCCESS'));
 assert.ok(completed.steps.every(([step])=>!['asr','enrich','review'].includes(step)));
-assert.ok(admin.includes("j.type==='MEDIA_REENCODE'?'均衡720P已更新，学习内容保持不变'"));
+assert.ok(admin.includes("j.type==='MEDIA_REENCODE'?'视频优化已完成，学习内容保持不变'"));

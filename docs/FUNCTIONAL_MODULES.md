@@ -7,11 +7,11 @@
 | M01 | 身份、账号与会员准入 | 账号规范化、登录、邀请码注册/续期、角色和 VIP 门禁、会话失效 | `learner-auth`、`invite-register`、`get_my_learning_access_v2`、`EastudyAuth`、`EastudyAccessGuard` | Supabase Auth、会员表 | 媒体对象键、处理任务内部状态 |
 | M02 | 学员首页与推荐 | 首页内容、热门标签、继续学习、创作者推荐 | `EastudyCatalog`、已发布内容快照、学习摘要 | M03、M05、M06 | 草稿、处理任务、管理端私有表 |
 | M03 | 内容目录与搜索 | 视频、合集、创作者、标签、难度的只读目录和筛选 | `get_published_content`、`EastudyCatalog` | M01 的准入结果 | Auth 身份解析、R2 原片 |
-| M04 | 视频学习教室 | 720P 播放、字幕、单句循环、重点词、词卡和观看记录 | `/api/session` 短票据、媒体路由、`EastudyMediaPlayer` | M01、M03、M05 | Supabase access token Cookie、任意任务/路径 |
+| M04 | 视频学习教室 | 540P 播放（过渡兼容720P）、字幕、单句循环、重点词、词卡和观看记录 | `/api/session` 短票据、媒体路由、`EastudyMediaPlayer` | M01、M03、M05 | Supabase access token Cookie、任意任务/路径 |
 | M05 | 学习计划与进度 | 目标、学习时长、连续学习、历史和跨设备同步 | 学习 RPC、`EastudyData` 学习方法 | M01、M03 | 管理端草稿、处理节点租约 |
 | M06 | 生词、收藏与关注 | 生词复习、句子/合集收藏、创作者关注 | 个人学习 RPC、受用户 ID 约束的本地缓存 | M01、M03 | 其他用户数据、管理端写接口 |
 | M07 | 管理端内容运营 | 视频/字幕/合集/创作者编辑、发布、回收站 | 管理端内容 RPC、持久删除流程 | M01 管理员权限、M03 | 绕过回收站直接删除 R2 |
-| M08 | AI 视频处理 | 上传、720P、faster-whisper、DeepSeek、续跑、回传和按视频汇总 | 处理任务 RPC、`admin_list_processing_video_groups_v1` | M07 的视频 ID、处理 Worker | 学员 UI 状态、先按任务截断再分组 |
+| M08 | AI 视频处理 | 上传、540P、faster-whisper、DeepSeek、续跑、回传和按视频汇总 | 处理任务 RPC、`admin_list_processing_video_groups_v1` | M07 的视频 ID、处理 Worker | 学员 UI 状态、先按任务截断再分组 |
 | M09 | 学员、VIP 与邀请码管理 | 学员列表/详情、到期时间、邀请码生成复制撤销和续期 | 管理端学员/邀请码 RPC | M01 管理员权限 | 客户端明文密码、完整令牌日志 |
 | M10 | 系统运营与质量 | 健康状态、审计、版本、北京时间相对时间、专项回归 | `EastudyRelativeTime`、`audit/` 测试命令 | 各板块的公开只读状态 | 直接改业务数据来制造健康结果 |
 

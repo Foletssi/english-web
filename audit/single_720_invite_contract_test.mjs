@@ -11,8 +11,8 @@ const media=fs.readFileSync('services/local-studio/media_tools.py','utf8');
 const session=fs.readFileSync('functions/api/session.js','utf8');
 const mediaRoute=fs.readFileSync('functions/api/processing/media/[[path]].js','utf8');
 
-assert.ok(media.includes("'label': '720p'"));
-assert.ok(media.includes('encoded_size = min(720'));
+assert.ok(media.includes("'label': '540p'"));
+assert.ok(media.includes("'profileVersion': 'balanced-540-v1'"));
 assert.ok(media.includes("'crf': 25"));
 assert.ok(pipeline.includes("'policy': 'single-standard-v2'"));
 assert.ok(!pipeline.includes("'original':"));

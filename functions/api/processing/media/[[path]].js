@@ -22,7 +22,7 @@ async function handle({ request, env, params, waitUntil }, headOnly) {
   const job = slash < 0 ? '' : raw.slice(0, slash);
   const path = slash < 0 ? '' : raw.slice(slash + 1);
   if (!/^[0-9a-f-]{36}$/i.test(job) || !path) return json({ error: 'MEDIA_PATH_INVALID' }, 400);
-  const playbackAsset=/^720p\/(?:index\.m3u8|segment_[0-9]{5}\.ts)$/.test(path);
+  const playbackAsset=/^(?:540|720)p\/(?:index\.m3u8|segment_[0-9]{5}\.ts)$/.test(path);
   let key='';
   if(playbackAsset){
     let ticket;
@@ -78,7 +78,7 @@ async function handle({ request, env, params, waitUntil }, headOnly) {
   const headers = new Headers();
   object.writeHttpMetadata(headers);
   headers.set('Accept-Ranges', 'bytes');
-  headers.set('Cache-Control', path.endsWith('.m3u8') ? 'private, max-age=60' : 'private, max-age=31536000, immutable');
+  headers.set('Cache-Control', 'private, no-store');
   headers.set('ETag', object.httpEtag || object.etag);
   headers.set('Content-Length', String(range ? range.end - range.start + 1 : head.size));
   if (range) headers.set('Content-Range', `bytes ${range.start}-${range.end}/${head.size}`);

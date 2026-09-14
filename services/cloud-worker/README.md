@@ -14,7 +14,7 @@
 
 ## 单档媒体配置
 
-`services/local-studio/media_tools.py` 是本地导入与云端队列共用的唯一编码配置：`balanced-720-v3`，H.264 CRF25、medium、maxrate1000k、最高30fps、AAC96k、4秒HLS。低于720P的原片不放大，但仍只发布一个720p路径。旧参数缓存不会被当作新成品复用。
+`services/local-studio/media_tools.py` 是本地导入与云端队列共用的唯一编码配置：`balanced-540-v1`，H.264 CRF25、medium、maxrate800k、最高30fps、AAC96k、4秒HLS。长边≤960、短边≤540；小原片不放大，只发布一个540p路径；≤30fps保留，高帧率整数分频至≤30。旧参数缓存不会被当作新成品复用。
 
 ## 现有视频媒体替换（维护命令）
 

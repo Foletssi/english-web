@@ -27,19 +27,27 @@ def rpc(name, values):
         return json.load(response)
 
 
-def prepare(original_job, output, progress=None):
+def prepare(original_job, output, progress=None, cover=None):
     source = worker_root() / original_job / 'source.mp4'
     if not source.is_file():
         raise RuntimeError('Verified local source is missing; use the cloud worker source cache')
     info = probe(source)
     variants = transcode(source, output, info, progress=progress)
     # Keep the exact existing cover, rather than select a new frame.
-    cover = source.parent / 'output' / original_job / 'cover.webp'
+    cover = cover or source.parent / 'output' / original_job / 'cover.webp'
     if not cover.is_file():
         raise RuntimeError('Existing cover cache is missing')
     output.mkdir(parents=True, exist_ok=True)
     shutil.copy2(cover, output / 'cover.webp')
-    run(['ffmpeg', '-v', 'error', '-nostdin', '-i', str(output / '720p' / 'index.m3u8'), '-f', 'null', '-'], 7200)
+    playlist = output / '540p' / 'index.m3u8'
+    run(['ffmpeg', '-v', 'error', '-xerror', '-nostdin', '-i', str(playlist), '-f', 'null', '-'], 7200)
+    encoded = probe(playlist)
+    if abs(encoded['duration'] - info['duration']) > 0.15:
+        raise RuntimeError('Encoded duration differs from source')
+    if (min(encoded['width'], encoded['height']) > 540
+            or max(encoded['width'], encoded['height']) > 960
+            or not 0 < encoded['fps'] <= 30.001):
+        raise RuntimeError('Encoded media does not meet the 540P profile')
     assets = selected_assets(output, {'video': {'playback': {'variants': variants}}})
     result = {'originalJobId': original_job, 'duration': info['duration'], 'variants': variants,
               'bytes': sum(path.stat().st_size for path in assets), 'assetCount': len(assets)}
@@ -60,7 +68,7 @@ def apply(original_job, output):
     lease['downloadUrl'] = base + f'source?job={job_id}&token={token}'
     lease['outputUrl'] = base + f'output?job={job_id}&token={token}&run={run_id}'
     client = EdgeClient(DEFAULT_ENDPOINT, secret, 'eastudy-media-maintenance',
-                        {'ffmpeg': True, 'mediaProfile': 'balanced-720-v3'})
+                        {'ffmpeg': True, 'mediaProfile': 'balanced-540-v1'})
     stop, cancelled = threading.Event(), threading.Event()
     thread = threading.Thread(target=heartbeat_loop, args=(client, lease, stop, cancelled), daemon=True)
     thread.start()
@@ -68,6 +76,8 @@ def apply(original_job, output):
         # HEAD/ETag+length revalidates the cached original against cloud storage.
         source = worker_root() / original_job / 'source.mp4'
         download(lease['downloadUrl'], source)
+        cover = source.parent / 'reencode-cover.webp'
+        download(lease['downloadUrl'] + '&asset=cover', cover)
         last_report = [0.0]
         def progress(_index, _count, label, current, total):
             if cancelled.is_set():
@@ -76,9 +86,9 @@ def apply(original_job, output):
                 return
             last_report[0] = time.monotonic()
             report_progress(client, lease, 'TRANSCODE', min(95, 10 + int(85 * current / max(total, 1))),
-                            '正在生成均衡720P，保留现有学习内容',
+                            '正在生成均衡540P，保留现有学习内容',
                             {'current': current, 'total': total, 'unit': 'media_seconds', 'substage': label})
-        summary = prepare(original_job, output, progress)
+        summary = prepare(original_job, output, progress, cover=cover)
         if cancelled.is_set():
             raise ApiError('JOB_LEASE_LOST_OR_CANCELLED')
         assets = selected_assets(output, {'video': {'playback': {'variants': summary['variants']}}})

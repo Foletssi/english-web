@@ -7,13 +7,15 @@ declare
   lease jsonb;
   manifest jsonb;
   path text;
-  variant jsonb:='{"label":"720p","path":"720p/index.m3u8","width":1280,"height":720,"frameRate":30}';
-  original_id uuid:='c295fa07-9d5f-4b3d-b1e1-1e915ac78249';
+  variant jsonb:='{"label":"540p","path":"540p/index.m3u8","width":960,"height":540,"frameRate":30,"bandwidth":950000,"averageBandwidth":700000,"profileVersion":"balanced-540-v1"}';
+  original_id uuid;
   before_video jsonb;
   after_video jsonb;
   keys text[]:=array['processingJobId','mediaUrl','playback','cover','mediaEncodingProfile','playbackBytes'];
 begin
   select * into before_row from private.content_snapshots where environment='production';
+  select (v->>'processingJobId')::uuid into original_id
+    from jsonb_array_elements(before_row.published->'videos') v where v->>'id'='1788926081632';
   begin
     perform public.service_begin_balanced_reencode('00000000-0000-0000-0000-000000000000');
     raise exception 'TEST_INVALID_SOURCE_ACCEPTED';
@@ -34,7 +36,7 @@ begin
   exception when others then
     if sqlerrm<>'OUTPUT_MANIFEST_INCOMPLETE' then raise; end if;
   end;
-  foreach path in array array['master.m3u8','cover.webp','720p/index.m3u8','720p/segment_00000.ts'] loop
+  foreach path in array array['master.m3u8','cover.webp','540p/index.m3u8','540p/segment_00000.ts'] loop
     insert into private.processing_output_receipts(job_id,run_id,path,size,sha256,etag)
       values((lease#>>'{job,id}')::uuid,(lease#>>'{job,run_id}')::uuid,path,10,repeat('a',64),'test-only');
   end loop;

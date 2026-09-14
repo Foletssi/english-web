@@ -32,7 +32,7 @@ def process_job(store, job_id, source_path, cover_path, ai_config, media_root,
     try:
         source = Path(source_path)
         source_identity = file_sha256(source) if source.is_file() else canonical_hash(str(source))
-        probe_key = canonical_hash({'source': source_identity, 'probeSchema': 1})
+        probe_key = canonical_hash({'source': source_identity, 'probeSchema': 2})
         info = read_valid_json(checkpoints / 'probe.json', probe_key,
                                lambda value: value if float(value['duration']) > 0 else None)
         if info is None:
@@ -41,7 +41,7 @@ def process_job(store, job_id, source_path, cover_path, ai_config, media_root,
             save_json_checkpoint(checkpoints / 'probe.json', probe_key, info)
         else:
             progress('probe', 10, '已复用素材检查结果')
-        progress('transcode', 18, '正在生成单档均衡 720P 视频')
+        progress('transcode', 18, '正在生成单档均衡 540P 视频')
         variants = transcode(source_path, output, info, progress=transcode_progress)
         cover = make_cover(source_path, output / 'cover.webp', info['duration'], cover_path)
         progress('asr', 48, '正在提取英语音轨')
