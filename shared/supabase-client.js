@@ -291,7 +291,8 @@
   async function setFavorite(input) {
     const api = client('student');
     const context = await getContext('student');
-    if (!api || !context.user || !isLearnerProfile(context.profile)) return { error: null };
+    if (context.error || !api || !context.user || !isLearnerProfile(context.profile)) return { error: context.error || new Error('AUTH_REQUIRED') };
+    if (input.expectedUserId && String(context.user.id) !== String(input.expectedUserId)) return { error: new Error('ACCOUNT_CHANGED') };
     return input.active
       ? api.from('saved_sentences').upsert({ user_id: context.user.id, video_id: Number(input.videoId), sentence_index: Number(input.sentenceIndex), sentence_id: String(input.sentenceId || ''), content_version: String(input.contentVersion || 'published-v1'), english: input.english || '', chinese: input.chinese || '' }, { onConflict: 'user_id,video_id,sentence_index' })
       : api.from('saved_sentences').delete().eq('user_id', context.user.id).eq('video_id', Number(input.videoId)).eq('sentence_index', Number(input.sentenceIndex));
@@ -300,9 +301,10 @@
   async function setVocabulary(input) {
     const api = client('student');
     const context = await getContext('student');
-    if (!api || !context.user || !isLearnerProfile(context.profile)) return { error: null };
+    if (context.error || !api || !context.user || !isLearnerProfile(context.profile)) return { error: context.error || new Error('AUTH_REQUIRED') };
+    if (input.expectedUserId && String(context.user.id) !== String(input.expectedUserId)) return { error: new Error('ACCOUNT_CHANGED') };
     const wordKey = String(input.wordKey || input.word || '').toLowerCase().trim();
-    if (!wordKey) return { error: null };
+    if (!wordKey) return { error: new Error('WORD_REQUIRED') };
     if (!input.active) return api.from('user_vocabulary').delete().eq('user_id', context.user.id).eq('word_key', wordKey);
     return api.from('user_vocabulary').upsert({
       user_id: context.user.id,
@@ -334,15 +336,17 @@
     });
   }
 
-  async function setCreatorFollow(creatorId, active) {
+  async function setCreatorFollow(creatorId, active, expectedUserId) {
     const api = client('student'), context = await getContext('student');
-    if (!api || !context.user || !isLearnerProfile(context.profile)) return { error: null };
+    if (context.error || !api || !context.user || !isLearnerProfile(context.profile)) return { error: context.error || new Error('AUTH_REQUIRED') };
+    if (expectedUserId && String(context.user.id) !== String(expectedUserId)) return { error: new Error('ACCOUNT_CHANGED') };
     return api.from('user_creator_follows').upsert({ user_id: context.user.id, creator_id: String(creatorId), active: Boolean(active), updated_at: new Date().toISOString() }, { onConflict: 'user_id,creator_id' });
   }
 
-  async function setCollectionSave(collectionId, active) {
+  async function setCollectionSave(collectionId, active, expectedUserId) {
     const api = client('student'), context = await getContext('student');
-    if (!api || !context.user || !isLearnerProfile(context.profile)) return { error: null };
+    if (context.error || !api || !context.user || !isLearnerProfile(context.profile)) return { error: context.error || new Error('AUTH_REQUIRED') };
+    if (expectedUserId && String(context.user.id) !== String(expectedUserId)) return { error: new Error('ACCOUNT_CHANGED') };
     return api.from('user_collection_saves').upsert({ user_id: context.user.id, collection_id: String(collectionId), active: Boolean(active), updated_at: new Date().toISOString() }, { onConflict: 'user_id,collection_id' });
   }
 
@@ -463,11 +467,11 @@
           sourceVideoId: row.source_video_id || null,
           sourceSentenceId: row.source_sentence_id || null
         };
-        details[row.word_key] = { phon: row.phonetic || '', meaning: row.meaning || '', context: row.context || '', sourceVideoId: row.source_video_id || null, sourceSentenceId: row.source_sentence_id || null };
+        details[row.word_key] = { phon: row.phonetic || '', meaning: row.meaning || '', context: row.context || '', contentVersion: row.content_version, sourceVideoId: row.source_video_id || null, sourceSentenceId: row.source_sentence_id || null };
       });
       setLocal(context.user.id, 'vocabMeta', meta);
       setLocal(context.user.id, 'vocabDetails', details);
-      setLocal(context.user.id, 'vocab', (vocabulary.data || []).map(row => row.word));
+      setLocal(context.user.id, 'vocab', Object.keys(meta));
       setLocal(context.user.id, 'vocabRemoved', []);
     }
     if (!learningGoal.error && learningGoal.data) {

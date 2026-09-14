@@ -74,6 +74,16 @@
     return queryVideos(videos, { collectionId });
   }
 
+  function decodeRouteId(value) {
+    try { return decodeURIComponent(String(value || '')); } catch (_) { return null; }
+  }
+
+  function creatorContent(videos, collections, creatorId) {
+    const rows = queryVideos(videos, { creatorId });
+    const ids = new Set(rows.flatMap(video => video.collectionIds || []).map(String));
+    return { videos: rows, collections: collections.filter(collection => ids.has(String(collection.id))) };
+  }
+
   function collectionStats(members, progressForVideo, sentencesForVideo) {
     const rows = publishedVideos(members);
     const durationSeconds = rows.reduce((sum, video) => sum + Math.max(0, Number(video.duration) || 0), 0);
@@ -97,6 +107,6 @@
 
   global.EastudyCatalog = Object.freeze({
     TOPIC_CATEGORIES, uniqueStrings, publishedVideos, topicIds, categoryLabel, tagIds,
-    queryVideos, availableTags, uniqueTagPage, collectionMembers, collectionStats
+    queryVideos, availableTags, uniqueTagPage, collectionMembers, collectionStats, decodeRouteId, creatorContent
   });
 })(window);

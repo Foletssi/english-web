@@ -71,6 +71,16 @@
     return {data:firstRow(data),error:error||null};
   }
 
+  async function setCreatorStatus(creatorId, status, replacementId, expectedRevision) {
+    if(global.ZoContent?.localOnly)return {error:new Error('LOCAL_CONTENT_CLOUD_WRITE_DISABLED')};
+    const api=auth('admin');
+    if(!api)return {error:new Error('SUPABASE_NOT_CONFIGURED')};
+    const {data,error}=await api.rpc('admin_set_creator_status_v1',{
+      p_creator_id:String(creatorId),p_status:String(status),p_replacement_id:replacementId?String(replacementId):null,p_expected_revision:Number(expectedRevision)
+    });
+    return {data:firstRow(data),error:error||null};
+  }
+
   async function setVideoPublication(videoId, status, expectedRevision) {
     if(global.ZoContent?.localOnly)return {error:new Error('LOCAL_CONTENT_CLOUD_WRITE_DISABLED')};
     const api=auth('admin');
@@ -316,7 +326,7 @@
     return { key: payload.key, url: payload.url, size: Number(payload.size) || file.size, type: 'image/webp' };
   }
 
-  global.EastudyCloudContent = Object.freeze({ pullPublished, pullAdmin, saveDraft, publish, publishEntity, setVideoPublication, createLearningRepair, listTrash, trashVideos, restoreVideo,planPermanentVideoDeletion,confirmPermanentVideoDeletion,getVideoDeletion,
+  global.EastudyCloudContent = Object.freeze({ pullPublished, pullAdmin, saveDraft, publish, publishEntity, setCreatorStatus, setVideoPublication, createLearningRepair, listTrash, trashVideos, restoreVideo,planPermanentVideoDeletion,confirmPermanentVideoDeletion,getVideoDeletion,
     processingHealth, createProcessingJob, listProcessingJobs, listProcessingHistory, getProcessingJob, retryProcessingJob,
     syncMediaSession, clearMediaSession, uploadVideo, uploadCreatorAvatar });
 })(window);
