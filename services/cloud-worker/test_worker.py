@@ -1,9 +1,10 @@
 import importlib.util
+import io
 import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 MODULE = Path(__file__).with_name('worker.py')
 SPEC = importlib.util.spec_from_file_location('cloud_worker', MODULE)
@@ -13,6 +14,122 @@ SPEC.loader.exec_module(worker)
 
 
 class WorkerTests(unittest.TestCase):
+    def test_idempotent_network_retry_is_bounded(self):
+        client = worker.EdgeClient('https://example.test', 'secret', 'test-worker', {})
+        with patch.object(worker.urllib.request, 'urlopen', side_effect=TimeoutError()) as request, \
+             patch.object(worker.time, 'sleep') as sleep:
+            with self.assertRaises(worker.ApiError):
+                client.call('worker-output-receipt-v2')
+        self.assertEqual(request.call_count, 3)
+        self.assertEqual([call.args[0] for call in sleep.call_args_list], [1, 2])
+
+    def test_receipt_retries_transient_failure_with_identical_payload(self):
+        client = worker.EdgeClient('https://example.test', 'secret', 'test-worker', {})
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = b'{"ok":true}'
+        error = worker.urllib.error.HTTPError('https://example.test', 503, 'busy', {}, io.BytesIO(b'{}'))
+        with patch.object(worker.urllib.request, 'urlopen', side_effect=[error, response]) as request, \
+             patch.object(worker.time, 'sleep'):
+            self.assertTrue(client.call('worker-output-receipt-v2', runId='run', path='540p/a.ts')['ok'])
+        self.assertEqual(request.call_count, 2)
+        self.assertEqual(request.call_args_list[0].args[0].data, request.call_args_list[1].args[0].data)
+
+    def test_claim_and_permission_failure_are_not_retried(self):
+        client = worker.EdgeClient('https://example.test', 'secret', 'test-worker', {})
+        for action, status in [('worker-claim', 503), ('worker-telemetry-v2', 403)]:
+            error = worker.urllib.error.HTTPError('https://example.test', status, 'failed', {}, io.BytesIO(b'{}'))
+            with patch.object(worker.urllib.request, 'urlopen', side_effect=error) as request:
+                with self.assertRaises(worker.ApiError):
+                    client.call(action)
+            self.assertEqual(request.call_count, 1)
+
+    def test_progress_outage_does_not_abort_but_lease_loss_does(self):
+        lease = {'job': {'id': 'job', 'run_id': 'run'}, 'token': 'token'}
+        client = MagicMock()
+        client.call.side_effect = worker.ApiError('EDGE_HTTP_503', status=503)
+        self.assertIsNone(worker.report_progress(client, lease, 'LOCAL_UPLOAD', 96, '上传'))
+        client.call.side_effect = worker.ApiError('JOB_LEASE_LOST_OR_CANCELLED', status=403)
+        with self.assertRaises(worker.ApiError):
+            worker.report_progress(client, lease, 'LOCAL_UPLOAD', 96, '上传')
+
+    def test_wrapped_business_errors_are_not_retried(self):
+        client = worker.EdgeClient('https://example.test', 'secret', 'test-worker', {})
+        for code in ('VIDEO_IN_TRASH', 'JOB_NOT_FOUND', 'OUTPUT_RECEIPT_CONFLICT'):
+            for action in ('worker-telemetry-v2', 'worker-output-receipt-v2'):
+                with self.subTest(code=code, action=action):
+                    detail = {'ok': False, 'error': 'SUPABASE_400:' + code}
+                    errors = [worker.urllib.error.HTTPError(client.endpoint, 500, 'failed', {},
+                              io.BytesIO(worker.json.dumps(detail).encode())) for _ in range(3)]
+                    for error in errors:
+                        self.addCleanup(error.close)
+                    with patch.object(worker.urllib.request, 'urlopen', side_effect=errors) as request, \
+                         patch.object(worker.time, 'sleep') as sleep:
+                        with self.assertRaises(worker.ApiError) as raised:
+                            client.call(action)
+                    self.assertEqual(request.call_count, 1)
+                    sleep.assert_not_called()
+                    self.assertEqual(raised.exception.code, code)
+                    self.assertEqual(raised.exception.status, 400)
+                    self.assertEqual(raised.exception.detail, detail)
+
+    def test_wrapped_lease_refusals_cancel_the_run(self):
+        for code in ('VIDEO_IN_TRASH', 'JOB_NOT_FOUND', 'JOB_LEASE_LOST_OR_CANCELLED', 'RUN_ID_MISMATCH'):
+            with self.subTest(code=code):
+                detail = worker.json.dumps({'ok': False, 'error': 'SUPABASE_400:' + code}).encode()
+                error = worker.urllib.error.HTTPError('https://example.test', 500, 'failed', {}, io.BytesIO(detail))
+                self.addCleanup(error.close)
+                self.assertTrue(worker.lease_cancelled(worker.api_error_from_http(error)))
+
+    def test_progress_does_not_swallow_business_refusals(self):
+        client = worker.EdgeClient('https://example.test', 'secret', 'test-worker', {})
+        for code in ('SUPABASE_400:VIDEO_IN_TRASH', 'SUPABASE_400:OUTPUT_RECEIPT_CONFLICT',
+                     'SUPABASE_400:NEW_BUSINESS_REFUSAL', 'NEW_BUSINESS_REFUSAL'):
+            with self.subTest(code=code):
+                lease = {'job': {'id': 'job', 'run_id': 'run'}, 'token': 'token'}
+                detail = worker.json.dumps({'ok': False, 'error': code}).encode()
+                errors = [worker.urllib.error.HTTPError(client.endpoint, 500, 'failed', {},
+                          io.BytesIO(detail)) for _ in range(3)]
+                for error in errors:
+                    self.addCleanup(error.close)
+                with patch.object(worker.urllib.request, 'urlopen', side_effect=errors) as request, \
+                     patch.object(worker.time, 'sleep') as sleep:
+                    with self.assertRaises(worker.ApiError):
+                        worker.report_progress(client, lease, 'LOCAL_UPLOAD', 96, '上传')
+                self.assertEqual(request.call_count, 1)
+                sleep.assert_not_called()
+
+    def test_wrapped_transient_status_retries_but_unknown_error_does_not(self):
+        client = worker.EdgeClient('https://example.test', 'secret', 'test-worker', {})
+        for code, retry in [('SUPABASE_429:REQUEST_FAILED', True), ('SUPABASE_503:REQUEST_FAILED', True),
+                            ('SUPABASE_400:REQUEST_FAILED', False), ('SUPABASE_503:NEW_BUSINESS_REFUSAL', False)]:
+            with self.subTest(code=code):
+                detail = worker.json.dumps({'ok': False, 'error': code}).encode()
+                error = worker.urllib.error.HTTPError(client.endpoint, 500, 'failed', {}, io.BytesIO(detail))
+                self.addCleanup(error.close)
+                response = MagicMock()
+                response.__enter__.return_value.read.return_value = b'{"ok":true}'
+                with patch.object(worker.urllib.request, 'urlopen', side_effect=[error, response]) as request, \
+                     patch.object(worker.time, 'sleep') as sleep:
+                    if retry:
+                        self.assertTrue(client.call('worker-output-receipt-v2')['ok'])
+                    else:
+                        with self.assertRaises(worker.ApiError):
+                            client.call('worker-output-receipt-v2')
+                self.assertEqual(request.call_count, 2 if retry else 1)
+                self.assertEqual(sleep.call_count, 1 if retry else 0)
+
+    def test_upload_retries_network_failure_without_changing_bytes(self):
+        client = worker.EdgeClient('https://example.test', 'secret', 'test-worker', {})
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = b'{"ok":true}'
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / 'a.ts'
+            source.write_bytes(b'video')
+            with patch.object(worker.urllib.request, 'urlopen', side_effect=[TimeoutError(), response]) as request, \
+                 patch.object(worker.time, 'sleep'):
+                self.assertTrue(client.upload('https://example.test?job=1', 'token', 'job', '540p/a.ts', source)['ok'])
+            self.assertEqual(request.call_args_list[0].args[0].data, request.call_args_list[1].args[0].data)
+
     def test_generic_retry_cannot_reprocess_media_maintenance_learning(self):
         lease = {'job': {'id': '00000000-0000-0000-0000-000000000001',
                         'input': {'kind': 'MEDIA_REENCODE'}}, 'token': 'fixture'}
@@ -26,7 +143,7 @@ class WorkerTests(unittest.TestCase):
             pipeline.assert_not_called()
 
     def test_worker_reports_v5_protocol_version(self):
-        self.assertEqual(worker.VERSION, '2.3.1')
+        self.assertEqual(worker.VERSION, '2.3.2')
         source = MODULE.read_text(encoding='utf-8')
         self.assertIn("'learningRepairV5': True", source)
         self.assertIn("'teachingSchemaVersion': 3", source)
@@ -58,6 +175,18 @@ class WorkerTests(unittest.TestCase):
             manifest = worker.upload_assets(Client(), lease, output, assets)
         self.assertEqual([item['path'] for item in manifest], ['a.m3u8', 'm.webp', 'z.ts'])
         self.assertEqual(sum(action == 'worker-output-receipt-v2' for action, _ in calls), 3)
+        self.assertLessEqual(sum(action == 'worker-telemetry-v2' for action, _ in calls), 2)
+
+    def test_missing_receipt_never_returns_publishable_manifest(self):
+        client = MagicMock()
+        client.upload.return_value = {'size': 1, 'sha256': 'sha', 'etag': 'etag'}
+        client.call.side_effect = worker.ApiError('EDGE_HTTP_503', status=503)
+        lease = {'job': {'id': 'job', 'run_id': 'run'}, 'token': 'token', 'outputUrl': 'https://example.test'}
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'a.ts'
+            path.write_bytes(b'x')
+            with self.assertRaises(worker.ApiError):
+                worker.upload_assets(client, lease, Path(folder), [path])
 
     def test_v2_progress_carries_run_and_monotonic_sequence(self):
         calls = []

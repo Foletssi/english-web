@@ -24,17 +24,20 @@ from checkpoint import atomic_json  # noqa: E402
 from media_tools import ladder  # noqa: E402
 
 
-VERSION = '2.3.1'
+VERSION = '2.3.2'
 DEFAULT_ENDPOINT = 'https://ehxqtgakjgqgmghhdmjg.supabase.co/functions/v1/video-processing'
 STAGE_MAP = {'probe': 'PROBE', 'transcode': 'TRANSCODE', 'asr': 'ASR', 'enrich': 'ENRICH'}
 
 
 class ApiError(RuntimeError):
     def __init__(self, code, message=None, status=None, detail=None):
-        self.code = str(code or 'EDGE_REQUEST_FAILED')[:120]
-        self.status = status
+        code = str(code or 'EDGE_REQUEST_FAILED')
+        # Edge can wrap an upstream business rejection in an outer HTTP 500.
+        wrapped = re.fullmatch(r'SUPABASE_(\d{3}):(.+)', code, re.DOTALL)
+        self.code = (wrapped.group(2) if wrapped else code)[:120]
+        self.status = int(wrapped.group(1)) if wrapped else status
         self.detail = detail
-        super().__init__(str(message or self.code))
+        super().__init__(str(message or code))
 
 
 def api_error_from_http(error, prefix='EDGE'):
@@ -54,6 +57,42 @@ def lease_cancelled(error):
     }
 
 
+def transient_request_error(error):
+    if not isinstance(error, ApiError) or lease_cancelled(error):
+        return False
+    if error.status is not None and error.status not in {429, 500, 502, 503, 504}:
+        return False
+    # Named business errors, including unknown ones, must not inherit HTTP retries.
+    return error.code in {'EDGE_UNAVAILABLE', 'OUTPUT_UNAVAILABLE'} or (
+        error.status is not None and error.code in {
+            f'EDGE_HTTP_{error.status}', f'OUTPUT_HTTP_{error.status}', 'REQUEST_FAILED'})
+
+
+def request_json(request, timeout, prefix='EDGE', retryable=False):
+    # Retry only operations whose server contract is idempotent, using the same bytes.
+    attempts = 3 if retryable else 1
+    for attempt in range(attempts):
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                result = json.loads(response.read().decode('utf-8'))
+            if not isinstance(result, dict):
+                raise ValueError('Expected JSON object')
+            if not result.get('ok'):
+                raise ApiError(result.get('error') or f'{prefix}_REQUEST_FAILED', result.get('message'))
+            return result
+        except urllib.error.HTTPError as error:
+            failure = api_error_from_http(error, prefix)
+        except (urllib.error.URLError, OSError) as error:
+            failure = ApiError(f'{prefix}_UNAVAILABLE', str(error))
+        except ValueError as error:
+            failure = ApiError(f'{prefix}_INVALID_RESPONSE', str(error))
+        except ApiError as error:
+            failure = error
+        if attempt + 1 == attempts or not transient_request_error(failure):
+            raise failure
+        time.sleep(2 ** attempt)
+
+
 class EdgeClient:
     def __init__(self, endpoint, secret, worker_id, capabilities):
         self.endpoint = endpoint
@@ -68,16 +107,8 @@ class EdgeClient:
             'Content-Type': 'application/json', 'x-worker-secret': self.secret,
             'User-Agent': f'EastudyCloudWorker/{VERSION}'})
         timeout = 15 if 'heartbeat' in action else 45
-        try:
-            with urllib.request.urlopen(request, timeout=timeout) as response:
-                result = json.loads(response.read().decode('utf-8'))
-        except urllib.error.HTTPError as error:
-            raise api_error_from_http(error) from error
-        except (urllib.error.URLError, TimeoutError, ValueError) as error:
-            raise ApiError('EDGE_UNAVAILABLE', str(error)) from error
-        if not result.get('ok'):
-            raise ApiError(result.get('error') or 'EDGE_REQUEST_FAILED', result.get('message'))
-        return result
+        return request_json(request, timeout, retryable=action in {
+            'worker-telemetry-v2', 'worker-output-receipt-v2'})
 
     def upload(self, base_url, token, job_id, path, source):
         url = base_url + '&path=' + urllib.parse.quote(path, safe='/')
@@ -85,14 +116,7 @@ class EdgeClient:
         request = urllib.request.Request(url, data=data, method='PUT', headers={
             'Content-Type': content_type(path), 'Content-Length': str(len(data)),
             'User-Agent': f'EastudyCloudWorker/{VERSION}'})
-        try:
-            with urllib.request.urlopen(request, timeout=300) as response:
-                result = json.loads(response.read().decode('utf-8'))
-        except urllib.error.HTTPError as error:
-            raise api_error_from_http(error, 'OUTPUT') from error
-        if not result.get('ok'):
-            raise ApiError(str(result.get('error') or 'OUTPUT_UPLOAD_FAILED'))
-        return result
+        return request_json(request, 300, 'OUTPUT', retryable=True)
 
 
 class RemoteProgressStore:
@@ -154,9 +178,16 @@ def sequence(lease):
 def report_progress(client, lease, stage, progress, message, metrics=None):
     current_run = run_id(lease)
     if current_run:
-        return client.call('worker-telemetry-v2', jobId=lease['job']['id'], token=lease['token'],
-                           runId=current_run, sequence=sequence(lease), stage=stage,
-                           progress=progress, message=message, metrics=metrics or {})
+        try:
+            return client.call('worker-telemetry-v2', jobId=lease['job']['id'], token=lease['token'],
+                               runId=current_run, sequence=sequence(lease), stage=stage,
+                               progress=progress, message=message, metrics=metrics or {})
+        except ApiError as error:
+            if not transient_request_error(error):
+                raise
+            # Heartbeat and output receipts remain mandatory; a missed UI sample is not a failed video.
+            print(f'Progress sample deferred: {error.code}', flush=True)
+            return None
     return client.call('worker-progress', jobId=lease['job']['id'], token=lease['token'],
                        stage=stage, progress=progress, message=message)
 
@@ -193,6 +224,7 @@ def upload_assets(client, lease, output, assets, cancelled=None):
     job_id = lease['job']['id']
     ordered = sorted(assets)
     manifest = {}
+    last_progress = None
 
     def upload_one(path):
         if cancelled and cancelled.is_set():
@@ -215,11 +247,14 @@ def upload_assets(client, lease, output, assets, cancelled=None):
                 client.call('worker-output-receipt-v2', jobId=job_id, token=lease['token'],
                             runId=run_id(lease), path=relative, size=item['size'],
                             sha256=item['sha256'], etag=str(receipt['etag']))
-            progress = 96 + int(3 * completed / len(ordered))
-            report_progress(client, lease, 'LOCAL_UPLOAD', min(99, progress),
-                            f'正在上传成品 {completed}/{len(ordered)}',
-                            {'substage': relative, 'current': completed,
-                             'total': len(ordered), 'unit': 'files'})
+            now = time.monotonic()
+            if last_progress is None or completed == len(ordered) or now - last_progress >= 5:
+                progress = 96 + int(3 * completed / len(ordered))
+                report_progress(client, lease, 'LOCAL_UPLOAD', min(99, progress),
+                                f'正在上传成品 {completed}/{len(ordered)}',
+                                {'substage': relative, 'current': completed,
+                                 'total': len(ordered), 'unit': 'files'})
+                last_progress = time.monotonic()
     return [manifest[path.relative_to(output).as_posix()] for path in ordered]
 
 
