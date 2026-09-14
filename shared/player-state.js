@@ -47,6 +47,27 @@ function captionView(status,rows,time){
   return selectCaption(status,buildCaptionTimeline(rows),time);
 }
 
+function initialPosition(sentenceIndex,rows,resume){
+  const index=typeof sentenceIndex==='string'&&/^\d+$/.test(sentenceIndex)?Number(sentenceIndex):-1;
+  const start=rows?.[index]?.s;
+  if(Number.isFinite(start)&&start>=0)return start;
+  const saved=Number(resume);
+  return Number.isFinite(saved)&&saved>=0?saved:0;
+}
+
+// Install after destroying the old source and before loading the new one.
+function attachInitialSeek(video,position,isCurrent,onApplied=()=>{}){
+  const cancel=()=>video.removeEventListener('loadedmetadata',apply);
+  const apply=()=>{
+    if(!isCurrent()){cancel();return}
+    if(video.readyState<1||!Number.isFinite(video.duration)||video.duration<=0)return;
+    cancel();
+    if(position>=0&&position<video.duration){video.currentTime=position;onApplied()}
+  };
+  video.addEventListener('loadedmetadata',apply);
+  return cancel;
+}
+
 function activeSlice(previous,current){
   if(!previous||!current)return null;
   const wall=(current.monotonicMs-previous.monotonicMs)/1000;
@@ -58,5 +79,5 @@ function activeSlice(previous,current){
   return {activeSeconds:wall,watchRange:[previous.mediaTime,current.mediaTime]};
 }
 
-global.EastudyPlayerState=Object.freeze({initial,sessionMessage,buildCaptionTimeline,selectCaption,captionView,activeSlice});
+global.EastudyPlayerState=Object.freeze({initial,sessionMessage,buildCaptionTimeline,selectCaption,captionView,initialPosition,attachInitialSeek,activeSlice});
 })(window);

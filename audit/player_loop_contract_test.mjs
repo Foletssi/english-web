@@ -56,6 +56,35 @@ function loadLoop(video) {
 }
 
 const state = loadPlayerState();
+assert.equal(state.initialPosition('0', [{s:0},{s:8}], 12), 0);
+assert.equal(state.initialPosition('1', [{s:0},{s:8}], 12), 8);
+for (const query of [null,'','-1','1.5','abc','10']) {
+  assert.equal(state.initialPosition(query, [{s:0},{s:8}], 12), 12);
+}
+const seekVideo = new VideoFixture();
+seekVideo.duration = 30;
+seekVideo.readyState = 0;
+let current = true, applied = 0;
+const cancelSeek = state.attachInitialSeek(seekVideo, 8, () => current, () => applied++);
+assert.equal(seekVideo.currentTime, 0, 'do not seek using metadata from the previous source');
+seekVideo.emit('loadedmetadata');
+assert.equal(seekVideo.currentTime, 0);
+seekVideo.readyState = 1;
+seekVideo.emit('loadedmetadata');
+assert.equal(seekVideo.currentTime, 8);
+assert.equal(applied, 1);
+seekVideo.emit('loadedmetadata');
+assert.equal(applied, 1, 'initial seek is one-shot, including media retries');
+cancelSeek();
+state.attachInitialSeek(seekVideo, 18, () => current, () => applied++);
+current = false;
+seekVideo.emit('loadedmetadata');
+assert.equal(seekVideo.currentTime, 8, 'late metadata may not seek a different route');
+const cancelPending = state.attachInitialSeek(seekVideo, 20, () => true);
+cancelPending();
+seekVideo.emit('loadedmetadata');
+assert.equal(seekVideo.currentTime, 8);
+assert.equal(seekVideo.listenerCount(), 0);
 for (const code of ['PLAYBACK_AUTH_UNAVAILABLE','PLAYBACK_TICKET_UNAVAILABLE','SESSION_TIMEOUT','']) {
   const message=state.sessionMessage(code).join(' ');
   assert.match(message,/播放服务暂时不可用/);
@@ -144,4 +173,4 @@ assert.ok(migration.includes('revoke all on table private.learner_activity'));
 assert.equal(migration.includes('completed_sentences'), false, 'unknown daily statistic columns must not be guessed');
 assert.equal(migration.includes('reviewed_words'), false, 'unknown daily statistic columns must not be guessed');
 
-console.log('Player loop and learner admin contract: 35 checks passed.');
+console.log('Player loop and learner admin contract: all checks passed.');
