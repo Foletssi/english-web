@@ -4,9 +4,11 @@
 
 ## 发布状态
 
-- 已完成：全项目回归；Supabase `20260915110000_creator_catalog_lifecycle` 正式迁移。
-- 待完成：main提交推送、Cloudflare Pages上线、HTTPS验收、空闲Worker隐藏重启及2.3.2心跳。
+- 已完成：全项目回归、Supabase正式迁移、main推送、Cloudflare Pages上线及HTTPS验收。
+- 应用提交：`b72d2c8c16edfe687a4a0a142d00f91e7b201f01`（包含按Worker、目录映射、学习交互拆分的修复提交）。首次生产发布ID：`084208ab-7b35-4fdc-b5be-b5f65d307a44`，来源main，状态Active。后续仅追加本发布记录，不更改应用产物。
+- Worker已在确认活动租约任务为0后隐藏重启；计划任务Running，云端版本`2.3.2`，最终检查心跳年龄13秒。处理电脑仍须开机联网，不依赖Codex保持运行。
 - 备用通道：Chrome连接器拒绝apikey；使用用户已授权的官方Supabase CLI、Git、Pages Git集成及HTTPS验证，不用桌面/CDP绕过。
+- Git直连两次分别连接重置和超时；确认用户已有系统代理`127.0.0.1:18809`监听后，仅为fetch/push命令指定该代理，成功快进推送。未更改全局Git配置或远端，未强推。
 
 ## 用户可见修复
 
@@ -35,6 +37,9 @@
 - 目录生命周期事务断言已在BEGIN/ROLLBACK中通过，未遗留fixture；包含权限拒绝、revision冲突、公开草稿隔离、回收站恢复及媒体引用保持。
 - 全回归日志：`tmp/balanced-540/release-6371-regression.log`（本地证据，不提交临时目录）。
 - 本地DOM测试拦截远程API，不向生产写入测试收藏/目录；媒体HTTPS验收仅使用临时登录会话并退出。
+- 上线后学生端`/`、管理端`/admin/`返回200并包含`beta6.37.1`；两页HTML及其所有本地版本化JS/CSS共25项逐项返回200，规范化CRLF/LF后SHA-256与本地发布文件一致。
+- 上线后`node audit/verify_balanced_media.mjs`通过：两条视频均为PUBLISHED、仅540p、`balanced-540-v1`；封面、manifest、首/中/尾TS分片有效。第一条126,011,361字节/292分片，第二条73,352,900字节/161分片；匿名401、跨视频票据403，测试会话退出。
+- 正式库再次确认`20260915090000_mobile_balanced_540`及`20260915110000_creator_catalog_lifecycle`均存在，生命周期RPC签名正确。发布未重新转码、未删除生产媒体。
 
 ## 回滚与边界
 
