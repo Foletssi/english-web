@@ -1,24 +1,51 @@
 {
-  "version": "1.0.0-alpha",
-  "authority": "shared/content-store.js",
+  "version": "beta6.37.1",
+  "authority": "Supabase private.content_snapshots and admin RPCs; get_published_content reads the published snapshot. shared/content-store.js is a scoped client projection, not the cloud authority.",
   "rules": {
     "published_visibility": "Only Video.status=PUBLISHED is projected into the student content list.",
-    "identity": "Admin and student use the same numeric Video.id.",
+    "identity": "Admin and student preserve server IDs; compare video/creator/collection IDs as strings at UI boundaries.",
     "sentences": "Admin Sentence.startTime/endTime/english/chinese maps directly to student s/e/en/zh at hydration.",
-    "creator": "Video.creatorId resolves a shared Creator entity; student cards consume the projected creator name.",
+    "creator": "Video.creatorId resolves Creator in the same snapshot, never joins admin drafts to student data. admin_set_creator_status_v1 uses revision CAS to update catalog and restorable trash references atomically; never deletes media.",
     "pipeline": "Processing jobs never mutate student learning state; only content metadata/status is shared.",
-    "theme": "Admin and student share zs:theme localStorage preference on the same origin."
+    "theme": "Student uses zs:theme; administrator uses zs:admin:theme independently.",
+    "save": "Admin creator/collection: prepare -> cloud success -> valid increasing revision -> local commit. Follow/collection/sentence/vocabulary/mastery/removal/review: cloud success and unchanged account -> account-scoped cache. Duplicate saves are guarded; late completions cannot mutate another route or word card. Failure must preserve state and allow retry, never display success.",
+    "access": "M01 is the only VIP authority. M04 consumes scoped short-lived playback tickets, never arbitrary R2 paths or full access tokens in cookies.",
+    "account_switch": "Learning hydration checks request generation and current session ID. Async saves also check account, route and connected DOM."
   },
   "field_map": [
     {"admin":"Video.id","student":"route /video/:id + progress key","required":true},
     {"admin":"Video.title","student":"home/video cards + study page title","required":true},
     {"admin":"Video.cover","student":"video cards / thumbnails","required":true},
-    {"admin":"Video.mediaUrl","student":"HTML5 video src","required":true},
+    {"admin":"Video.processingJobId + playback.masterUrl/variants","student":"POST /api/session -> scoped cookie -> authorized HLS; single balanced-540-v1 rendition","required":true},
+    {"admin":"Creator.id/name/avatar/bio","student":"published video attribution, recommendations and creator profile","required":true},
+    {"admin":"Collection.id/title/description/videoIds","student":"published collection cards/detail and saved collection routes","required":true},
     {"admin":"Video.level","student":"difficulty badges","required":true},
     {"admin":"Video.status","student":"content visibility gate","required":true},
     {"admin":"Sentence.startTime","student":"subtitle seek start (s)","required":true},
     {"admin":"Sentence.endTime","student":"subtitle activation end (e)","required":true},
     {"admin":"Sentence.english","student":"English subtitle (en)","required":true},
     {"admin":"Sentence.chinese","student":"Chinese subtitle (zh)","required":true}
+  ],
+  "learning_map": {
+    "user_progress": ["progress:videoId", "watchCoverage:videoId"],
+    "saved_sentences": ["favSentences:videoId"],
+    "user_vocabulary": ["vocabMeta", "vocabDetails", "vocab", "vocabRemoved"],
+    "learner_goal_profiles": ["learningPlan"],
+    "daily_learning_stats": ["studySessions"],
+    "user_creator_follows": ["follow:creator_id"],
+    "user_collection_saves": ["collectionSaved:collection_id"],
+    "user_learning_preferences": ["settings"],
+    "get_my_learning_summary_v3": ["learningSummary"]
+  },
+  "verification": [
+    "audit/catalog_mapping_test.mjs",
+    "audit/catalog_admin_ui_test.mjs",
+    "audit/catalog_lifecycle_transaction_test.sql (transaction rollback)",
+    "audit/personal_library_test.mjs",
+    "audit/student_mapping_ui_test.mjs",
+    "audit/verify_balanced_media.mjs (production media checks plus test session login/logout)"
+  ],
+  "known_gaps": [
+    "Real iOS/WeChat devices and regional mobile networks remain unverified."
   ]
 }

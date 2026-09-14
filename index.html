@@ -23,7 +23,7 @@
   }catch(e){document.documentElement.dataset.theme='dark'}
 })();
 </script>
-<link rel="stylesheet" href="assets/css/app.css?v=beta6.37.0">
+<link rel="stylesheet" href="assets/css/app.css?v=beta6.37.1">
 </head>
 <body class="production-build">
 <div class="shell">
@@ -167,7 +167,7 @@
 <main id="creatorDetailPage" class="page product-page"><div class="product-shell">
   <button class="back-link" data-route="/creators"><i data-icon="chevron-left"></i>返回博主</button>
   <section class="creator-profile-hero"><div class="creator-profile-avatar">J</div><div class="creator-profile-copy"><span class="creator-badge">生活英语 · 英国</span><h1>Jojo English</h1><p>用英国乡村的真实日常，帮助学习者在自然语境里听懂英语。慢而不刻意，适合 A2–B1。</p><div class="creator-profile-meta"><span><b>128</b> 视频</span><span><b>42K</b> 学习者</span><span><b>286</b> 高频词</span></div></div><button class="follow-main" id="creatorFollowMain"><i data-icon="plus"></i><span>关注</span></button></section>
-  <div class="profile-tabs"><button class="active">视频</button><button>合集</button><button>简介</button></div>
+  <div class="profile-tabs" role="tablist" aria-label="博主内容"><button id="creatorTabVideos" class="active" role="tab" aria-selected="true" aria-controls="creatorVideoGrid" data-creator-tab="videos">视频</button><button id="creatorTabCollections" role="tab" aria-selected="false" aria-controls="creatorVideoGrid" data-creator-tab="collections">合集</button><button id="creatorTabBio" role="tab" aria-selected="false" aria-controls="creatorVideoGrid" data-creator-tab="bio">简介</button></div>
   <section class="profile-video-grid" id="creatorVideoGrid"></section>
 </div></main>
 
@@ -211,7 +211,7 @@
 
 <main id="favoritesPage" class="page product-page"><div class="product-shell">
   <section class="page-heading"><div><span class="section-kicker">SAVED FOR LATER</span><h1>我的收藏</h1><p>把值得反复学习的内容留在这里。</p></div></section>
-  <div class="favorites-tabs"><button class="active" data-fav-tab="videos"><i data-icon="video"></i>视频 <b>8</b></button><button data-fav-tab="collections"><i data-icon="grid"></i>合集 <b>3</b></button><button data-fav-tab="sentences"><i data-icon="quote"></i>句子 <b id="favSentenceCount">0</b></button></div>
+  <div class="favorites-tabs"><button class="active" data-fav-tab="videos"><i data-icon="video"></i>视频 <b>0</b></button><button data-fav-tab="collections"><i data-icon="grid"></i>合集 <b>0</b></button><button data-fav-tab="sentences"><i data-icon="quote"></i>句子 <b id="favSentenceCount">0</b></button></div>
   <section id="favoritesContent" class="favorites-content"></section>
 </div></main>
 
@@ -344,22 +344,23 @@
 
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="shared/supabase-config.js?v=beta6.37.0"></script>
-<script src="shared/supabase-client.js?v=beta6.37.0"></script>
-<script src="shared/access-guard.js?v=beta6.37.0"></script>
-<script src="shared/learning-contract.js?v=beta6.37.0"></script>
-<script src="shared/content-store.js?v=beta6.37.0"></script>
-<script src="shared/cloud-content.js?v=beta6.37.0"></script>
-<script src="shared/content-taxonomy.js?v=beta6.37.0"></script>
-<script src="shared/catalog-selectors.js?v=beta6.37.0"></script>
-<script src="shared/study-utils.js?v=beta6.37.0"></script>
-<script src="shared/learning-queue.js?v=beta6.37.0"></script>
-<script src="shared/playback-controller.js?v=beta6.37.0"></script>
-<script src="shared/sentence-loop.js?v=beta6.37.0"></script>
+<script src="shared/supabase-config.js?v=beta6.37.1"></script>
+<script src="shared/supabase-client.js?v=beta6.37.1"></script>
+<script src="shared/access-guard.js?v=beta6.37.1"></script>
+<script src="shared/learning-contract.js?v=beta6.37.1"></script>
+<script src="shared/content-store.js?v=beta6.37.1"></script>
+<script src="shared/cloud-content.js?v=beta6.37.1"></script>
+<script src="shared/content-taxonomy.js?v=beta6.37.1"></script>
+<script src="shared/catalog-selectors.js?v=beta6.37.1"></script>
+<script src="shared/study-utils.js?v=beta6.37.1"></script>
+<script src="shared/personal-library.js?v=beta6.37.1"></script>
+<script src="shared/learning-queue.js?v=beta6.37.1"></script>
+<script src="shared/playback-controller.js?v=beta6.37.1"></script>
+<script src="shared/sentence-loop.js?v=beta6.37.1"></script>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.6.13/dist/hls.min.js"></script>
-<script src="shared/player-state.js?v=beta6.37.0"></script>
-<script src="shared/media-player.js?v=beta6.37.0"></script>
-<script src="assets/js/creator-avatars.js?v=beta6.37.0"></script>
-<script src="assets/js/app.js?v=beta6.37.0"></script>
+<script src="shared/player-state.js?v=beta6.37.1"></script>
+<script src="shared/media-player.js?v=beta6.37.1"></script>
+<script src="assets/js/creator-avatars.js?v=beta6.37.1"></script>
+<script src="assets/js/app.js?v=beta6.37.1"></script>
 </body>
 </html>
