@@ -34,7 +34,11 @@
 
 发布通道：Git main → GitHub → Cloudflare Pages连接Git自动部署 → 正式HTTPS校验。Chrome连接器此前拒绝当前apikey认证，使用仓库明确允许且用户授权的备用通道；不通过桌面、CDP或内置浏览器替代部署。
 
-生产状态在HTTPS校验完成后补记。核验学生端和管理端HTML及引用的全部同源JS/CSS，使用正式URL与页面实际版本参数，比较完整规范化文本，不用随机参数掩盖缓存。
+应用提交 927710834f9a7cbf228b7405df6db00a20d43adf 已推送 main 并在生产生效。部署前 fetch 确认本地 main 与 origin/main 均为 a8ca4e7，无分歧。后续提交仅补充本记录，不改变应用产物。
+
+生产HTTPS核验完成于2026-09-15T03:23:27.778Z（北京时间11:23）：学生端 https://english-web-lce.pages.dev/ 与管理端 https://english-web-lce.pages.dev/admin/ 均为beta6.39.0；两份HTML及所有关联同源JS/CSS共25项全部HTTP200，统一CRLF/LF后完整文本逐项一致。使用正式URL与页面实际版本参数，不用随机参数掩盖缓存。证据：tmp/production-6390-verification.json；脚本：tmp/verify-release-6390.mjs。临时文件不纳入提交。
+
+补充字号实际点击断言后的 player_loop_ui_test 再次退出码0；最终 git diff a8ca4e7...HEAD --check 通过。
 
 回滚使用 git revert 本轮应用提交并走同一发布通道；不强推、不覆盖云端学习数据、不删除媒体。
 
