@@ -26,16 +26,25 @@ function equal(actual, expected, message) {
 equal(queue.eligibleVideos(videos, 'cet4').map(v => v.id), [2], 'exam pool only includes reviewed playable mappings');
 equal(queue.eligibleVideos(videos, 'general').map(v => v.id), [1, 2], 'general pool includes all playable published content');
 const one = queue.create({ videos, goalId: 'cet4', loop: true });
+const all = queue.create({ videos, goalId: 'cet4', source: 'direct', preferredVideoId: 1, loop: false });
+equal(all.ids, ['1', '2'], 'ordinary viewing includes all published playable videos across goals');
+equal(all.goalId, 'general', 'ordinary viewing reports the all-video scope');
+equal(queue.next(all, 1).id, '2', 'ordinary viewing advances to the other goal video');
+equal(queue.next(all, 2).finished, true, 'all-video queue stops when repeat is disabled');
+equal(queue.next({ ...all, loop: true }, 2).id, '1', 'all-video queue repeats only when enabled');
 equal(queue.next(one, 2).id, '2', 'single-item loop repeats explicitly');
 const noLoop = queue.create({ videos, goalId: 'cet4', loop: false });
 equal(queue.next(noLoop, 2).finished, true, 'single-item no-loop finishes');
 const preferred = queue.create({ videos, goalId: 'daily', preferredVideoId: 2 });
 equal(preferred.ids, ['1'], 'preferred video cannot bypass the selected goal');
-equal(queue.next(preferred, 1).id, '1', 'eligible single entry loops');
+equal(queue.next(preferred, 1).finished, true, 'eligible single entry stops without explicit loop');
+equal(queue.next({ ...preferred, loop: true }, 1).id, '1', 'eligible single entry loops explicitly');
 equal(queue.create({ videos, goalId: 'toefl' }).ids, [], 'unmapped goal stays empty');
 equal(queue.create({ videos, goalId: 'toefl', collectionId: 10 }).ids, ['1', '2'], 'explicit collection uses only its published playable items');
 equal(queue.eligibleVideos([{ id: 5, status: 'PUBLISHED', mediaUrl: '/5.mp4', goalIds: ['toefl'], goalMappings: [{ goalId: 'toefl', approved: false, status: 'REVIEW' }] }], 'toefl').length, 0, 'legacy goalIds cannot bypass review');
 equal(queue.create({ videos, goalId: 'daily', collectionId: 20, preferredVideoId: 1 }).ids, ['2'], 'preferred video cannot bypass collection membership');
+equal(queue.create({ videos, goalId: 'cet4', source: 'direct', preferredVideoId: 2 }).cursor, 1, 'preferred video selects cursor without reordering queue');
+equal(queue.previous(queue.create({ videos, goalId: 'cet4', source: 'direct' }), 2).id, '1', 'previous returns prior video');
 
 const playbackWindow = load(new URL('../shared/playback-controller.js', import.meta.url));
 let done = 0;
@@ -45,4 +54,4 @@ controller.cancel('route-change');
 await new Promise(resolve => setTimeout(resolve, 1100));
 equal(done, 0, 'cancel prevents late navigation');
 
-console.log('Learning queue contract: 11/11 checks passed.');
+console.log('Learning queue contract: all checks passed.');

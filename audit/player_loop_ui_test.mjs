@@ -31,6 +31,10 @@ const snapshot = {
   jobs: [], trash: [], tombstones: {}, auditLog: []
 };
 
+snapshot.videos.push({ ...snapshot.videos[0], id: 9002, title: 'Next video fixture', titleZh: '下一条视频测试' });
+snapshot.sentences[9002] = [{ id: '9002-1', order: 0, startTime: 1, endTime: 2, english: 'Next video.', chinese: '下一条视频。', reviewStatus: 'APPROVED' }];
+for(let n=0;n<13;n++)snapshot.videos.push({...snapshot.videos[0],id:9010+n,title:'Catalog item '+n,titleZh:'目录视频 '+n});
+snapshot.videos.push({...snapshot.videos[0]}); // Duplicate catalog ID must render once.
 const browser = await chromium.launch({ headless: true, executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
 const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
 await context.route('https://cdn.jsdelivr.net/**', route => {
@@ -39,7 +43,7 @@ await context.route('https://cdn.jsdelivr.net/**', route => {
 });
 await context.addInitScript(snapshotValue => {
   localStorage.setItem('zs:platform:content:local:v1', JSON.stringify(snapshotValue));
-  localStorage.setItem('zs:user:student-fixture:learningPlan', JSON.stringify({ track: 'general', dailyMinutes: 20, onboardingVersion: 1 }));
+  localStorage.setItem('zs:user:student-fixture:learningPlan', JSON.stringify({ track: 'cet4', dailyMinutes: 20, onboardingVersion: 1 }));
   const auth = {
     available: true,
     getContext: async () => ({ user: { id: 'student-fixture' }, profile: { role: 'learner', nickname: '测试学员', phone: '+8613800000000' } }),
@@ -66,7 +70,7 @@ page.setDefaultTimeout(7000);
 const pageErrors = [];
 page.on('pageerror', error => pageErrors.push(error.message));
 await page.goto(`${baseUrl}/#/video/9001`, { waitUntil: 'networkidle' });
-await page.waitForFunction(() => document.documentElement.dataset.authState === 'authenticated');
+await page.waitForFunction(() => document.documentElement.dataset.authState === 'authenticated').catch(error => { throw new Error(`${error.message}; page errors: ${pageErrors.join('; ')}`); });
 await page.evaluate(() => { location.hash = '#/video/9001'; });
 await page.locator('#videoPage.active').waitFor().catch(async error => {
   const diagnostic = await page.evaluate(() => ({ hash: location.hash, auth: document.body.dataset.authState, title: document.querySelector('.study-title')?.textContent }));
@@ -116,13 +120,12 @@ for (const viewport of [{width:320,height:640},{width:360,height:800},{width:390
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `no global overflow at ${viewport.width}`);
   const visible = await page.locator('#transcript [data-i="20"]').evaluate(line => {
     const box = document.querySelector('#transcript').getBoundingClientRect(), rect = line.getBoundingClientRect();
-    return rect.top >= box.top-2 && rect.bottom <= box.bottom+2;
+    return rect.top >= box.top-2 && (rect.bottom <= box.bottom+2 || (rect.height > box.height && rect.top < box.top+16));
   });
   const layout = await page.locator('#transcript').evaluate(box => ({top:box.getBoundingClientRect().top,height:box.clientHeight,scrollTop:box.scrollTop,scrollHeight:box.scrollHeight,line:box.querySelector('[data-i="20"]')?.getBoundingClientRect().toJSON(),active:box.querySelector('.active')?.dataset.i,time:document.querySelector('#video').currentTime}));
   assert.ok(visible, `current sentence follows inside transcript at ${viewport.width}x${viewport.height}: ${JSON.stringify(layout)}`);
 }
 await page.setViewportSize({width:390,height:844});
-await page.locator('[data-mobile-study="transcript"]').click();
 await page.locator('#transcript').evaluate(box => { box.dispatchEvent(new WheelEvent('wheel',{deltaY:-100,bubbles:true})); box.scrollTop=0; });
 await page.locator('#video').evaluate(video => { video.currentTime=72.25; video.dispatchEvent(new Event('timeupdate')); });
 await page.waitForTimeout(400);
@@ -133,7 +136,89 @@ assert.ok(await page.locator('#transcript').evaluate(box => box.scrollTop>0), 'r
 const beforeWord = await page.locator('#video').evaluate(video => video.currentTime);
 await page.locator('#transcript [data-i="24"] .teaching-keyword').first().click();
 assert.equal(await page.locator('#video').evaluate(video => video.currentTime), beforeWord, 'word card must not seek the video');
+// Direct entry must not silently acquire unrelated videos.
+assert.equal(await page.locator('#nextVideo').isDisabled(), true);
+// Close the word card before exercising completion controls.
+await page.keyboard.press('Escape');
+await page.evaluate(() => { location.hash = '#/home'; });
+await page.locator('#mobileVideoList [data-video="9001"]').click();
+await page.locator('#videoPage.active').waitFor();
+await page.locator('[data-practice="loop"]').click();
+await page.locator('#video').evaluate(video => video.dispatchEvent(new Event('ended')));
+assert.equal(await page.locator('#lessonComplete').isVisible(), false, 'sentence loop must not advance the video queue');
+await page.locator('[data-practice="watch"]').click();
+await page.locator('#video').evaluate(video => video.dispatchEvent(new Event('ended')));
+assert.match(await page.locator('#nextLessonTitle').innerText(), /下一条视频测试/);
+assert.equal(await page.locator('#nextLessonReason').innerText(), '来自当前视频列表');
+await page.locator('#cancelNextLesson').click();
+await page.waitForTimeout(5200);
+assert.match(page.url(), /#\/video\/9001$/);
+await page.locator('#video').evaluate(video => video.dispatchEvent(new Event('ended')));
+await page.waitForURL('**/#/video/9002', { timeout: 8000 });
+assert.match(await page.locator('#videoPage .study-title').innerText(), /下一条视频测试/);
+await page.locator('#previousVideo').click();
+await page.waitForURL('**/#/video/9001');
+await page.waitForFunction(() => document.querySelector('#videoPage .study-title')?.textContent.includes('本地单句循环测试'));
+await page.locator('#video').evaluate(video => {
+  // Empty data fixture cannot load metadata; deliver the real readiness contract.
+  Object.defineProperty(video, 'readyState', { configurable: true, get: () => 1 });
+  Object.defineProperty(video, 'duration', { configurable: true, get: () => 100 });
+  video.dispatchEvent(new Event('loadedmetadata'));
+});
+assert.equal(await page.locator('#video').evaluate(video => video.currentTime), 0, 'previous video starts at zero after metadata');
+assert.equal(await page.locator('#previousVideo').isDisabled(), true, 'first item cannot go backwards');
+await page.locator('#openQueueDirectory').click();
+assert.equal(await page.locator('#closeQueueDirectory').evaluate(el=>el===document.activeElement),true);
+await page.keyboard.press('Escape');
+assert.equal(await page.locator('#queueDirectory').isVisible(),false);
+await page.locator('#autoplayNext').uncheck();
+await page.locator('#video').evaluate(video=>video.dispatchEvent(new Event('ended')));
+await page.waitForTimeout(5200);
+assert.match(page.url(), /#\/video\/9001$/);
+await page.locator('#cancelNextLesson').click();
+await page.locator('#closeLessonComplete').click();
+await page.locator('[data-practice="cloze"]').click();
+await page.locator('#video').evaluate(video=>{video.currentTime=1.25;video.dispatchEvent(new Event('timeupdate'))});
+const cloze=page.locator('#transcript .cloze-input');
+await cloze.fill('taking');
+await page.locator('#video').evaluate(video=>video.dispatchEvent(new Event('seeked')));
+assert.equal(await cloze.inputValue(),'taking','same-sentence seek does not erase typed answer');
+let warned=false;
+page.once('dialog',async dialog=>{warned=true;await dialog.dismiss()});
+await page.locator('#nextVideo').click();
+assert.equal(warned,true,'unfinished dictation warns before manual video navigation');
+assert.match(page.url(), /#\/video\/9001$/);
+assert.equal(await cloze.inputValue(),'taking','cancelled navigation preserves the answer');
+await page.locator('#video').evaluate(video=>video.dispatchEvent(new Event('ended')));
+assert.equal(await page.locator('#lessonComplete').isVisible(),false,'cloze mode never advances the queue');
+await page.locator('[data-practice="watch"]').click();
+const controlBefore=await page.locator('#videoQueueControls').boundingBox();
+await page.locator('#transcript').evaluate(el=>el.scrollTop=el.scrollHeight);
+assert.deepEqual(await page.locator('#videoQueueControls').boundingBox(),controlBefore,'video navigation stays fixed when captions scroll');
+await page.locator('[data-caption="hidden"]').click();
+await page.locator('#transcript .line').first().click();
+assert.match(await page.locator('#transcript .line-en').first().innerText(),/Taking a short break/,'hidden captions can be revealed on mobile');
+await page.locator('[data-caption="bilingual"]').click();
+await page.evaluate(()=>{location.hash='#/home'});
+await page.locator('#mobileVideoList [data-video="9001"]').waitFor();
+assert.equal(await page.locator('#mobileVideoList [data-video]').count(),12);
+await page.locator('#mobileLoadMore').click();
+assert.equal(await page.locator('#mobileVideoList [data-video]').count(),15,'full catalog is paginated and deduplicated');
+await page.locator('#mobileVideoSearch').fill('下一条');
+assert.equal(await page.locator('#mobileVideoList [data-video]').count(),1);
+await page.locator('#mobileVideoList [data-video="9002"]').focus();
+await page.keyboard.press('Enter');
+await page.waitForURL('**/#/video/9002');
+await page.waitForFunction(()=>document.querySelector('#openQueueDirectory')?.textContent==='1 / 1 · 目录');
+assert.equal(await page.locator('#nextVideo').isDisabled(),true,'filtered queue excludes unmatching videos');
+await page.locator('#videoPage .study-back').click();
+await page.waitForURL('**/#/home');
+await page.locator('#mobileVideoSearch').waitFor();
+assert.equal(await page.locator('#mobileVideoSearch').inputValue(),'下一条','return restores account search');
+await page.locator('#mobileNav [data-route="/discover"]').click();
+await page.locator('#discoveryCreators').waitFor();
+assert.ok(await page.locator('#discoveryCreators [data-route]').count()>0);
 assert.deepEqual(pageErrors, []);
 
 await browser.close();
-console.log('Player UI: blank pre-roll, held gap, keywords, eight viewport layouts, lyric following, browsing/return and non-seeking word card passed.');
+console.log('Player UI: captions, eight viewport layouts, word card, all-video automatic advance, cancellation and sentence-loop isolation passed.');

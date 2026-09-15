@@ -138,7 +138,8 @@ try {
  });
  await check('sentence save failure leaves state unchanged and allows retry',async()=>{
   await go('/video/9001');await page.locator('#videoPage.active').waitFor();
-  await page.locator('[data-mobile-study="transcript"]').click();
+  // Mobile now keeps the transcript visible without a separate tab.
+  await page.locator('#transcript').waitFor();
   await page.locator('#transcript .line[data-i="1"]').waitFor();
   await page.locator('#transcript .line[data-i="1"] .line-time').click();
   const button=page.locator('#transcript .line[data-i="1"] .favSentence');
@@ -210,6 +211,14 @@ try {
    video.dispatchEvent(new Event('loadedmetadata'));
   });
   assert.equal(await page.locator('#video').evaluate(video=>video.currentTime),10);
+ });
+ await check('collection entry preserves its queue and back destination',async()=>{
+  await go('/compilation/7001');await page.locator('#collectionPage.active').waitFor();
+  await page.locator('#collectionPage [data-video="9001"]').first().click();
+  await page.waitForFunction(()=>document.querySelector('#videoPage .study-back')?.dataset.route==='/compilation/7001');
+  const queue=await page.evaluate(()=>JSON.parse(localStorage.getItem('zs:user:student-fixture:learningQueue')));
+  assert.equal(queue.source,'collection');assert.equal(queue.collectionId,'7001');assert.deepEqual(queue.ids,['9001']);
+  await page.locator('#videoPage .study-back').click();await page.waitForURL('**/#/compilation/7001');
  });
  assert.deepEqual(errors,[],'no uncaught browser errors');
  assert.deepEqual(failures,[]);

@@ -19,7 +19,7 @@
   }
 
   function create(input) {
-    const goalId = String(input?.goalId || 'general');
+    const goalId = input?.source === 'direct' ? 'general' : String(input?.goalId || 'general');
     const preferred = input?.preferredVideoId == null ? '' : String(input.preferredVideoId);
     const collectionId = input?.collectionId == null ? null : String(input.collectionId);
     const pool = collectionId
@@ -30,19 +30,16 @@
       const pb = Number(b.teacherOrder ?? b.goalOrder ?? Number.MAX_SAFE_INTEGER);
       return pa - pb || String(b.publishedAt || '').localeCompare(String(a.publishedAt || '')) || String(a.id).localeCompare(String(b.id));
     });
-    if (preferred) {
-      const index = candidates.findIndex(video => String(video.id) === preferred);
-      if (index > 0) candidates.unshift(candidates.splice(index, 1)[0]);
-    }
     const ids = [...new Set(candidates.map(video => String(video.id)))];
+    const preferredIndex = preferred ? ids.indexOf(preferred) : -1;
     return {
       goalId,
       source: input?.source || 'goal',
       collectionId,
       ids,
-      cursor: ids.length ? 0 : -1,
+      cursor: preferredIndex >= 0 ? preferredIndex : (ids.length ? 0 : -1),
       cycle: 0,
-      loop: input?.loop !== false
+      loop: input?.loop === true
     };
   }
 
@@ -66,5 +63,17 @@
     return { id: null, finished: true, wrapped: false, queue: { ...queue, cursor: current } };
   }
 
-  global.EastudyLearningQueue = Object.freeze({ mappedGoalIds, eligibleVideos, create, locate, next });
+  function previous(queue, videoId) {
+    const ids = Array.isArray(queue?.ids) ? queue.ids : [];
+    if (!ids.length) return { id: null, boundary: true, queue };
+    const index = locate(queue, videoId);
+    const current = index < 0 ? Number(queue?.cursor) || 0 : index;
+    if (current > 0) {
+      const updated = { ...queue, cursor: current - 1 };
+      return { id: ids[current - 1], boundary: false, queue: updated };
+    }
+    return { id: null, boundary: true, queue: { ...queue, cursor: 0 } };
+  }
+
+  global.EastudyLearningQueue = Object.freeze({ mappedGoalIds, eligibleVideos, create, locate, next, previous });
 })(window);

@@ -356,7 +356,7 @@
     {
       "name": "learning queue and countdown contract regression",
       "ok": true,
-      "detail": "Learning queue contract: 11/11 checks passed."
+      "detail": "Learning queue contract: all checks passed."
     }
   ]
 }
