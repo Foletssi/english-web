@@ -13,7 +13,7 @@ try {
    const response=await context.request.get(local+url.pathname+url.search);
    return route.fulfill({response});
   }
-  if(url.hostname==='cdn.jsdelivr.net')return route.fulfill({contentType:'application/javascript',body:'window.supabase={createClient(){return {}}};'});
+  if(url.pathname.includes('/assets/vendor/'))return route.fulfill({contentType:'application/javascript',body:'window.supabase={createClient(){return {}}};'});
   return route.fulfill({contentType:'application/json',body:'{"jobs":[],"ready":false}'});
  });
  await context.addInitScript(()=>{

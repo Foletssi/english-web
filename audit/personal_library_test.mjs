@@ -29,6 +29,7 @@ assert.deepEqual(JSON.parse(JSON.stringify(selected.counts)),{videos:1,collectio
 let identity='a',writes=0;
 const api={auth:{getSession:async()=>({data:{session:identity?{user:{id:identity}}:null}})},from:table=>table==='profiles'?{select(){return this},eq(){return this},maybeSingle:async()=>({data:{role:'learner'},error:null})}:{upsert:async row=>{writes++;return {data:row,error:null}}}};
 const storage={getItem:()=>null,setItem(){},removeItem(){}};
+api.rpc=async(name,{p_patch})=>{assert.equal(name,'patch_learning_preferences_v1');writes++;return {data:{user_id:identity,settings:p_patch},error:null}};
 const authWindow={EASTUDY_SUPABASE_CONFIG:{url:'https://fixture.supabase.co',publishableKey:'fixture'},supabase:{createClient:()=>api},addEventListener(){}};
 vm.runInNewContext(fs.readFileSync(new URL('../shared/supabase-client.js',import.meta.url),'utf8'),{window:authWindow,document:{addEventListener(){}},localStorage:storage,sessionStorage:storage,console});
 for(const method of ['setCreatorFollow','setCollectionSave']){
@@ -44,6 +45,16 @@ for(const method of ['setFavorite','setVocabulary']){
  identity='a';assert.equal((await authWindow.EastudyData[method](payload)).error,null);
 }
 assert.equal(writes,4);
+const preferences={reviewedVideos:{9001:'2026-09-16T00:00:00.000Z'}};
+identity=null;assert.ok((await authWindow.EastudyData.saveLearningPreferences(preferences,'a')).error);
+identity='b';assert.ok((await authWindow.EastudyData.saveLearningPreferences(preferences,'a')).error);
+assert.equal(writes,4,'anonymous and stale preference writes are rejected');
+identity='a';
+const preferenceResult=await authWindow.EastudyData.saveLearningPreferences(preferences,'a');
+assert.equal(preferenceResult.error,null);
+assert.equal(preferenceResult.data.user_id,'a');
+assert.equal(preferenceResult.data.settings,preferences);
+assert.equal(writes,5);
 let committed=0,finish;
 const transaction={key:'vocab:hello',getUserId:()=>user,save:async uid=>{assert.equal(uid,'a');return {error:new Error('offline')}},commit:()=>committed++};
 assert.ok((await window.EastudyPersonalLibrary.saveMutation(transaction)).error);

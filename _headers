@@ -6,3 +6,11 @@
   Cache-Control: no-cache, no-store, must-revalidate
 /admin/index.html
   Cache-Control: no-cache, no-store, must-revalidate
+/assets/vendor/*
+  Cache-Control: public, max-age=31536000, immutable
+/shared/*
+  Cache-Control: public, max-age=0, must-revalidate
+/assets/js/*
+  Cache-Control: public, max-age=0, must-revalidate
+/assets/css/*
+  Cache-Control: public, max-age=0, must-revalidate

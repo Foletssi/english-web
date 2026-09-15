@@ -23,7 +23,7 @@ const learner = {
 
 const browser = await chromium.launch({ headless: true, executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-await context.route('https://cdn.jsdelivr.net/**', route => route.fulfill({ status: 200, contentType: 'application/javascript', body: 'window.supabase={createClient(){return {}}};' }));
+await context.route('**/assets/vendor/*.js', route => route.fulfill({ status: 200, contentType: 'application/javascript', body: 'window.supabase={createClient(){return {}}};' }));
 await context.route('http://127.0.0.1:8788/**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ jobs: [], ready: false }) }));
 await context.addInitScript(({ learner, learnerId }) => {
   const auth = {

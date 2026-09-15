@@ -45,8 +45,8 @@ for (const rows of Object.values(snapshot.sentences)) for (const row of rows) {
 }
 const browser = await chromium.launch({ headless: true, executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
 const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
-await context.route('https://cdn.jsdelivr.net/**', route => {
-  const body = route.request().url().includes('hls.js') ? 'window.Hls=undefined;' : 'window.supabase={createClient(){return {}}};';
+await context.route('**/assets/vendor/*.js', route => {
+  const body = route.request().url().includes('/hls-') ? 'window.Hls=undefined;' : 'window.supabase={createClient(){return {}}};';
   return route.fulfill({ status: 200, contentType: 'application/javascript', body });
 });
 await context.addInitScript(snapshotValue => {
@@ -63,7 +63,7 @@ await context.addInitScript(snapshotValue => {
     startLearnerActivity: () => () => {}, stopLearnerActivity: () => {},
     getMembership: async () => ({ membership: null, error: null }),
     hydrateStudentLearning: async () => ({ error: null }), pendingStudyEvents: () => 0,
-    saveLearningPreferences: async () => ({ error: null }),
+    saveLearningPreferences: async settings => { if(window.__failPreferences)return {error:new Error('offline')};window.__savedPreferences=structuredClone(settings);return { error: null }; },
     logStudyEvent: async () => ({ error: null }), upsertProgress: async () => ({ error: null }),
     recordStudyActivity: async () => ({ error: null })
   };
@@ -101,6 +101,21 @@ const keywordStyle = await keyword.evaluate(element => ({ color: getComputedStyl
 assert.notEqual(keywordStyle.color, 'rgb(0, 0, 0)');
 assert.match(keywordStyle.decoration, /underline/);
 
+await keyword.click();
+await page.locator('#speakOriginal').waitFor({state:'visible'});
+await page.evaluate(() => {
+  document.querySelector('#video').currentTime = 15;
+  // The fixture has no decoded media. Verify the UI seek and play request;
+  // authorization and decoder behavior have their own media-player tests.
+  window.__fixturePlayerPlay = State.mediaPlayer.play;
+  State.mediaPlayer.play = () => { window.__originalPlayAt = document.querySelector('#video').currentTime; return Promise.resolve(); };
+});
+await page.locator('#speakOriginal').click();
+assert.ok(Math.abs(await page.evaluate(() => window.__originalPlayAt) - 1.01) < .001,
+  'original pronunciation must seek to the clicked sentence normalized start before playing');
+assert.equal(await page.locator('#dict').evaluate(el => el.classList.contains('show')), false);
+await page.evaluate(() => { State.mediaPlayer.play = window.__fixturePlayerPlay; delete window.__fixturePlayerPlay; });
+
 await page.locator('#video').evaluate(video => {
   video.pause();
   video.currentTime = 2.5;
@@ -117,7 +132,7 @@ await page.setViewportSize({ width: 375, height: 812 });
 await page.waitForTimeout(250);
 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, 'mobile player must not overflow globally');
 await page.screenshot({ path: 'tmp/local-player-loop-mobile.png', fullPage: true });
-await page.locator('#mobilePracticeMode').selectOption('watch');
+await page.locator('[data-mobile-practice="watch"]').click();
 await page.setViewportSize({width:320,height:640});
 await page.locator('#video').evaluate(video=>{video.currentTime=6.5;video.dispatchEvent(new Event('timeupdate'))});
 const phraseTokens=page.locator('#transcript [data-i="2"] [data-phrase]');
@@ -135,7 +150,7 @@ const tokenBoxes=await phraseTokens.evaluateAll(tokens=>tokens.map(el=>({top:el.
 assert.ok(new Set(tokenBoxes.map(x=>x.top)).size>1,'long phrase actually wraps');
 assert.ok(tokenBoxes.every(x=>x.height<32 && ['none','normal'].includes(x.after)),'no multi-line phrase border');
 assert.equal(await page.locator('#transcript [data-i="0"] [data-word-start]').count(),0,'estimated timing is not treated as aligned speech');
-for (const viewport of [{width:320,height:640},{width:360,height:800},{width:390,height:844},{width:430,height:932},{width:768,height:1024},{width:1024,height:768},{width:1280,height:800},{width:844,height:390}]) {
+for (const viewport of [{width:320,height:568},{width:320,height:640},{width:360,height:800},{width:390,height:844},{width:430,height:932},{width:768,height:1024},{width:1024,height:768},{width:1280,height:800},{width:1440,height:900},{width:844,height:390}]) {
   await page.setViewportSize(viewport);
   const transcriptTab = page.locator('[data-mobile-study="transcript"]');
   if (await transcriptTab.isVisible()) await transcriptTab.click();
@@ -146,6 +161,9 @@ for (const viewport of [{width:320,height:640},{width:360,height:800},{width:390
   if(viewport.width<=850){
     const boxes=await page.evaluate(()=>Object.fromEntries(['.player','.mobile-learning-tools','.transcript-wrap','.mobile-learning-dock','.timeline','.center-ctl','.learning-dock-links'].map(selector=>[selector,document.querySelector('#videoPage '+selector).getBoundingClientRect().toJSON()])));
     const dock=boxes['.mobile-learning-dock'];
+    assert.equal(dock.height,viewport.height<=500?88:112,'compact dock has exact row heights');
+    const components=await page.locator('.mobile-learning-dock .player-icon,.mobile-learning-dock .play-disc').evaluateAll(nodes=>nodes.map(node=>({disc:node.classList.contains('play-disc'),width:node.getBoundingClientRect().width,height:node.getBoundingClientRect().height})));
+    assert.ok(components.every(c=>c.width===(c.disc?32:18)&&c.height===c.width),'icons and play disc retain square dimensions '+JSON.stringify(components));
     assert.ok(dock.bottom<=viewport.height+1 && dock.top>=boxes['.transcript-wrap'].bottom-1,'dock and transcript do not overlap '+JSON.stringify(boxes));
     for(const selector of (viewport.height<=500?['.center-ctl','.learning-dock-links']:['.timeline','.center-ctl','.learning-dock-links']))assert.ok(boxes[selector].top>=dock.top-1 && boxes[selector].bottom<=dock.bottom+1,'all controls contained in dock '+selector+JSON.stringify(boxes));
     if(viewport.height>500)assert.ok(boxes['.player'].top<=45 && boxes['.player'].bottom<=boxes['.mobile-learning-tools'].top+1 && boxes['.mobile-learning-tools'].bottom<=boxes['.transcript-wrap'].top+1,'video/tools/captions in separate rows');
@@ -175,10 +193,10 @@ await page.keyboard.press('Escape');
 await page.evaluate(() => { location.hash = '#/home'; });
 await page.locator('#mobileVideoList [data-video="9001"]').click();
 await page.locator('#videoPage.active').waitFor();
-await page.locator('#mobilePracticeMode').selectOption('loop');
+await page.locator('[data-mobile-practice="loop"]').click();
 await page.locator('#video').evaluate(video => video.dispatchEvent(new Event('ended')));
 assert.equal(await page.locator('#lessonComplete').isVisible(), false, 'sentence loop must not advance the video queue');
-await page.locator('#mobilePracticeMode').selectOption('watch');
+await page.locator('[data-mobile-practice="watch"]').click();
 await page.locator('#video').evaluate(video => video.dispatchEvent(new Event('ended')));
 assert.match(await page.locator('#nextLessonTitle').innerText(), /下一条视频测试/);
 assert.equal(await page.locator('#nextLessonReason').innerText(), '来自当前视频列表');
@@ -188,6 +206,7 @@ assert.match(page.url(), /#\/video\/9001$/);
 await page.locator('#video').evaluate(video => video.dispatchEvent(new Event('ended')));
 await page.waitForURL('**/#/video/9002', { timeout: 8000 });
 assert.match(await page.locator('#videoPage .study-title').innerText(), /下一条视频测试/);
+await page.locator('#openLessonMore').click();
 await page.locator('#openVideoSwitch').click();
 await page.locator('#previousVideo').click();
 await page.waitForURL('**/#/video/9001');
@@ -204,15 +223,17 @@ await page.locator('#openQueueDirectory').click();
 assert.equal(await page.locator('#closeQueueDirectory').evaluate(el=>el===document.activeElement),true);
 await page.keyboard.press('Escape');
 assert.equal(await page.locator('#queueDirectory').isVisible(),false);
+await page.locator('#openLessonMore').click();
 await page.locator('#openVideoSwitch').click();
 await page.locator('#autoplayNext').uncheck();
 await page.locator('#videoSwitchPanel [data-close]').click();
+await page.waitForFunction(()=>document.activeElement?.id==='openLessonMore');
 await page.locator('#video').evaluate(video=>video.dispatchEvent(new Event('ended')));
 await page.waitForTimeout(5200);
 assert.match(page.url(), /#\/video\/9001$/);
 await page.locator('#cancelNextLesson').click();
 await page.locator('#closeLessonComplete').click();
-await page.locator('#mobilePracticeMode').selectOption('cloze');
+await page.locator('[data-mobile-practice="cloze"]').click();
 await page.locator('#video').evaluate(video=>{video.currentTime=1.25;video.dispatchEvent(new Event('timeupdate'))});
 const cloze=page.locator('#transcript .cloze-input');
 await cloze.fill('taking');
@@ -220,6 +241,7 @@ await page.locator('#video').evaluate(video=>video.dispatchEvent(new Event('seek
 assert.equal(await cloze.inputValue(),'taking','same-sentence seek does not erase typed answer');
 let warned=false;
 page.once('dialog',async dialog=>{warned=true;await dialog.dismiss()});
+await page.locator('#openLessonMore').click();
 await page.locator('#openVideoSwitch').click();
 await page.locator('#nextVideo').click();
 await page.locator('#videoSwitchPanel [data-close]').click();
@@ -228,18 +250,26 @@ assert.match(page.url(), /#\/video\/9001$/);
 assert.equal(await cloze.inputValue(),'taking','cancelled navigation preserves the answer');
 await page.locator('#video').evaluate(video=>video.dispatchEvent(new Event('ended')));
 assert.equal(await page.locator('#lessonComplete').isVisible(),false,'cloze mode never advances the queue');
-await page.locator('#mobilePracticeMode').selectOption('watch');
+await page.locator('[data-mobile-practice="watch"]').click();
 const controlBefore=await page.locator('.mobile-learning-dock').boundingBox();
 assert.ok(controlBefore && controlBefore.height > 0);
 await page.locator('#transcript').evaluate(el=>el.scrollTop=el.scrollHeight);
 assert.deepEqual(await page.locator('.mobile-learning-dock').boundingBox(),controlBefore,'video navigation stays fixed when captions scroll');
-await page.locator('#mobileCaptionMode').selectOption('hidden');
+await page.locator('#dockBlind').click();
+assert.equal(await page.locator('#dockBlind').getAttribute('aria-pressed'),'true');
 await page.locator('#transcript .line-en').first().click();
 assert.match(await page.locator('#transcript .line-en').first().innerText(),/Taking a short break/,'hidden captions can be revealed on mobile');
+await page.locator('#openLessonMore').click();
 await page.locator('#mobileCaptionMode').selectOption('chinese');
+await page.locator('#lessonMore [data-close]').click();
 assert.equal(await page.locator('#transcript .line-en').first().isVisible(),false,'Chinese mode hides English');
 assert.equal(await page.locator('#transcript .line-zh').first().isVisible(),true,'Chinese mode keeps translation');
+await page.locator('#dockBlind').click();
+await page.locator('#dockBlind').click();
+assert.equal(await page.locator('#mobileCaptionMode').inputValue(),'chinese','blind toggle restores the last visible caption mode');
+await page.locator('#openLessonMore').click();
 await page.locator('#mobileCaptionMode').selectOption('bilingual');
+await page.locator('#lessonMore [data-close]').click();
 for(const viewport of [{width:320,height:640},{width:390,height:844},{width:844,height:390}]){
  await page.setViewportSize(viewport);
  await page.locator('#openLessonMore').click();
@@ -259,6 +289,58 @@ assert.equal(await page.locator('#transcript .line-en').first().evaluate(el=>get
 await page.locator('.font-choice[data-font-value="16"]').click();
 assert.equal(await page.locator('#transcript .line-en').first().evaluate(el=>getComputedStyle(el).fontSize),'16px','mobile font can be reduced again');
 await page.locator('#closeSettings').click();
+await page.keyboard.press('Escape');
+// Learning markers must acknowledge persistence and keep failures out of local state.
+assert.equal(await page.locator('#markLessonLearned').getAttribute('aria-pressed'),'false');
+await page.locator('#markLessonLearned').click();
+await page.waitForFunction(()=>document.querySelector('#markLessonLearned').getAttribute('aria-pressed')==='true');
+assert.ok(await page.evaluate(()=>window.__savedPreferences.reviewedVideos['9001']));
+await page.evaluate(()=>{window.__failPreferences=true});
+await page.locator('#markLessonLearned').click();
+await page.waitForFunction(()=>!document.querySelector('#markLessonLearned').disabled);
+assert.equal(await page.locator('#markLessonLearned').getAttribute('aria-pressed'),'true','failed save preserves last confirmed marker');
+await page.evaluate(()=>{window.__failPreferences=false});
+await page.locator('#markLessonLearned').click();
+await page.waitForFunction(()=>document.querySelector('#markLessonLearned').getAttribute('aria-pressed')==='false');
+await page.evaluate(()=>{
+ const key='zs:user:student-fixture:settings',settings=JSON.parse(localStorage.getItem(key)||'{}');
+ settings.reviewedVideos={'9001':'2026-09-16T00:00:00.000Z'};localStorage.setItem(key,JSON.stringify(settings));
+ window.dispatchEvent(new Event('eastudy:learning-hydrated'));
+});
+assert.equal(await page.locator('#markLessonLearned').getAttribute('aria-pressed'),'true','cloud hydration refreshes marker');
+await page.locator('#markLessonLearned').click();
+await page.locator('#videoPage').evaluate(el=>el.style.setProperty('--player-safe-bottom','34px'));
+await page.waitForTimeout(100);
+assert.equal((await page.locator('.mobile-learning-dock').boundingBox()).height,146,'safe area adds padding without stretching icons');
+await page.locator('#openLessonMore').click();
+const safeMore=await page.locator('#lessonMore').boundingBox(),safeDock=await page.locator('.mobile-learning-dock').boundingBox();
+assert.ok(safeMore.y+safeMore.height<=safeDock.y-7,'More clears the real dock including safe area');
+await page.keyboard.press('Escape');
+await page.locator('#videoPage').evaluate(el=>el.style.removeProperty('--player-safe-bottom'));
+await page.locator('#speedSelect').selectOption('1.25');
+assert.equal(await page.locator('#video').evaluate(video=>video.playbackRate),1.25,'dock speed control changes media rate');
+await page.locator('#speedSelect').selectOption('1');
+await page.locator('#video').evaluate(video=>{video.currentTime=6.5;video.dispatchEvent(new Event('timeupdate'))});
+if(await page.locator('#returnCurrentSentence').isVisible())await page.locator('#returnCurrentSentence').click();
+await page.waitForTimeout(3500); // Let prior action toasts clear for reference screenshots.
+// This fixture has no decodable media. Model ready/paused only for UI screenshots;
+// these captures do not validate real playback, network speed, or media decoding.
+await page.locator('#video').evaluate(video=>{video.dispatchEvent(new Event('pause'));video.dispatchEvent(new Event('loadeddata'))});
+assert.equal(await page.locator('#mediaState').isVisible(),false,'ready paused fixture clears media status');
+for(const theme of ['light','dark']){
+ if(await page.locator('html').getAttribute('data-theme')!==theme)await page.locator('#studyThemeBtn').click();
+ const before=await page.locator('#transcript [data-i="2"] [data-phrase]').first().evaluate(el=>getComputedStyle(el).color);
+ await page.locator('#video').evaluate(video=>{video.currentTime=7.3;video.dispatchEvent(new Event('timeupdate'))});
+ assert.equal(await page.locator('#transcript [data-i="2"] [data-phrase]').first().evaluate(el=>getComputedStyle(el).color),before,'timing preserves semantic keyword color in '+theme);
+ await page.screenshot({path:`tmp/player-blue-${theme}-normal.png`});
+ await page.locator('#dockBlind').click();
+ assert.equal(await page.locator('#dockBlind').getAttribute('aria-pressed'),'true');
+ await page.screenshot({path:`tmp/player-blue-${theme}-blind.png`});
+ await page.locator('#dockBlind').click();
+ await page.locator('#openLessonMore').click();
+ await page.screenshot({path:`tmp/player-blue-${theme}-more.png`});
+ await page.keyboard.press('Escape');
+}
 await page.evaluate(()=>{location.hash='#/home'});
 await page.locator('#mobileVideoList [data-video="9001"]').waitFor();
 assert.equal(await page.locator('#mobileVideoList [data-video]').count(),12);
@@ -281,4 +363,4 @@ assert.ok(await page.locator('#discoveryCreators [data-route]').count()>0);
 assert.deepEqual(pageErrors, []);
 
 await browser.close();
-console.log('Player UI: captions, eight viewport layouts, word card, all-video automatic advance, cancellation and sentence-loop isolation passed.');
+console.log('Player UI: ten viewport layouts, exact dock/icon sizes, safe area, themes, learning markers, captions, word cards, automatic advance and practice controls passed.');

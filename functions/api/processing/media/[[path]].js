@@ -15,6 +15,7 @@ function rangeFromHeader(value, size) {
 }
 
 async function handle({ request, env, params, waitUntil }, headOnly) {
+  const started=performance.now();
   const bucketError = requireBucket(env);
   if (bucketError) return bucketError;
   const raw = joinedPath(params.path);
@@ -54,11 +55,14 @@ async function handle({ request, env, params, waitUntil }, headOnly) {
     }
   }
   if (!key) return json({ error: 'MEDIA_NOT_FOUND' }, 404);
+  const authorized=performance.now();
+  const timing=(headers,cacheStatus)=>{headers.set('Server-Timing',`authorization;dur=${(authorized-started).toFixed(1)},delivery;dur=${(performance.now()-authorized).toFixed(1)}`);headers.set('X-Eastudy-Media-Cache',cacheStatus)};
   const requested = request.headers.get('Range');
-  if(playbackAsset&&!headOnly&&!requested&&typeof caches!=='undefined'){
+  if(!headOnly&&!requested&&typeof caches!=='undefined'){
     const cache= caches.default,cacheUrl=new URL(request.url);cacheUrl.pathname='/__eastudy_media_cache__/'+key;cacheUrl.search='';
     const cacheKey=new Request(cacheUrl.toString(),{method:'GET'});
     let cached=await cache.match(cacheKey);
+    const hit=Boolean(cached);
     if(!cached){
       const object=await env.VIDEO_BUCKET.get(key);
       if(!object?.body)return json({error:'MEDIA_NOT_FOUND'},404);
@@ -68,13 +72,14 @@ async function handle({ request, env, params, waitUntil }, headOnly) {
       if(typeof waitUntil==='function')waitUntil(cacheWrite);
       else await cacheWrite;
     }
-    const outgoing=new Response(cached.body,cached);outgoing.headers.set('Cache-Control','private, no-store');outgoing.headers.set('X-Content-Type-Options','nosniff');return outgoing;
+    const outgoing=new Response(cached.body,cached);outgoing.headers.set('Cache-Control','private, no-store');outgoing.headers.set('X-Content-Type-Options','nosniff');timing(outgoing.headers,hit?'HIT':'MISS');return outgoing;
   }
   const head = await env.VIDEO_BUCKET.head(key);
   if (!head) return json({ error: 'MEDIA_NOT_FOUND' }, 404);
   const range = requested ? rangeFromHeader(requested, head.size) : null;
   if (requested && !range) return new Response(null, { status: 416, headers: { 'Content-Range': 'bytes */' + head.size } });
   const object = headOnly ? head : await env.VIDEO_BUCKET.get(key, range ? { range: { offset: range.start, length: range.end - range.start + 1 } } : undefined);
+  if (!object) return json({ error: 'MEDIA_NOT_FOUND' }, 404);
   const headers = new Headers();
   object.writeHttpMetadata(headers);
   headers.set('Accept-Ranges', 'bytes');
@@ -82,6 +87,7 @@ async function handle({ request, env, params, waitUntil }, headOnly) {
   headers.set('ETag', object.httpEtag || object.etag);
   headers.set('Content-Length', String(range ? range.end - range.start + 1 : head.size));
   if (range) headers.set('Content-Range', `bytes ${range.start}-${range.end}/${head.size}`);
+  headers.set('X-Content-Type-Options','nosniff');timing(headers,'BYPASS');
   return new Response(headOnly ? null : object.body, { status: range ? 206 : 200, headers });
 }
 

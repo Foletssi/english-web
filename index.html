@@ -8,8 +8,6 @@
 <link rel="icon" type="image/png" href="assets/images/eastudy-icon.png">
 <link rel="apple-touch-icon" href="assets/images/eastudy-icon.png">
 <meta name="color-scheme" content="dark light">
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Eastudy · Learn English with Real Videos</title>
 <script>
 (function(){
@@ -23,7 +21,7 @@
   }catch(e){document.documentElement.dataset.theme='dark'}
 })();
 </script>
-<link rel="stylesheet" href="assets/css/app.css?v=beta6.41.0">
+<link rel="stylesheet" href="assets/css/app.css?v=beta6.42.0">
 </head>
 <body class="production-build">
 <div class="shell">
@@ -253,7 +251,7 @@
 <div class="search-backdrop" id="searchBackdrop"><section class="search-modal"><div class="search-modal-bar"><i data-icon="search"></i><input id="globalSearchInput" placeholder="搜索视频、合集、博主或学习主题…" autocomplete="off"><kbd>ESC</kbd></div><div class="search-suggestions" id="searchSuggestions"><div class="search-section-title">热门搜索</div><div class="search-chips"><button>日常生活</button><button>旅行英语</button><button>Jojo English</button><button>职场表达</button><button>心理学</button></div><div class="search-section-title">最近学习</div></div><div class="search-results" id="globalSearchResults"></div></section></div>
 <nav class="mobile-nav" id="mobileNav" aria-label="主导航"><button data-route="/home"><i data-icon="home"></i><span>视频</span></button><button data-route="/discover"><i data-icon="grid"></i><span>发现</span></button><button data-route="/vocabulary"><i data-icon="book"></i><span>生词</span></button><button data-route="/me"><i data-icon="user"></i><span>我的</span></button></nav>
 
-<div class="dict" id="dict"><div class="dict-top"><div class="dict-row"><div><div class="dict-word" id="dictWord"></div><div class="dict-phon" id="dictPhon"></div><div class="level-badges" id="dictBadges"></div></div><button class="speakbtn" id="speakWord" type="button" aria-label="播放单词发音" title="播放单词发音">🔊</button><button class="dict-close" id="dictClose" type="button" aria-label="关闭词典">×</button></div></div><div class="dict-body"><div class="pronunciation-status" id="pronunciationStatus" role="status">点击扬声器播放英音</div><div class="sense"><b>核心释义</b><p id="dictMeaning"></p></div><div class="sense"><b>语境理解</b><p id="dictExplain"></p></div><div class="context-box" id="dictContext"></div><div class="dict-actions"><button id="copyWord">复制词语</button><button class="saveword" id="saveWord">＋ 加入生词本</button></div></div></div>
+<div class="dict" id="dict"><div class="dict-top"><div class="dict-row"><div><div class="dict-word" id="dictWord"></div><div class="dict-phon" id="dictPhon"></div><div class="level-badges" id="dictBadges"></div></div><button class="speakbtn" id="speakWord" type="button" aria-label="播放单词发音" title="播放单词发音">🔊</button><button class="dict-close" id="dictClose" type="button" aria-label="关闭词典">×</button></div></div><div class="dict-body"><div class="pronunciation-status" id="pronunciationStatus" role="status">点击扬声器播放英音</div><div class="sense"><b>核心释义</b><p id="dictMeaning"></p></div><div class="sense"><b>语境理解</b><p id="dictExplain"></p></div><div class="context-box" id="dictContext"></div><div class="dict-actions"><button id="speakOriginal" type="button" hidden>播放原句</button><button id="copyWord">复制词语</button><button class="saveword" id="saveWord">＋ 加入生词本</button></div></div></div>
 
 <div class="backdrop" id="settingsBackdrop"><div class="settings settings-v2">
   <div class="set-head"><div><b>偏好设置</b><small>按你的阅读习惯定制学习界面</small></div><button id="closeSettings">×</button></div>
@@ -344,25 +342,26 @@
 <div class="lesson-complete" id="lessonComplete" role="dialog" aria-modal="true" aria-labelledby="lessonCompleteTitle" hidden><div class="lesson-complete-card"><span class="complete-mark"><i data-icon="check"></i></span><h2 id="lessonCompleteTitle">本条视频播放结束</h2><p id="lessonCompleteSummary">本次学习已经保存。</p><article class="next-lesson-preview" id="nextLessonPreview" hidden><img id="nextLessonCover" src="assets/images/home_video_1.png" alt=""><div><small id="nextLessonReason">来自你的学习目标</small><b id="nextLessonTitle">下一条视频</b><span id="nextLessonCountdown">5 秒后自动播放</span></div></article><label class="queue-loop-option"><input id="queueLoopToggle" type="checkbox" checked><span>本目标视频播完后循环</span></label><div class="lesson-complete-actions"><button type="button" class="secondary" id="closeLessonComplete">留在本条视频</button><button type="button" class="primary" id="continueCollection">立即播放下一条</button><button type="button" class="secondary" id="cancelNextLesson">取消本次自动播放</button><button type="button" class="secondary" id="reviewLessonFavorites">复习本次收藏</button><button type="button" class="text-action" id="completeBackHome">返回首页</button></div></div></div>
 
 <div class="toast" id="toast"></div>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="shared/supabase-config.js?v=beta6.41.0"></script>
-<script src="shared/supabase-client.js?v=beta6.41.0"></script>
-<script src="shared/access-guard.js?v=beta6.41.0"></script>
-<script src="shared/learning-contract.js?v=beta6.41.0"></script>
-<script src="shared/content-store.js?v=beta6.41.0"></script>
-<script src="shared/cloud-content.js?v=beta6.41.0"></script>
-<script src="shared/content-taxonomy.js?v=beta6.41.0"></script>
-<script src="shared/catalog-selectors.js?v=beta6.41.0"></script>
-<script src="shared/study-utils.js?v=beta6.41.0"></script>
-<script src="shared/personal-library.js?v=beta6.41.0"></script>
-<script src="shared/learning-queue.js?v=beta6.41.0"></script>
-<script src="shared/playback-controller.js?v=beta6.41.0"></script>
-<script src="shared/sentence-loop.js?v=beta6.41.0"></script>
-<script src="https://cdn.jsdelivr.net/npm/hls.js@1.6.13/dist/hls.min.js"></script>
-<script src="shared/player-state.js?v=beta6.41.0"></script>
-<script src="shared/media-player.js?v=beta6.41.0"></script>
-<script src="assets/js/creator-avatars.js?v=beta6.41.0"></script>
-<script src="shared/mobile-player.js?v=beta6.41.0"></script>
-<script src="assets/js/app.js?v=beta6.41.0"></script>
+<script src="assets/vendor/supabase-2.116.0.js"></script>
+<script src="shared/supabase-config.js?v=beta6.42.0"></script>
+<script src="shared/supabase-client.js?v=beta6.42.0"></script>
+<script src="shared/access-guard.js?v=beta6.42.0"></script>
+<script src="shared/learning-contract.js?v=beta6.42.0"></script>
+<script src="shared/content-store.js?v=beta6.42.0"></script>
+<script src="shared/cloud-content.js?v=beta6.42.0"></script>
+<script src="shared/content-taxonomy.js?v=beta6.42.0"></script>
+<script src="shared/catalog-selectors.js?v=beta6.42.0"></script>
+<script src="shared/study-utils.js?v=beta6.42.0"></script>
+<script src="shared/personal-library.js?v=beta6.42.0"></script>
+<script src="shared/learning-queue.js?v=beta6.42.0"></script>
+<script src="shared/playback-controller.js?v=beta6.42.0"></script>
+<script src="shared/sentence-loop.js?v=beta6.42.0"></script>
+<script src="assets/vendor/hls-1.6.13.min.js"></script>
+<script src="shared/player-state.js?v=beta6.42.0"></script>
+<script src="shared/media-player.js?v=beta6.42.0"></script>
+<script src="assets/js/creator-avatars.js?v=beta6.42.0"></script>
+<script src="shared/mobile-player.js?v=beta6.42.0"></script>
+<script src="shared/pronunciation.js?v=beta6.42.0"></script>
+<script src="assets/js/app.js?v=beta6.42.0"></script>
 </body>
 </html>

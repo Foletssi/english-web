@@ -2,14 +2,14 @@ import assert from 'node:assert/strict';
 import { webcrypto } from 'node:crypto';
 import { onRequestPost as createSession, onRequestGet as checkReadiness } from '../functions/api/session.js';
 import { onRequestGet as readMedia } from '../functions/api/processing/media/[[path]].js';
-import { openPlaybackTicket } from '../functions/_lib/playback-ticket.js';
+import { openPlaybackTicket, sealPlaybackTicket } from '../functions/_lib/playback-ticket.js';
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 const jobId='00000000-0000-4000-8000-000000000001';
 const userId='00000000-0000-4000-8000-000000000002';
 const prefix=`videos/00000000-0000-4000-8000-000000000003/processed/${jobId}/runs/00000000-0000-4000-8000-000000000004/`;
 const env={SUPABASE_URL:'https://project.test',SUPABASE_PUBLISHABLE_KEY:'public',SUPABASE_SERVICE_ROLE_KEY:'service',PLAYBACK_TICKET_KEY:Buffer.alloc(32,9).toString('base64url')};
-let upstreamCalls=0,serviceAvailable=true,isAdmin=true,currentLabel="720p";
+let upstreamCalls=0,serviceAvailable=true,isAdmin=true,currentLabel="720p",canPlay=true;
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json'}});
 globalThis.fetch=async (url, options={})=>{
   upstreamCalls+=1;
@@ -19,6 +19,7 @@ globalThis.fetch=async (url, options={})=>{
   if(value.includes('/get_my_learning_access_v2'))return json([{canPlay:true,canEnterLearning:true,kind:'LEARNER',reason:'OK',expiresAt:'2099-01-01T00:00:00Z'}]);
   if(value.includes('/service_resolve_playback_access_v2')){
     if(!serviceAvailable)throw new Error('service unavailable');
+    if(!canPlay)return json([{canPlay:false,reason:'VIP_EXPIRED'}]);
     const requested=JSON.parse(options.body).p_path;
     const path=requested==='master.m3u8'?currentLabel+'/index.m3u8':requested;
     return json([{canPlay:true,canEnterLearning:true,kind:'LEARNER',reason:'OK',expiresAt:'2099-01-01T00:00:00Z',objectKey:prefix+path,prefix}]);
@@ -80,4 +81,25 @@ for(const method of ['GET','HEAD']){
 }
 const anonymous=await readMedia({request:new Request(`https://site.test/api/processing/media/${jobId}/540p/index.m3u8`),env:mediaEnv,params:{path:[jobId,'540p','index.m3u8']}});
 assert.equal(anonymous.status,401);
+
+const cachedObjects=new Map();let reads=0,cacheReads=0;
+globalThis.caches={default:{match:async request=>{cacheReads++;return cachedObjects.get(request.url)?.clone()},put:async(request,response)=>cachedObjects.set(request.url,response)}};
+const cacheEnv={...mediaEnv,VIDEO_BUCKET:{get:async()=>{reads++;return object},head:async()=>object}};
+const cacheRequest=(path,cookie=newCookie)=>({request:new Request(`https://site.test/api/processing/media/${jobId}/${path}`,{headers:{Cookie:cookie}}),env:cacheEnv,params:{path:[jobId,...path.split('/')]}});
+for(const expected of ['MISS','HIT']){
+ const response=await readMedia(cacheRequest('540p/index.m3u8'));
+ assert.equal(response.headers.get('X-Eastudy-Media-Cache'),expected);
+ assert.equal(response.headers.get('cache-control'),'private, no-store');
+ assert.match(response.headers.get('server-timing'),/authorization;dur=/);
+ assert.equal(await response.text(),'#EXTM3U\n');
+}
+assert.equal(reads,1,'cache avoids the second object read');
+const beforeCacheReads=cacheReads;canPlay=false;
+assert.equal((await readMedia(cacheRequest('540p/index.m3u8'))).status,403);
+assert.equal(cacheReads,beforeCacheReads,'VIP is checked before even looking in the cache');
+canPlay=true;
+const catalogTicket=await sealPlaybackTicket({aud:'eastudy-catalog',sub:userId,exp:Math.floor(Date.now()/1000)+60},env);
+const coverCookie='eastudy_catalog='+encodeURIComponent(catalogTicket);
+for(const expected of ['MISS','HIT'])assert.equal((await readMedia(cacheRequest('cover.webp',coverCookie))).headers.get('X-Eastudy-Media-Cache'),expected);
+delete globalThis.caches;
 console.log('Playback session and media route contract passed.');

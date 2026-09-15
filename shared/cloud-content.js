@@ -10,6 +10,8 @@
   const activeMediaSessionKeys = { student: '', admin: '' };
   const mediaSessionGeneration = { student: 0, admin: 0 };
   const usedMediaJobIds = new Set();
+  const publishedRequests = new Map();
+  const publishedCache = new Map();
 
   function auth(scope) {
     return global.EastudyAuth?.client(scope);
@@ -31,9 +33,34 @@
     if(global.ZoContent?.localOnly)return {snapshot:null,revision:0,error:null};
     const api = auth('student');
     if (!api) return { snapshot: null, revision: 0, error: new Error('SUPABASE_NOT_CONFIGURED') };
-    const { data, error } = await api.rpc('get_published_content');
-    const row = firstRow(data);
-    return { snapshot: row?.snapshot || null, revision: Number(row?.revision) || 0, publishedAt: row?.published_at || null, error: error || null };
+    const session = await api.auth.getSession();
+    const owner = session.data?.session?.user?.id;
+    if (session.error || !owner) return { snapshot: null, error: session.error || new Error('AUTH_REQUIRED') };
+    if (publishedRequests.has(owner)) return publishedRequests.get(owner);
+    const request = (async () => {
+      const key = 'eastudy:published:v1:' + owner;
+      let cached = publishedCache.get(owner);
+      try { cached ||= JSON.parse(global.localStorage?.getItem(key) || 'null'); } catch (_) {}
+      if (!cached?.snapshot || !Number.isSafeInteger(cached.revision)) cached = null;
+      const query = api.rpc('get_published_content_if_changed_v1', { p_known_revision: cached?.revision ?? null });
+      const controller = typeof AbortController === 'function' ? new AbortController() : null;
+      const timeout = controller ? setTimeout(() => controller.abort(), 15000) : null;
+      let result;
+      try { result = await (controller && typeof query.abortSignal === 'function' ? query.abortSignal(controller.signal) : query); }
+      finally { clearTimeout(timeout); }
+      const { data, error } = result;
+      const current = await api.auth.getSession();
+      if (current.data?.session?.user?.id !== owner) return { snapshot: null, error: new Error('ACCOUNT_CHANGED') };
+      if (error) { publishedCache.delete(owner); try { global.localStorage?.removeItem(key); } catch (_) {} return { snapshot: null, error }; }
+      const row = firstRow(data), snapshot = row?.snapshot || (cached && Number(row?.revision) === cached.revision ? cached.snapshot : null);
+      if (!snapshot) return { snapshot: null, error: new Error('CONTENT_SNAPSHOT_MISSING') };
+      const value = { snapshot, revision: Number(row.revision), publishedAt: row.published_at || null };
+      publishedCache.set(owner, value);
+      if (row.snapshot) try { global.localStorage?.setItem(key, JSON.stringify(value)); } catch (_) {}
+      return { ...value, error: null };
+    })().catch(error => ({ snapshot: null, error }));
+    publishedRequests.set(owner, request);
+    try { return await request; } finally { if (publishedRequests.get(owner) === request) publishedRequests.delete(owner); }
   }
 
   async function pullAdmin() {

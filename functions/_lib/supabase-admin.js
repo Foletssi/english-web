@@ -10,6 +10,7 @@ export function adminConfig(env) {
 export async function serviceRpc(env, name, input) {
   const config = adminConfig(env);
   const response = await fetch(`${config.url}/rest/v1/rpc/${name}`, {
+    signal: AbortSignal.timeout(10000),
     method: 'POST',
     headers: {
       apikey: config.serviceKey,
@@ -31,6 +32,7 @@ export async function serviceRpc(env, name, input) {
 export async function userRpc(env, token, name, input) {
   const config = supabaseConfig(env);
   const response = await fetch(`${config.url}/rest/v1/rpc/${name}`, {
+    signal: AbortSignal.timeout(10000),
     method: 'POST',
     headers: { apikey: config.key, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(input || {}),

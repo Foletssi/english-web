@@ -21,7 +21,7 @@ const fakeClient=`
 (async()=>{const browser=await chromium.launch({channel:'chrome',headless:true});try{
  const context=await browser.newContext(),errors=[];
  await context.route('**/*',async route=>{const url=new URL(route.request().url());
-  if(url.hostname==='cdn.jsdelivr.net')return route.fulfill({contentType:'text/javascript',body:''});
+  if(url.pathname.includes('/assets/vendor/'))return route.fulfill({contentType:'text/javascript',body:''});
   if(url.hostname!=='eastudy.test')return route.abort();
   if(url.pathname==='/shared/supabase-client.js')return route.fulfill({contentType:'text/javascript',body:fakeClient});
   if(url.pathname==='/api/session')return route.fulfill({contentType:'application/json',body:'{}'});

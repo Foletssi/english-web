@@ -350,10 +350,11 @@
     return api.from('user_collection_saves').upsert({ user_id: context.user.id, collection_id: String(collectionId), active: Boolean(active), updated_at: new Date().toISOString() }, { onConflict: 'user_id,collection_id' });
   }
 
-  async function saveLearningPreferences(settings) {
+  async function saveLearningPreferences(settings, expectedUserId) {
     const api = client('student'), context = await getContext('student');
-    if (!api || !context.user || !isLearnerProfile(context.profile)) return { error: null };
-    return api.from('user_learning_preferences').upsert({ user_id: context.user.id, settings: settings || {}, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+    if (context.error || !api || !context.user || !isLearnerProfile(context.profile)) return { error: context.error || new Error('AUTH_REQUIRED') };
+    if (expectedUserId && String(context.user.id) !== String(expectedUserId)) return { error: new Error('ACCOUNT_CHANGED') };
+    return api.rpc('patch_learning_preferences_v1', { p_patch: settings || {} });
   }
 
   function setLocal(userId, key, value) {
