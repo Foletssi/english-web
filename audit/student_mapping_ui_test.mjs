@@ -21,6 +21,7 @@ try {
   window.mappingFixture={fail:false,calls:0,hold:false,learningCalls:[]};
   const auth={available:true,getContext:async()=>({user:{id:'student-fixture'},profile:{role:'learner',nickname:'测试'}}),getRememberLogin:()=>false};
   const data={getLearningAccess:async()=>({access:{canEnterLearning:true,reason:'VIP_ACTIVE'},error:null}),startLearnerActivity:()=>()=>{},stopLearnerActivity(){},getMembership:async()=>({membership:null,error:null}),hydrateStudentLearning:async()=>({error:null}),pendingStudyEvents:()=>0,saveLearningPreferences:async()=>({error:null}),logStudyEvent:async()=>({error:null}),recordStudyActivity:async()=>({error:null}),setCollectionSave:async()=>{window.mappingFixture.calls++;return {error:window.mappingFixture.fail?new Error('NETWORK_FAILURE'):null}},setCreatorFollow:async()=>({error:null})};
+  data.hydrateStudentLearning=async()=>{window.dispatchEvent(new CustomEvent('eastudy:learning-hydrated',{detail:{userId:'student-fixture',vocabularyLoaded:true}}));return {error:null}};
   const saveCollection=data.setCollectionSave;
   data.setCollectionSave=async()=>{if(window.mappingFixture.hold)await new Promise(resolve=>window.mappingFixture.release=resolve);return saveCollection()};
   data.setCreatorFollow=async()=>{if(window.mappingFixture.hold)await new Promise(resolve=>window.mappingFixture.releaseFollow=resolve);window.mappingFixture.followCalls=(window.mappingFixture.followCalls||0)+1;return {error:window.mappingFixture.fail?new Error('NETWORK_FAILURE'):null}};
@@ -141,7 +142,8 @@ try {
   // Mobile now keeps the transcript visible without a separate tab.
   await page.locator('#transcript').waitFor();
   await page.locator('#transcript .line[data-i="1"]').waitFor();
-  await page.locator('#transcript .line[data-i="1"] .line-time').click();
+  await page.locator('#transcript .line[data-i="1"] .line-zh').click();
+  await page.locator('#transcript .line[data-i="1"] .line-actions summary').click();
   const button=page.locator('#transcript .line[data-i="1"] .favSentence');
   await page.evaluate(()=>window.mappingFixture.fail=true);await button.click();
   await page.waitForFunction(()=>!document.querySelector('.line[data-i="1"] .favSentence').disabled);
@@ -151,16 +153,26 @@ try {
   assert.equal(await button.locator('.label').innerText(),'已收藏');
  });
  await check('word card saves the clicked sentence, not the current playback sentence',async()=>{
+  const countBefore=Number(await page.locator('#savedWordCount').innerText());
+  assert.ok(Number.isFinite(countBefore),'cloud hydration makes count known');
   await page.locator('#video').evaluate(video=>{video.currentTime=1;video.dispatchEvent(new Event('timeupdate'))});
   await page.locator('#transcript .line[data-i="1"] .word-token').first().click();
   assert.equal(await page.locator('#dictContext').innerText(),'Good morning.');
   await page.evaluate(()=>window.mappingFixture.fail=true);await page.locator('#saveWord').click();
   await page.waitForFunction(()=>!document.querySelector('#saveWord').disabled);
+  assert.equal(Number(await page.locator('#savedWordCount').innerText()),countBefore,'failed cloud save does not increase count');
   assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('zs:user:student-fixture:vocab')||'[]').includes('good morning')),false);
   await page.evaluate(()=>window.mappingFixture.fail=false);await page.locator('#saveWord').click();
   await page.waitForFunction(()=>JSON.parse(localStorage.getItem('zs:user:student-fixture:vocab')||'[]').includes('good morning'));
   const input=await page.evaluate(()=>window.mappingFixture.learningCalls.filter(x=>x.method==='setVocabulary').at(-1).input);
   assert.equal(input.context,'Good morning.');assert.equal(input.sourceSentenceId,'s2');
+  assert.equal(Number(await page.locator('#savedWordCount').innerText()),countBefore+1,'successful cloud save updates dock count');
+  await page.locator('#dictClose').click();
+  await page.locator('#openSavedWords').click();
+  await page.locator('#playerWordVideoOnly').check();
+  assert.equal(await page.locator('#playerWordList button').innerText(),'good morning','current video filter uses saved cloud source');
+  await page.locator('#playerWordList button').click();
+  assert.ok(await page.locator('#dictClose').isVisible(),'list opens existing word card');
   await page.locator('#dictClose').click();
  });
  await check('late word save does not overwrite a different open word card',async()=>{
@@ -219,6 +231,32 @@ try {
   const queue=await page.evaluate(()=>JSON.parse(localStorage.getItem('zs:user:student-fixture:learningQueue')));
   assert.equal(queue.source,'collection');assert.equal(queue.collectionId,'7001');assert.deepEqual(queue.ids,['9001']);
   await page.locator('#videoPage .study-back').click();await page.waitForURL('**/#/compilation/7001');
+ });
+ await check('saved word list retains meaning and context from another video',async()=>{
+  await go('/video/9001');await page.locator('#videoPage.active').waitFor();
+  await page.evaluate(()=>{
+   const prefix='zs:user:student-fixture:';
+   localStorage.setItem(prefix+'vocab',JSON.stringify(['hello']));
+   localStorage.setItem(prefix+'vocabDetails',JSON.stringify({hello:{meaning:'另一视频保存的释义',context:'Hello from another video.',sourceVideoId:'other-video',sourceSentenceId:'other-sentence'}}));
+  });
+  await page.locator('#openSavedWords').click();await page.locator('#playerWordVideoOnly').uncheck();
+  await page.locator('#playerWordList button[data-word="hello"]').click();
+  assert.equal(await page.locator('#dictMeaning').innerText(),'另一视频保存的释义');
+  assert.equal(await page.locator('#dictContext').innerText(),'Hello from another video.');
+  await page.locator('#saveWord').click();
+  await page.waitForFunction(()=>!document.querySelector('#saveWord').disabled);
+  const input=await page.evaluate(()=>window.mappingFixture.learningCalls.filter(x=>x.method==='setVocabulary').at(-1).input);
+  assert.equal(input.sourceVideoId,'other-video');assert.equal(input.sourceSentenceId,'other-sentence');
+  await page.locator('#dictClose').click();
+ });
+ await check('word count ignores stale hydration from another account',async()=>{
+  await go('/video/9001');await page.locator('#videoPage.active').waitFor();
+  await page.evaluate(()=>{window.__eastudyStudentId='second-fixture';window.dispatchEvent(new CustomEvent('eastudy:learning-hydrated',{detail:{userId:'second-fixture',vocabularyLoaded:false}}))});
+  assert.equal(await page.locator('#savedWordCount').innerText(),'—');
+  await page.evaluate(()=>window.dispatchEvent(new CustomEvent('eastudy:learning-hydrated',{detail:{userId:'student-fixture',vocabularyLoaded:true}})));
+  assert.equal(await page.locator('#savedWordCount').innerText(),'—');
+  await page.evaluate(()=>window.dispatchEvent(new CustomEvent('eastudy:learning-hydrated',{detail:{userId:'second-fixture',vocabularyLoaded:true}})));
+  assert.equal(await page.locator('#savedWordCount').innerText(),'0','second account never inherits first account words');
  });
  assert.deepEqual(errors,[],'no uncaught browser errors');
  assert.deepEqual(failures,[]);

@@ -494,7 +494,7 @@
         masteredWords: Number(row?.masteredWords ?? row?.mastered_words) || 0
       });
     }
-    window.dispatchEvent(new CustomEvent('eastudy:learning-hydrated', { detail: { userId: context.user.id } }));
+    window.dispatchEvent(new CustomEvent('eastudy:learning-hydrated', { detail: { userId: context.user.id, vocabularyLoaded: !vocabulary.error } }));
     void flushStudyOutbox();
     return context;
   }

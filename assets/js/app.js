@@ -55,7 +55,7 @@ const MockAPI={
 const DEFAULT_SETTINGS={font:20,gap:.2,track:'highlight',outlineColor:'#AFC3D5',highlight:true,pronunciationDialect:'en-GB',levels:['cet4','cet6','gaokao','ielts','phrase','tem4','tem8','toefl','zsb']};const State={route:'/home',query:new URLSearchParams(),theme:Storage.get('theme','dark'),lang:Storage.get('lang','zh'),homeCategory:'热门',homeTag:null,currentSentence:-1,activeSentence:-1,captionTimeline:[],currentVideo:null,mode:'bilingual',captionMode:'bilingual',captionsStatus:'loading',practiceMode:'watch',practiceSelectedIndex:-1,practiceBoundaryReached:false,playing:false,playRequested:false,buffering:false,scrubbing:false,seekPreviewTime:null,speed:1,userBrowsingTranscript:false,word:null,membership:null,learningQueue:null,nextQueueResult:null,pendingAutoplayVideoId:null,queueStartAtZero:null,queueOwner:null,watchRanges:[],lastMediaTime:null,lastStudySample:null,mediaGeneration:0,dictGeneration:0,sessionFavoriteBaseline:0,settings:{...DEFAULT_SETTINGS,...Storage.get('settings',{})},lastProgressWrite:0};
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 let PlaybackCountdown=null,SentenceLoop=null;
-function stopAllMedia(reason='manual',{saveProgress=true,closeOverlays=false}={}){const video=$('#video'),wasVideo=State.route.startsWith('/video/');PlaybackCountdown?.cancel(reason);State.nextQueueResult=null;if(saveProgress&&video&&wasVideo)MockAPI.saveProgress(activeVideoId(),video.currentTime,video.duration);State.mediaGeneration+=1;State.cancelInitialSeek?.();State.cancelInitialSeek=null;State.resumeAfterDict=false;SentenceLoop?.dispose();SentenceLoop=null;try{window.speechSynthesis?.cancel()}catch(_){}if(video&&!video.paused)video.pause();if(['route-change','pagehide'].includes(reason)){State.mediaPlayer?.destroy();State.mediaPlayer=null}if(closeOverlays){const dict=$('#dict');dict?.classList.remove('show','mobile-dict');const complete=$('#lessonComplete');if(complete)complete.hidden=true;const directory=$('#queueDirectory');if(directory)directory.hidden=true}logEvent('media.stop',reason)}
+function stopAllMedia(reason='manual',{saveProgress=true,closeOverlays=false}={}){const video=$('#video'),wasVideo=State.route.startsWith('/video/');PlaybackCountdown?.cancel(reason);State.nextQueueResult=null;if(saveProgress&&video&&wasVideo)MockAPI.saveProgress(activeVideoId(),video.currentTime,video.duration);State.mediaGeneration+=1;State.cancelInitialSeek?.();State.cancelInitialSeek=null;State.resumeAfterDict=false;SentenceLoop?.dispose();SentenceLoop=null;try{window.speechSynthesis?.cancel()}catch(_){}if(video&&!video.paused)video.pause();if(['route-change','pagehide'].includes(reason)){State.mediaPlayer?.destroy();State.mediaPlayer=null}if(closeOverlays){const dict=$('#dict');dict?.classList.remove('show','mobile-dict');const complete=$('#lessonComplete');if(complete)complete.hidden=true;const directory=$('#queueDirectory');if(directory)directory.hidden=true;$('#playerWordPanel')?.close();const options=$('.playback-options');if(options)options.open=false}logEvent('media.stop',reason)}
 function toast(t){const el=$('#toast');el.textContent=t;el.classList.add('show');clearTimeout(window.__toast);window.__toast=setTimeout(()=>el.classList.remove('show'),1500)}
 function logEvent(type,msg){const time=new Date().toLocaleTimeString('zh-CN',{hour12:false});window.__logs=window.__logs||[];window.__logs.unshift({time,type,msg});window.__logs=window.__logs.slice(0,80);renderLogic()}
 function fmt(t){t=Math.max(0,Math.floor(t||0));return `${Math.floor(t/60)}:${String(t%60).padStart(2,'0')}`}
@@ -68,7 +68,7 @@ function applySettings(){
   const gap=Number(State.settings.gap);State.settings.gap=Number.isFinite(gap)?Math.max(0,Math.min(.6,gap)):.2;
   const color=String(State.settings.outlineColor||'').trim();State.settings.outlineColor=/^#[0-9a-f]{6}$/i.test(color)?color.toUpperCase():'#AFC3D5';
   State.settings.pronunciationDialect=State.settings.pronunciationDialect==='en-US'?'en-US':'en-GB';
-  document.documentElement.style.setProperty('--font',State.settings.font+'px');document.documentElement.style.setProperty('--wordGap',State.settings.gap+'em');document.documentElement.style.setProperty('--wordOutline',State.settings.outlineColor);document.documentElement.dataset.track=State.settings.track;
+  document.documentElement.style.setProperty('--mobile-font',(Number(State.settings.mobileFont)||17)+'px');document.documentElement.style.setProperty('--font',State.settings.font+'px');document.documentElement.style.setProperty('--wordGap',State.settings.gap+'em');document.documentElement.style.setProperty('--wordOutline',State.settings.outlineColor);document.documentElement.dataset.track=State.settings.track;
   $$('[data-track-option]').forEach(x=>x.classList.toggle('active',x.dataset.trackOption===State.settings.track));
   $$('.font-choice').forEach(x=>x.classList.toggle('active',+x.dataset.fontValue===+State.settings.font));$$('.gap-choice').forEach(x=>x.classList.toggle('active',Math.abs(+x.dataset.gapValue-+State.settings.gap)<.001));$$('.level-toggle').forEach(x=>x.classList.toggle('off',!State.settings.levels.includes(x.dataset.level)));
   const colorInput=$('#outlineColorInput');if(colorInput)colorInput.value=State.settings.outlineColor;$$('[data-outline-color]').forEach(x=>x.classList.toggle('active',x.dataset.outlineColor.toUpperCase()===State.settings.outlineColor));const colorControl=$('#outlineColorControl');if(colorControl)colorControl.classList.toggle('disabled',State.settings.track!=='outline');
@@ -214,7 +214,7 @@ function setAuthTab(tab){const next=tab==='register'?'register':'login',password
 function syncStudentProfile(context){const profile=context?.profile||{},user=context?.user||{},name=profile.nickname||user.user_metadata?.nickname||'学习者',phone=profile.phone||user.phone||'未绑定手机号';document.querySelectorAll('[data-student-name],.home-user-copy b,.account-menu-head b').forEach(x=>{x.textContent=name;x.title=name});document.querySelectorAll('#userPlanText,#globalAccountPhone,#profileAccountPhone').forEach(x=>x.textContent='学生账户 · '+phone);const avatar=$('#accountAvatar'),dialogName=$('#accountDisplayName'),dialogPhone=$('#accountPhone'),detailName=$('#accountDetailName'),detailPhone=$('#accountDetailPhone');if(avatar)avatar.textContent=name.slice(0,1).toUpperCase();if(dialogName){dialogName.textContent=name;dialogName.title=name}if(dialogPhone)dialogPhone.textContent=phone;if(detailName)detailName.value=name;if(detailPhone)detailPhone.value=phone;syncPasswordStatus()}
 async function waitForStudentProfile(displayName){for(let i=0;i<8;i+=1){const context=await window.EastudyAuth.getContext('student');if(context.profile)return context;await new Promise(resolve=>setTimeout(resolve,180))}return window.EastudyAuth.ensureStudentProfile(displayName)}
 function studentAuthErrorMessage(error,register){const raw=String(error?.code||error?.message||'').toUpperCase();if(!register){if(raw.includes('VIP_EXPIRED'))return'会员已到期，请输入新的邀请码续期';if(raw.includes('VIP_REQUIRED'))return'该账号尚未开通会员，请输入邀请码激活';if(raw.includes('VIP_REVOKED'))return'会员权益已被停用，请联系管理员';if(raw.includes('ACCOUNT_UNAVAILABLE'))return'账号已停用，请联系管理员';if(raw.includes('ACTIVATION_CODE_USED'))return'邀请码已被其他账号使用';if(raw.includes('ACTIVATION_CODE_EXPIRED'))return'邀请码已过期';if(raw.includes('ACTIVATION_CODE_REVOKED'))return'邀请码已停用';if(raw.includes('ACTIVATION_CODE_INVALID')||raw.includes('INVALID_ACTIVATION_CODE'))return'邀请码无效，请检查后重试';if(raw.includes('SERVICE_UNAVAILABLE')||raw.includes('AUTH_UNAVAILABLE'))return'登录服务暂时不可用，请稍后重试';return raw.includes('RATE')||raw.includes('TOO_MANY')?'登录尝试过于频繁，请稍后再试':'账号或密码错误'}if(raw.includes('ACCOUNT_EXISTS'))return'该账号已经注册，请直接登录';if(raw.includes('INVITE_INVALID'))return'邀请码无效、已使用、已撤销或已过期';if(raw.includes('ATTEMPT_MISMATCH'))return'邀请码已更换，请重新提交注册';if(raw.includes('ATTEMPT_EXPIRED'))return'本次注册已超时，请重新提交';if(raw.includes('INPUT_INVALID'))return'请检查账号、密码和邀请码';return'注册服务暂时不可用，请稍后重试'}
-async function completeStudentSignIn(context,source,knownAccess=null){const check=knownAccess?{access:knownAccess,error:null}:await window.EastudyData?.getLearningAccess?.();if(check?.error||check?.access?.canEnterLearning!==true){await window.EastudyAuth?.signOut('student');StudentAuth.context=null;StudentAuth.access=null;StudentAuth.phase='anonymous';setRenewalRequired(['VIP_REQUIRED','VIP_EXPIRED'].includes(check?.access?.reason));syncSessionUI();setAuthMessage(studentAuthErrorMessage({code:check?.access?.reason||'LOGIN_SERVICE_UNAVAILABLE'},false));return false}StudentAuth.context=context;StudentAuth.access=check.access;StudentAuth.phase='authenticated';StudentAuth.pendingContext=null;setRenewalRequired(false);window.__eastudyStudentId=context?.user?.id||'signed-out';window.EastudyData?.startLearnerActivity?.(context?.user?.id);startStudentAccessGuard();syncStudentProfile(context);syncSessionUI();await refreshMembership();await window.EastudyCloudContent?.syncMediaSession('student').catch(()=>{});await hydrateCloudContent();toast('登录成功，正在同步学习数据');await window.EastudyData?.hydrateStudentLearning();route('/home');if(StudentAuth.context?.user?.id===context?.user?.id){renderHomeHomeSections();refreshStats();maybeShowGoalOnboarding();toast('学习数据已同步')}void window.EastudyData?.logStudyEvent('student_sign_in',{payload:{source}});return true}
+async function completeStudentSignIn(context,source,knownAccess=null){const check=knownAccess?{access:knownAccess,error:null}:await window.EastudyData?.getLearningAccess?.();if(check?.error||check?.access?.canEnterLearning!==true){await window.EastudyAuth?.signOut('student');StudentAuth.context=null;StudentAuth.access=null;StudentAuth.phase='anonymous';setRenewalRequired(['VIP_REQUIRED','VIP_EXPIRED'].includes(check?.access?.reason));syncSessionUI();setAuthMessage(studentAuthErrorMessage({code:check?.access?.reason||'LOGIN_SERVICE_UNAVAILABLE'},false));return false}StudentAuth.context=context;StudentAuth.access=check.access;StudentAuth.phase='authenticated';StudentAuth.pendingContext=null;setRenewalRequired(false);window.__eastudyStudentId=context?.user?.id||'signed-out';State.vocabularyLoadedOwner=null;refreshPlayerCounts();window.EastudyData?.startLearnerActivity?.(context?.user?.id);startStudentAccessGuard();syncStudentProfile(context);syncSessionUI();await refreshMembership();await window.EastudyCloudContent?.syncMediaSession('student').catch(()=>{});await hydrateCloudContent();toast('登录成功，正在同步学习数据');await window.EastudyData?.hydrateStudentLearning();route('/home');if(StudentAuth.context?.user?.id===context?.user?.id){renderHomeHomeSections();refreshStats();maybeShowGoalOnboarding();toast('学习数据已同步')}void window.EastudyData?.logStudyEvent('student_sign_in',{payload:{source}});return true}
 function showRegistrationSuccess(context=null){StudentAuth.pendingContext=context;$('#authForm').hidden=true;$('#authSuccess').hidden=false;const button=$('#authGoLogin');if(button)button.textContent=context?'开始学习':'去登录';hydrateIcons($('#authSuccess'))}
 async function submitStudentAuth(){const register=authTab()==='register',account=String($('#signinAccount')?.value||'').trim(),password=$('#signinPassword')?.value||'',confirm=$('#signinPasswordConfirm')?.value||'',inviteCode=String($('#signinInviteCode')?.value||'').trim(),renewCode=String($('#signinRenewCode')?.value||'').trim(),displayName=$('#signinName')?.value.trim()||account,button=$('#signinSubmit');if(!window.EastudyAuth?.available){setAuthMessage('登录服务尚未配置，请刷新页面后重试');return}if(!account||account.length>128){setAuthMessage('请输入正确的手机号或账号');$('#signinAccount')?.focus();return}if(password.length<(register?8:6)){setAuthMessage(register?'密码至少需要 8 位':'密码至少需要 6 位');$('#signinPassword')?.focus();return}if(register&&password!==confirm){setAuthMessage('两次输入的密码不一致');$('#signinPasswordConfirm')?.focus();return}if(register&&!inviteCode){setAuthMessage('请输入邀请码');$('#signinInviteCode')?.focus();return}if(!register&&StudentAuth.renewalRequired&&!renewCode){setAuthMessage('请输入新的邀请码后续期');$('#signinRenewCode')?.focus();return}saveStudentRemember();button.disabled=true;button.textContent=register?'正在注册…':StudentAuth.renewalRequired?'正在续期…':'正在登录…';setAuthMessage('');try{if(register&&!StudentAuth.registrationAttemptId)StudentAuth.registrationAttemptId=crypto.randomUUID();const result=register?await window.EastudyAuth.registerWithInvite({account,password,displayName,inviteCode,attemptId:StudentAuth.registrationAttemptId},'student'):StudentAuth.renewalRequired?await window.EastudyAuth.activateAndLogin({account,password,inviteCode:renewCode},'student'):await window.EastudyAuth.signInAccount({account,password},'student');if(result.error){const raw=String(result.error.code||result.error.message||'').toUpperCase();if(raw.includes('ATTEMPT_EXPIRED')||raw.includes('ATTEMPT_MISMATCH')||raw.includes('INVITE_INVALID'))StudentAuth.registrationAttemptId=null;if(['VIP_REQUIRED','VIP_EXPIRED'].includes(raw))setRenewalRequired(true);setAuthMessage(studentAuthErrorMessage(result.error,register));return}const context=await waitForStudentProfile(displayName);if(!context.user||!isStudentProfile(context.profile)){await window.EastudyAuth.signOut('student');setAuthMessage('账号资料尚未准备完成，请稍后重试');return}if(register){StudentAuth.registrationAttemptId=null;StudentAuth.access=result.access;showRegistrationSuccess(context);return}await completeStudentSignIn(context,StudentAuth.renewalRequired?'invite_renewal':'password',result.access)}finally{button.disabled=false;updateAuthSubmitLabel()}}
 function startPasswordRecovery(){StudentAuth.intent='login';setAuthMessage('当前未接入自助找回密码，请联系管理员核验身份后重置密码');$('#signinAccount')?.focus()}
@@ -302,6 +302,43 @@ function renderQueueControls(){
   $('#queueDirectory').hidden=false;$('#closeQueueDirectory').focus();
  };
 }
+function updateMobilePlayerGeometry(){
+ const page=$('#videoPage'),video=$('#video');if(!page||!matchMedia('(max-width:850px)').matches)return;
+ const height=Math.round(window.visualViewport?.height||innerHeight),width=page.clientWidth;
+ const ratio=video.videoWidth>0&&video.videoHeight>0?video.videoWidth/video.videoHeight:16/9;
+ page.style.setProperty('--player-viewport',height+'px');
+ page.style.setProperty('--mobile-video-height',Math.floor(Math.max(64,Math.min((width-16)/ratio,height*.38,height-300)))+'px');
+}
+function confirmedTeachingEntries(){
+ const entries=new Map();
+ DATA.sentences.forEach((sentence,index)=>(sentence.keyWords||[]).forEach(raw=>{
+  const word=normalizePhrase(raw);if(word&&!entries.has(word))entries.set(word,{word,index});
+ }));
+ return [...entries.values()];
+}
+function playerVocabularyEntries(){
+ const details=Storage.get('vocabDetails',{}),meta=Storage.get('vocabMeta',{});
+ return [...new Set(Storage.get('vocab',[]).map(vocabKey).filter(Boolean))].map(word=>{
+  const source={...details[word],...meta[word]},sameVideo=String(source.sourceVideoId)===String(activeVideoId());
+  const index=sameVideo?DATA.sentences.findIndex(s=>source.sourceSentenceId?String(s.id)===String(source.sourceSentenceId):(' '+normalizePhrase(s.en)+' ').includes(' '+word+' ')):-1;
+  return {word,index,sourceVideoId:source.sourceVideoId,source};
+ });
+}
+function refreshPlayerCounts(){
+ const teaching=$('#teachingCount'),saved=$('#savedWordCount');
+ if(teaching)teaching.textContent=State.captionsStatus==='loading'?'—':String(confirmedTeachingEntries().length);
+ if(saved)saved.textContent=State.vocabularyLoadedOwner===currentStudentStorageId()?String(playerVocabularyEntries().length):'—';
+ if($('#playerWordPanel')?.open)renderPlayerWordList();
+}
+function renderPlayerWordList(){
+ const kind=$('#playerWordPanel').dataset.kind,filter=$('#playerWordVideoOnly');
+ filter.parentElement.hidden=kind!=='saved';
+ const known=kind==='saved'?State.vocabularyLoadedOwner===currentStudentStorageId():State.captionsStatus!=='loading';
+ const entries=kind==='saved'?playerVocabularyEntries().filter(x=>!filter.checked||String(x.sourceVideoId)===String(activeVideoId())):confirmedTeachingEntries();
+ const list=$('#playerWordList');list.replaceChildren();
+ if(!known||!entries.length){const p=document.createElement('p');p.textContent=!known?(kind==='saved'?'生词本尚未同步，请稍后重试':'字幕正在加载…'):'暂无词汇';list.append(p);return}
+ for(const entry of entries){const button=document.createElement('button');button.type='button';button.textContent=entry.word;button.dataset.word=entry.word;button.dataset.idx=String(entry.index);button.onclick=event=>{event.stopPropagation();$('#playerWordPanel').close();openDict(button,event,kind==='saved'?entry.source:null);$('#dictClose')?.focus()};list.append(button)}
+}
 function syncMobilePlayer(){
  const page=$('#videoPage');if(!page)return;
  const mobile=matchMedia('(max-width:850px)').matches;document.body.classList.toggle('mobile-player-open',mobile&&State.route.startsWith('/video/'));
@@ -309,22 +346,40 @@ function syncMobilePlayer(){
   const controls=document.createElement('div');controls.id='videoQueueControls';controls.className='video-queue-controls';
   controls.innerHTML='<button type="button" id="previousVideo">上一条视频</button><button type="button" id="openQueueDirectory">目录</button><button type="button" id="nextVideo">下一条视频</button><label><input type="checkbox" id="autoplayNext" checked>自动连播</label>';
   page.append(controls);
-  const details=document.createElement('details');details.className='playback-options';details.innerHTML='<summary>速度、音量与句子解析</summary>';page.append(details);
-  const ctl=page.querySelector('.ctl-left'),insight=$('#sentenceInsight');
-  for(const node of [ctl,insight]){const anchor=document.createComment('desktop placement');node.before(anchor);node._desktopAnchor=anchor}
-  const dialog=document.createElement('section');dialog.id='queueDirectory';dialog.className='queue-directory';dialog.hidden=true;dialog.setAttribute('role','dialog');dialog.setAttribute('aria-label','播放目录');dialog.innerHTML='<button type="button" id="closeQueueDirectory">关闭目录</button><div id="queueDirectoryList"></div>';page.append(dialog);
+  const details=document.createElement('details');details.className='playback-options';details.innerHTML='<summary>更多</summary><div class="playback-options-body"></div>';page.querySelector('.study-top').append(details);
+  const dock=document.createElement('div');dock.className='mobile-learning-dock';dock.innerHTML='<div class="learning-dock-links"><button type="button" id="openTeachingWords">重点词 <b id="teachingCount">—</b></button><button type="button" id="openSavedWords">生词本 <b id="savedWordCount">—</b></button></div>';page.append(dock);
+  const modes=document.createElement('div');modes.className='mobile-learning-tools';modes.innerHTML='<select id="mobileCaptionMode" aria-label="字幕设置"><option value="bilingual">双语</option><option value="english">英文</option><option value="hidden">隐藏字幕</option></select>';page.append(modes);
+  $('#mobileCaptionMode').onchange=e=>setCaptionMode(e.target.value);
+  const moving=[page.querySelector('.ctl-left'),$('#sentenceInsight'),$('#studyLangBtn'),$('#studyThemeBtn'),$('#openSettings'),page.querySelector('.timeline'),page.querySelector('.center-ctl'),page.querySelector('.practice-modes'),$('#openQueueDirectory')];
+  for(const node of moving){const anchor=document.createComment('desktop placement');node.before(anchor);node._desktopAnchor=anchor}
+  const dialog=document.createElement('section');dialog.id='queueDirectory';dialog.className='queue-directory';dialog.hidden=true;dialog.setAttribute('role','dialog');dialog.setAttribute('aria-label','播放目录');dialog.innerHTML='<button type="button" id="closeQueueDirectory">关闭目录</button><div id="queueDirectoryNavigation"></div><div id="queueDirectoryList"></div>';page.append(dialog);
   $('#closeQueueDirectory').onclick=()=>{dialog.hidden=true;$('#openQueueDirectory').focus()};
   dialog.setAttribute('aria-modal','true');
   dialog.onkeydown=event=>{
    if(event.key==='Escape'){event.stopPropagation();$('#closeQueueDirectory').click()}
-   if(event.key==='Tab'){const buttons=[...dialog.querySelectorAll('button:not(:disabled)')],first=buttons[0],last=buttons.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus()}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus()}}
+   if(event.key==='Tab'){const buttons=[...dialog.querySelectorAll('button:not(:disabled),input')].filter(x=>x.getClientRects().length),first=buttons[0],last=buttons.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus()}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus()}}
   };
+  const panel=document.createElement('dialog');panel.id='playerWordPanel';panel.setAttribute('aria-labelledby','playerWordTitle');panel.innerHTML='<header><b id="playerWordTitle"></b><button type="button" id="closePlayerWords">关闭</button></header><label><input type="checkbox" id="playerWordVideoOnly">只看本视频</label><div id="playerWordList"></div>';page.append(panel);
+  $('#closePlayerWords').onclick=()=>panel.close();$('#playerWordVideoOnly').onchange=renderPlayerWordList;
+  for(const [id,kind,title] of [['openTeachingWords','teaching','重点词'],['openSavedWords','saved','生词本']])$('#'+id).onclick=()=>{panel.dataset.kind=kind;$('#playerWordTitle').textContent=title;renderPlayerWordList();panel.showModal()};
+  const resize=new ResizeObserver(updateMobilePlayerGeometry);resize.observe(page);
  }
- const details=page.querySelector('.playback-options');
- for(const node of [page.querySelector('.ctl-left'),$('#sentenceInsight')]){if(mobile)details.append(node);else node._desktopAnchor.after(node)}
- details.hidden=!mobile;if(mobile)page.dataset.mobilePane='transcript';
- renderQueueControls();
+ const details=page.querySelector('.playback-options'),body=details.querySelector('.playback-options-body'),dock=page.querySelector('.mobile-learning-dock'),modes=page.querySelector('.mobile-learning-tools'),links=dock.querySelector('.learning-dock-links');
+ const placements=[[page.querySelector('.ctl-left'),body],[$('#sentenceInsight'),body],[$('#studyLangBtn'),body],[$('#studyThemeBtn'),body],[$('#openSettings'),body],[page.querySelector('.timeline'),dock],[page.querySelector('.center-ctl'),dock],[page.querySelector('.practice-modes'),modes],[$('#openQueueDirectory'),links]];
+ for(const [node,target] of placements){if(mobile){if(node.parentElement!==target)target.append(node)}else node._desktopAnchor.after(node)}
+ if(mobile){dock.append(links);links.prepend($('#openQueueDirectory'));$('#queueDirectoryNavigation').append($('#videoQueueControls'));page.dataset.mobilePane='transcript'}
+ else page.append($('#videoQueueControls'));
+ details.hidden=!mobile;dock.hidden=!mobile;modes.hidden=!mobile;
+ page.querySelectorAll('.line-actions').forEach(actions=>actions.open=!mobile);
+ renderQueueControls();refreshPlayerCounts();updateMobilePlayerGeometry();
 }
+window.visualViewport?.addEventListener('resize',updateMobilePlayerGeometry);
+window.addEventListener('resize',updateMobilePlayerGeometry);
+window.addEventListener('eastudy:learning-hydrated',event=>{
+ if(String(event.detail?.userId)!==String(currentStudentStorageId()))return;
+ State.vocabularyLoadedOwner=event.detail?.vocabularyLoaded===true?currentStudentStorageId():null;
+ refreshPlayerCounts();
+});
 matchMedia('(max-width:850px)').addEventListener('change',()=>{syncMobilePlayer();if(State.route==='/home'){bindHomeHeroCarousel();renderMobileHome()}});
 function bindHomeHeroCarousel(){
   stopHomeCarousel?.();if(matchMedia('(max-width:850px)').matches)return;
@@ -377,6 +432,8 @@ function tokenHTML(text,idx,wordTimings=[]){
   const words=[],re=/[A-Za-z][A-Za-z'-]*/g;let m;
   while((m=re.exec(source)))words.push({raw:m[0],word:normalizeWord(m[0]),start:m.index,end:m.index+m[0].length});
   if(!words.length)return escapeHtml(source);
+  // Timing is usable only when every source token has a matching, ordered cue.
+  const timingValid=sentence.timingSource!=='estimated'&&(!sentence.alignmentBasis?.english||sentence.alignmentBasis.english===sentence.en)&&wordTimings.length===words.length&&wordTimings.every((t,i)=>normalizeWord(t?.word||t?.text||'')===words[i].word&&Number.isFinite(Number(t.start))&&Number.isFinite(Number(t.end))&&Number(t.end)>Number(t.start)&&Number(t.start)>=Number(sentence.s)&&Number(t.end)<=Number(sentence.e)+.05&&(i===0||Number(t.start)>=Number(wordTimings[i-1].end)-.02));
   const phraseKeys=[...new Set([...sentenceKeywords(sentence),...Object.keys(DATA.dictionary).filter(k=>k.includes(' '))])]
     .map(x=>({key:x,parts:x.toLowerCase().split(/\s+/).map(normalizeWord).filter(Boolean)})).filter(x=>x.parts.length>1).sort((a,b)=>b.parts.length-a.parts.length);
   const phraseAt=new Map();
@@ -388,13 +445,13 @@ function tokenHTML(text,idx,wordTimings=[]){
     }
   }
   let keywordTone=0;
-  const renderToken=(raw,key,startIndex,endIndex,phrase=false)=>{
+  const renderToken=(raw,key,startIndex,endIndex,phrase=false,tone=null)=>{
     const info=wordInfo(key,sentence),levels=State.settings.highlight===false?[]:(info.levels||[]).filter(x=>State.settings.levels.includes(x)),teaching=sentenceKeywords(sentence).includes(key);
     const cls=['word-token',phrase?'phrase-token':'',...levels.map(x=>'level-'+x)].filter(Boolean);
     if(teaching)cls.push('teaching-keyword');
-    if(teaching||levels.length){keywordTone=(keywordTone%4)+1;cls.push('keyword-tone-'+keywordTone)}
+    if(teaching||levels.length){if(tone===null)keywordTone=(keywordTone%4)+1;cls.push('keyword-tone-'+(tone||keywordTone))}
     if(isVocabSaved(key))cls.push('saved');
-    const rows=wordTimings.slice(startIndex,endIndex+1).filter(t=>Number.isFinite(Number(t?.start))&&Number.isFinite(Number(t?.end)));
+    const rows=timingValid?wordTimings.slice(startIndex,endIndex+1):[];
     const timingAttrs=rows.length?` data-word-start="${Number(rows[0].start)}" data-word-end="${Number(rows[rows.length-1].end)}"`:'';
     return `<span class="${cls.join(' ')}" data-word="${escapeHtml(key)}" data-idx="${idx}"${phrase?' data-phrase="1"':''}${timingAttrs}>${escapeHtml(raw)}</span>`;
   };
@@ -402,7 +459,13 @@ function tokenHTML(text,idx,wordTimings=[]){
   while(i<words.length){
     const phrase=phraseAt.get(i),last=phrase?.endIndex||i,first=words[i],end=words[last];
     out+=escapeHtml(source.slice(cursor,first.start));
-    out+=renderToken(source.slice(first.start,end.end),phrase?phrase.key:first.word, i,last,!!phrase);
+    if(phrase){
+      keywordTone=(keywordTone%4)+1;
+      for(let n=i;n<=last;n++){
+        if(n>i)out+=escapeHtml(source.slice(words[n-1].end,words[n].start));
+        out+=renderToken(words[n].raw,phrase.key,n,n,true,keywordTone);
+      }
+    }else out+=renderToken(first.raw,first.word,i,i);
     cursor=end.end;i=last+1;
   }
   return out+escapeHtml(source.slice(cursor));
@@ -424,10 +487,11 @@ function mountSentenceLoop(){
 let videoBound=false;
 function updateWordTimeline(time){
   let active='';
-  $$('.word-token[data-word-start]').forEach(el=>{
+  (State.timedElements||[]).forEach(el=>el.classList.remove('timing-active'));State.timedElements=[];
+  $$('#transcript .line.active .word-token[data-word-start], #currentEn .word-token[data-word-start]').forEach(el=>{
     const on=time>=Number(el.dataset.wordStart)&&time<Number(el.dataset.wordEnd);
     el.classList.toggle('timing-active',on);
-    if(on)active=el.dataset.word;
+    if(on){active=el.dataset.word;State.timedElements.push(el)};
   });
   State.timedWord=active;
 }
@@ -441,7 +505,7 @@ async function bootVideo(){
    PlaybackCountdown?.cancel('video-mount');State.nextQueueResult=null;ensureLearningQueueForVideo(id);
    State.watchRanges=mergeWatchRanges(Storage.get('watchCoverage:'+id,[]));State.lastMediaTime=null;State.sessionFavoriteBaseline=favoriteSentenceIds(id).length;
    const managedRows=window.ZoContent.listSentences?.(id)||[];
-   DATA.sentences=managedRows.map(x=>({id:x.id||'',s:+x.startTime,e:+x.endTime,en:x.english||'',zh:x.chinese||'',keyWords:Array.isArray(x.keyWords)?x.keyWords:[],expressions:Array.isArray(x.expressions)?x.expressions:[],wordTimings:Array.isArray(x.wordTimings)?x.wordTimings:[],grammar:x.grammar||x.grammarNote||'',learningAnalysis:x.learningAnalysis||null,reviewStatus:x.reviewStatus||'REVIEW',textRevision:Number(x.textRevision)||1,learningContractVersion:Number(x.learningContractVersion)||3}));
+   DATA.sentences=managedRows.map(x=>({id:x.id||'',s:+x.startTime,e:+x.endTime,en:x.english||'',zh:x.chinese||'',keyWords:Array.isArray(x.keyWords)?x.keyWords:[],expressions:Array.isArray(x.expressions)?x.expressions:[],wordTimings:Array.isArray(x.wordTimings)?x.wordTimings:[],timingSource:x.timingSource,alignmentBasis:x.alignmentBasis,grammar:x.grammar||x.grammarNote||'',learningAnalysis:x.learningAnalysis||null,reviewStatus:x.reviewStatus||'REVIEW',textRevision:Number(x.textRevision)||1,learningContractVersion:Number(x.learningContractVersion)||3}));
     State.captionsStatus=DATA.sentences.length?'ready':'empty';State.captionTimeline=window.EastudyPlayerState?.buildCaptionTimeline?.(DATA.sentences)||[];State.currentVideo=managed;const initialCaption=captionAt(0);State.currentSentence=initialCaption.index;State.activeSentence=initialCaption.activeIndex;State.practiceSelectedIndex=-1;State.practiceBoundaryReached=false;State.scrubbing=false;State.seekPreviewTime=null;State.userBrowsingTranscript=false;
    const video=$('#video');if(video){const poster=String(managed.cover||'').trim();if(poster)video.poster=poster;else video.removeAttribute('poster')}State.mediaPlayer?.destroy();State.mediaPlayer=null;mountSentenceLoop();
    const protectedMediaUrl=managed?.playback?.masterUrl||managed?.mediaUrl||'';try{await window.EastudyCloudContent?.syncMediaSession?.('student',{mediaUrl:protectedMediaUrl})}catch(error){if(generation!==State.mediaGeneration)return;setMediaState('session',{code:error?.message});renderTranscript();applyCurrent(false);return}
@@ -453,7 +517,7 @@ async function bootVideo(){
    document.querySelector('.practice-mode[data-practice="watch"]')?.removeAttribute('disabled');document.querySelectorAll('.practice-mode:not([data-practice="watch"])').forEach(button=>button.disabled=!DATA.sentences.length);renderTranscript();applyCurrent(false);if(!videoBound){bindVideo();videoBound=true}
    renderLogic();const player=State.mediaPlayer;if(player){try{await player.ready}catch(error){if(generation===State.mediaGeneration)setMediaState(error?.stage==='session'?'session':'video',{code:error?.message});return}}if(generation===State.mediaGeneration&&String(State.pendingAutoplayVideoId||'')===String(id)){State.pendingAutoplayVideoId=null;State.playRequested=true;try{await (player?.play?.()||video?.play())}catch(error){if(generation!==State.mediaGeneration)return;State.playRequested=false;setMediaState(error?.name==='NotAllowedError'?'interaction':'video',{code:error?.message})}}
 }
-function renderTranscript(){const root=$('#transcript'),favs=new Set(favoriteSentenceIds()),showZh=State.captionMode==='bilingual',hidden=State.captionMode==='hidden',cloze=State.practiceMode==='cloze';if(!DATA.sentences.length){const loading=State.captionsStatus==='loading';root.innerHTML=`<div class="transcript-empty" role="status"><b>${loading?'学习字幕正在加载中':'此视频暂未提供学习字幕'}</b><span>${loading?'':'你仍然可以正常观看视频。'}</span></div>`;return}root.innerHTML=DATA.sentences.map((d,i)=>{const active=i===State.currentSentence,enHTML=cloze?clozeSentenceHTML(d,i,active):tokenHTML(d.en,i,d.wordTimings);return `<div class="line ${active?'active':''} ${cloze?'cloze-line':''} ${hidden?'caption-hidden-line':''}" data-i="${i}"><div class="line-time">${fmt(d.s)}</div><div class="line-en">${hidden?'点击显示这一句':enHTML}</div><div class="line-zh" style="display:${showZh?'block':'none'}">${escapeHtml(d.zh||'')}</div><div class="line-actions"><button class="action-chip copySentence" title="复制当前双语句子"><span class="icon">📋</span><span class="label">复制句子</span></button><button class="action-chip favSentence ${favs.has(i)?'on':''}" title="收藏当前句子"><span class="icon">⭐</span><span class="label">${favs.has(i)?'已收藏':'收藏句子'}</span></button></div></div>`}).join('');$$('.line').forEach(el=>el.onclick=e=>{if(e.target.closest('.word-token')||e.target.closest('.line-actions')||e.target.closest('.cloze-entry')||!window.getSelection()?.isCollapsed)return;const i=+el.dataset.i;if(State.captionMode==='hidden'){const text=el.querySelector('.line-en');text.innerHTML=tokenHTML(DATA.sentences[i].en,i,DATA.sentences[i].wordTimings);text.querySelectorAll('.word-token').forEach(word=>word.onclick=event=>{event.stopPropagation();openDict(word,event)});return}if(State.practiceMode==='loop'){SentenceLoop?.select(i);return}if(State.practiceMode==='intensive'){State.practiceSelectedIndex=i;State.practiceBoundaryReached=false}$('#video').currentTime=DATA.sentences[i].s+.01;applyCurrent(true)});$$('.word-token').forEach(el=>el.onclick=e=>{e.stopPropagation();openDict(el,e)});$$('.favSentence').forEach(btn=>btn.onclick=e=>{e.stopPropagation();const i=+btn.closest('.line').dataset.i,generation=State.mediaGeneration;void runLearningSave(btn,()=>MockAPI.toggleSentence(i),({active:on})=>{btn.classList.toggle('on',on);const label=btn.querySelector('.label');if(label)label.textContent=on?'已收藏':'收藏句子';toast(on?'已收藏当前句':'已取消收藏');refreshStats();renderLogic()},()=>generation===State.mediaGeneration)});$$('.copySentence').forEach(btn=>btn.onclick=async e=>{e.stopPropagation();const i=+btn.closest('.line').dataset.i,d=DATA.sentences[i];try{await navigator.clipboard.writeText(d.en+'\n'+d.zh);toast('已复制双语句子')}catch{toast('当前浏览器不允许剪贴板')}});bindClozeInputs(root)}
+function renderTranscript(){refreshPlayerCounts();const root=$('#transcript'),favs=new Set(favoriteSentenceIds()),showZh=State.captionMode==='bilingual',hidden=State.captionMode==='hidden',cloze=State.practiceMode==='cloze';if(!DATA.sentences.length){const loading=State.captionsStatus==='loading';root.innerHTML=`<div class="transcript-empty" role="status"><b>${loading?'学习字幕正在加载中':'此视频暂未提供学习字幕'}</b><span>${loading?'':'你仍然可以正常观看视频。'}</span></div>`;return}root.innerHTML=DATA.sentences.map((d,i)=>{const active=i===State.currentSentence,enHTML=cloze?clozeSentenceHTML(d,i,active):tokenHTML(d.en,i,d.wordTimings);return `<div class="line ${active?'active':''} ${cloze?'cloze-line':''} ${hidden?'caption-hidden-line':''}" data-i="${i}"><div class="line-time">${fmt(d.s)}</div><div class="line-en">${hidden?'点击显示这一句':enHTML}</div><div class="line-zh" style="display:${showZh?'block':'none'}">${escapeHtml(d.zh||'')}</div><details class="line-actions" ${matchMedia('(min-width:851px)').matches?'open':''}><summary aria-label="句子操作">•••</summary><button class="action-chip copySentence" title="复制当前双语句子"><span class="icon">📋</span><span class="label">复制句子</span></button><button class="action-chip favSentence ${favs.has(i)?'on':''}" title="收藏当前句子"><span class="icon">⭐</span><span class="label">${favs.has(i)?'已收藏':'收藏句子'}</span></button></details></div>`}).join('');$$('.line').forEach(el=>el.onclick=e=>{if(e.target.closest('.word-token')||e.target.closest('.line-actions')||e.target.closest('.cloze-entry'))return;const selection=window.getSelection();if(selection?.toString()&&el.contains(selection.anchorNode)&&el.contains(selection.focusNode))return;const i=+el.dataset.i;if(State.captionMode==='hidden'){const text=el.querySelector('.line-en');text.innerHTML=tokenHTML(DATA.sentences[i].en,i,DATA.sentences[i].wordTimings);text.querySelectorAll('.word-token').forEach(word=>word.onclick=event=>{event.stopPropagation();openDict(word,event)});return}if(State.practiceMode==='loop'){SentenceLoop?.select(i);return}if(State.practiceMode==='intensive'){State.practiceSelectedIndex=i;State.practiceBoundaryReached=false}$('#video').currentTime=DATA.sentences[i].s+.01;applyCurrent(true)});$$('.word-token').forEach(el=>el.onclick=e=>{e.stopPropagation();openDict(el,e)});$$('.favSentence').forEach(btn=>btn.onclick=e=>{e.stopPropagation();const i=+btn.closest('.line').dataset.i,generation=State.mediaGeneration;void runLearningSave(btn,()=>MockAPI.toggleSentence(i),({active:on})=>{btn.classList.toggle('on',on);const label=btn.querySelector('.label');if(label)label.textContent=on?'已收藏':'收藏句子';toast(on?'已收藏当前句':'已取消收藏');refreshStats();renderLogic()},()=>generation===State.mediaGeneration)});$$('.copySentence').forEach(btn=>btn.onclick=async e=>{e.stopPropagation();const i=+btn.closest('.line').dataset.i,d=DATA.sentences[i];try{await navigator.clipboard.writeText(d.en+'\n'+d.zh);toast('已复制双语句子')}catch{toast('当前浏览器不允许剪贴板')}});bindClozeInputs(root)}
 function updateSentenceInsight(d){
   const keys=sentenceKeywords(d);
   const vocab=$('#insightVocab');
@@ -476,7 +540,7 @@ function scrollTranscriptToSentence(index=State.currentSentence,smooth=true){
 }
 function applyCurrent(scroll=true,smooth=true){const en=$('#currentEn'),zh=$('#currentZh'),videoTime=Number($('#video')?.currentTime)||0,locked=['intensive','loop'].includes(State.practiceMode)?DATA.sentences[State.practiceSelectedIndex]:null,view=locked?{kind:videoTime>=locked.s&&videoTime<locked.e?'cue':'hold',sentence:locked,index:State.practiceSelectedIndex,activeIndex:videoTime>=locked.s&&videoTime<locked.e?State.practiceSelectedIndex:-1}:captionAt(videoTime);State.activeSentence=view.activeIndex;if(!view.sentence){State.currentSentence=-1;if(en)en.replaceChildren();if(zh){zh.replaceChildren();zh.style.display='none'}const vocab=$('#insightVocab'),grammar=$('#insightGrammar');if(vocab)vocab.textContent='';if(grammar)grammar.textContent='';$$('.line').forEach(x=>x.classList.remove('active'));updateWordTimeline(videoTime);return}const d=view.sentence,previousIndex=State.currentSentence;State.currentSentence=view.index;updateSentenceInsight(d);applyMode(false);if(State.practiceMode==='cloze'){if(previousIndex!==State.currentSentence||!$('#transcript .cloze-input'))renderTranscript()}else $$('.line').forEach((x,i)=>x.classList.toggle('active',i===State.currentSentence));if(scroll&&previousIndex!==State.currentSentence)scrollTranscriptToSentence(State.currentSentence,smooth);$$('#currentEn .word-token').forEach(el=>el.onclick=e=>openDict(el,e));renderLogic()}
 function applyMode(rerender=true){const d=DATA.sentences[State.currentSentence],zh=$('#currentZh'),en=$('#currentEn');if(!d||!zh||!en)return;en.style.display='block';zh.textContent=d.zh||'';zh.style.display=State.captionMode==='bilingual'?'block':'none';if(State.captionMode==='hidden'){en.innerHTML='<button type="button" class="reveal-current-caption">显示这一句</button>';en.querySelector('button').onclick=()=>{en.innerHTML=tokenHTML(d.en,State.currentSentence,d.wordTimings);$$('#currentEn .word-token').forEach(el=>el.onclick=e=>openDict(el,e))}}else if(State.practiceMode==='cloze'){en.innerHTML=clozeSentenceHTML(d,State.currentSentence,true);bindClozeInputs($('#sentenceCard'))}else en.innerHTML=tokenHTML(d.en,State.currentSentence,d.wordTimings);$$('#currentEn .word-token').forEach(el=>el.onclick=e=>openDict(el,e));if(rerender)renderTranscript()}
-function setCaptionMode(mode){State.captionMode=['bilingual','english','hidden'].includes(mode)?mode:'bilingual';$$('[data-caption]').forEach(x=>{const active=x.dataset.caption===State.captionMode;x.classList.toggle('active',active);x.setAttribute('aria-pressed',String(active))});applyMode(true);logEvent('caption.mode',State.captionMode)}
+function setCaptionMode(mode){if($('#mobileCaptionMode'))$('#mobileCaptionMode').value=mode;State.captionMode=['bilingual','english','hidden'].includes(mode)?mode:'bilingual';$$('[data-caption]').forEach(x=>{const active=x.dataset.caption===State.captionMode;x.classList.toggle('active',active);x.setAttribute('aria-pressed',String(active))});applyMode(true);logEvent('caption.mode',State.captionMode)}
 function setPracticeMode(mode){const requested=mode==='shadowing'?'loop':mode,nextMode=['watch','intensive','loop','cloze'].includes(requested)?requested:'watch';if(!DATA.sentences.length&&nextMode!=='watch'){toast('该视频暂无学习字幕');return}PlaybackCountdown?.cancel('practice-mode');if(nextMode!=='watch'){if($('#lessonComplete'))$('#lessonComplete').hidden=true}if(State.practiceMode==='loop'&&nextMode!=='loop')SentenceLoop?.disable();State.practiceMode=nextMode;if(['intensive','loop'].includes(State.practiceMode)){const time=Number($('#video')?.currentTime)||0;State.practiceSelectedIndex=sentenceForTime(time,{preferNextBeforeFirst:true});State.practiceBoundaryReached=false}else{State.practiceSelectedIndex=-1;State.practiceBoundaryReached=false}if(State.practiceMode==='loop'&&!SentenceLoop?.enable(State.practiceSelectedIndex)){SentenceLoop?.disable();State.practiceMode='watch';State.practiceSelectedIndex=-1;State.practiceBoundaryReached=false;toast('当前字幕时间无效，无法循环')}State.mode=State.practiceMode==='cloze'?'cloze':State.practiceMode==='loop'?'loop':State.captionMode;$$('[data-practice]').forEach(x=>{const active=x.dataset.practice===State.practiceMode;x.classList.toggle('active',active);x.setAttribute('aria-pressed',String(active))});applyCurrent(false,false);applyMode(true);if(State.practiceMode==='loop')toast('循环跟读已开启：当前句会自动重播');if(State.practiceMode==='intensive')toast('逐句练习：句末自动停留，再点播放会重听本句');if(State.practiceMode==='cloze')toast('填写重点词，按 Enter 检查。');void window.EastudyData?.logStudyEvent('sentence_loop_toggled',{videoId:activeVideoId(),payload:{enabled:State.practiceMode==='loop',sentenceIndex:State.practiceSelectedIndex}});logEvent('study.practice',State.practiceMode)}
 function setMode(mode){if(mode==='english'||mode==='bilingual')setCaptionMode(mode);else setPracticeMode(mode==='spelling'?'cloze':mode)}
 function ensureLearningQueueForVideo(videoId){
@@ -529,14 +593,16 @@ function bindVideo(){
  const volume=$('#volumeRange'),volumeValue=$('#volumeValue');if(volume){volume.oninput=()=>{const requested=Math.max(0,Math.min(1,Number(volume.value)/100));try{v.muted=false;v.volume=requested;const actual=Math.round(v.volume*100);volumeValue.textContent=Math.abs(actual-Number(volume.value))>2?'音量由设备控制':`${actual}%`}catch(_){volumeValue.textContent='音量由设备控制'}volume.setAttribute('aria-valuetext',volumeValue.textContent)};v.addEventListener('volumechange',()=>{const actual=v.muted?0:Math.round(v.volume*100);volume.value=String(actual);volumeValue.textContent=`${actual}%`})}
  $$('[data-caption]').forEach(x=>x.onclick=()=>setCaptionMode(x.dataset.caption));$$('[data-practice]').forEach(x=>x.onclick=()=>setPracticeMode(x.dataset.practice));
 }
-function openDict(el,e){
+function openDict(el,e,savedSource=null){
   const w=el.dataset.word;if(!w)return;
   const video=$('#video');State.dictGeneration=State.mediaGeneration;State.resumeAfterDict=Boolean(video&&!video.paused);if(State.resumeAfterDict)video.pause();
   State.word=w;
-  const idx=+el.dataset.idx,d=wordInfo(w,DATA.sentences[idx]);
+  const idx=+el.dataset.idx,d=savedSource?{phon:savedSource.phon||'',meaning:savedSource.meaning||'暂无可用释义',explain:'',levels:[]}:wordInfo(w,DATA.sentences[idx]);
   const sentence=DATA.sentences[idx]||{};
   State.dictSource={phon:d.phon||'',meaning:d.meaning||'',context:sentence.en||'',sourceVideoId:activeVideoId(),sourceSentenceId:sentence.id||null,contentVersion:State.currentVideo?.contentVersion||null};
+  if(savedSource)State.dictSource={...savedSource,sourceVideoId:savedSource.sourceVideoId||null,sourceSentenceId:savedSource.sourceSentenceId||null};
   $('#dictWord').textContent=w;$('#dictPhon').textContent=d.phon;$('#dictMeaning').textContent=d.meaning;$('#dictExplain').textContent=d.explain;$('#dictContext').textContent=DATA.sentences[idx]?.en||'';
+  if(savedSource)$('#dictContext').textContent=savedSource.context||'';
   $('#dictBadges').innerHTML=(d.levels||[]).map(x=>`<span class="level-badge">${({cet4:'CET-4',cet6:'CET-6',ielts:'IELTS',phrase:'短语'})[x]||x}</span>`).join('');
   const saveButton=$('#saveWord');delete saveButton.__saveRequest;saveButton.disabled=false;const isSaved=isVocabSaved(w);$('#saveWord').classList.toggle('saved',isSaved);$('#saveWord').textContent=isSaved?'✓ 已加入生词本':'＋ 加入生词本';
   const box=$('#dict');if(!box)return;
@@ -611,7 +677,8 @@ function vocabMetaMap(){return Storage.get('vocabMeta',{})||{}}
 function ensureVocabMeta(word,seed={}){const key=vocabKey(typeof word==='string'?word:word.word),map=vocabMetaMap();if(!map[key]){const source=typeof word==='string'?{word}:word;map[key]={state:seed.state||source.state||'new',addedAt:seed.addedAt||Date.now(),lastReviewedAt:null,nextReviewAt:seed.nextReviewAt??(source.state==='review'?Date.now()-60000:source.state==='mastered'?Date.now()+14*VOCAB_DAY:null),correctStreak:source.state==='mastered'?2:0,sourceVideoId:seed.sourceVideoId||activeVideoId?.()||null};Storage.set('vocabMeta',map)}return map[key]}
 function saveVocabularyWord(word,active,patch={},details={}){
  const key=vocabKey(word);
- return window.EastudyPersonalLibrary.saveVocabulary({word,key,active,patch,details,getUserId:currentStudentStorageId,data:window.EastudyData,cache:Storage});
+ const owner=currentStudentStorageId();
+ return window.EastudyPersonalLibrary.saveVocabulary({word,key,active,patch,details,getUserId:currentStudentStorageId,data:window.EastudyData,cache:Storage}).then(result=>{if(!result?.error&&owner===currentStudentStorageId())refreshPlayerCounts();return result});
 }
 function updateVocabMeta(word,patch){return saveVocabularyWord(word,true,patch)}
 async function runLearningSave(button,action,onSuccess,isCurrent=()=>true){
@@ -749,7 +816,7 @@ if($('#openSettings'))$('#openSettings').onclick=()=>openPreferences();
 if($('#closeSettings'))$('#closeSettings').onclick=()=>$('#settingsBackdrop').classList.remove('show');
 if($('#settingsBackdrop'))$('#settingsBackdrop').onclick=e=>{if(e.target===$('#settingsBackdrop'))$('#settingsBackdrop').classList.remove('show')};
 $$('[data-theme-option]').forEach(x=>x.onclick=()=>{State.theme=x.dataset.themeOption;applyTheme();logEvent('theme.change',State.theme)});
-$$('.font-choice').forEach(x=>x.onclick=()=>{State.settings.font=+x.dataset.fontValue;applySettings();renderTranscript();if(State.route.startsWith('/video/'))applyCurrent(false)});
+$$('.font-choice').forEach(x=>x.onclick=()=>{State.settings.font=+x.dataset.fontValue;if(matchMedia('(max-width:850px)').matches)State.settings.mobileFont=State.settings.font;applySettings();renderTranscript();if(State.route.startsWith('/video/'))applyCurrent(false)});
 $$('.gap-choice').forEach(x=>x.onclick=()=>{State.settings.gap=+x.dataset.gapValue;applySettings();renderTranscript();if(State.route.startsWith('/video/'))applyCurrent(false)});
 $$('[data-pronunciation-dialect]').forEach(x=>x.onclick=()=>{State.settings.pronunciationDialect=x.dataset.pronunciationDialect==='en-US'?'en-US':'en-GB';applySettings();const label=State.settings.pronunciationDialect==='en-US'?'美音':'英音';const status=$('#pronunciationStatus');if(status)status.textContent=`点击扬声器播放${label}`;if(State.word)speechWord(State.word)});
 if($('#vocabHighlightToggle'))$('#vocabHighlightToggle').onclick=()=>{State.settings.highlight=State.settings.highlight===false;applySettings();renderTranscript();if(State.route.startsWith('/video/'))applyCurrent(false)};
@@ -772,7 +839,7 @@ $('#homeGoalStart')?.addEventListener('click',startGoalLearning);
 $('#homeGoalEdit')?.addEventListener('click',()=>showGoalOnboarding(true));
 $('#goalOnboardingSave')?.addEventListener('click',async()=>{const selected=$('[data-onboarding-goal].active')?.dataset.onboardingGoal||'general',dailyMinutes=Number($('#goalOnboardingMinutes')?.value)||20,selfLevel=$('#goalOnboardingLevel')?.value||'unsure',button=$('#goalOnboardingSave'),message=$('#goalOnboardingMessage');button.disabled=true;button.textContent='正在保存…';if(message){message.textContent='';message.dataset.kind=''}await persistLearningPlan({track:selected,dailyMinutes,selfLevel},{closeOnboarding:true});button.disabled=false;button.textContent='保存并进入首页';if(State.route!=='/home')route('/home')});
 if($('#exportBtn'))$('#exportBtn').onclick=exportVocabulary;
-document.addEventListener('keydown',e=>{if(e.target.matches('input,textarea'))return;if(State.route.startsWith('/video/')){if(e.code==='Space'){e.preventDefault();$('#playBtn')?.click()}if(e.key==='ArrowLeft')$('#prevBtn')?.click();if(e.key==='ArrowRight')$('#nextBtn')?.click();if(e.key.toLowerCase()==='s')$('#openSettings')?.click()}});
+document.addEventListener('keydown',e=>{if(e.target.closest('input,textarea,select,button,summary,[contenteditable="true"],dialog,[role="dialog"]'))return;if(State.route.startsWith('/video/')){if(e.code==='Space'){e.preventDefault();$('#playBtn')?.click()}if(e.key==='ArrowLeft')$('#prevBtn')?.click();if(e.key==='ArrowRight')$('#nextBtn')?.click();if(e.key.toLowerCase()==='s')$('#openSettings')?.click()}});
 
 /* completed UI interactions */
 hydrateIcons();
@@ -877,7 +944,7 @@ function hydrateManagedContent(){
   }catch(e){console.warn('Eastudy managed content hydration skipped',e)}
 }
 hydrateManagedContent();
-document.getElementById('video')?.addEventListener('loadedmetadata',event=>{const video=event.currentTarget,ratio=video.videoWidth>0&&video.videoHeight>0?`${video.videoWidth}/${video.videoHeight}`:'16/9';video.closest('.player')?.style.setProperty('--media-ratio',ratio)});
+document.getElementById('video')?.addEventListener('loadedmetadata',event=>{const video=event.currentTarget,ratio=video.videoWidth>0&&video.videoHeight>0?`${video.videoWidth}/${video.videoHeight}`:'16/9';video.closest('.player')?.style.setProperty('--media-ratio',ratio);updateMobilePlayerGeometry()});
 bindAccountUI();
 const initialRoute=parseHashRoute();State.route=initialRoute.path;State.query=initialRoute.query;
 applyTheme();applySettings();applyLanguage();bindCards();

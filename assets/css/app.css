@@ -502,24 +502,10 @@ html[data-theme="dark"] .transcript,.video-page{color:#E5E7EB}
   transform:none!important;
   transition:none!important;
 }
-.video-page .word-token.timing-active::after{
-  content:"";
-  position:absolute;
-  z-index:-1;
-   /* Keep punctuation outside the calm focus surface. The token span excludes
-      punctuation, so the marker hugs the glyphs without bleeding into the
-      following comma/period. */
-   inset:-2px 0 -2px -3px;
-  border:1px solid #D5DEE8;
-  border-radius:6px;
-  background:#EAF0F6;
-  pointer-events:none;
-}
 html[data-theme="light"] .video-page .current-en,
 html[data-theme="light"] .video-page .line.active .line-en{color:#1F2937}
 html[data-theme="dark"] .video-page .current-en,
 html[data-theme="dark"] .video-page .line.active .line-en{color:#E5E7EB}
-html[data-theme="dark"] .video-page .word-token.timing-active::after{background:rgba(148,163,184,.18);border-color:rgba(148,163,184,.24)}
 @media(prefers-reduced-motion:reduce){.video-page .word-token,.video-page .word-token::after{transition:none!important;animation:none!important}}
 
 
@@ -537,8 +523,6 @@ html[data-theme="dark"]{--bg:#111827;--bg2:#0F172A;--panel:#18212F;--panel2:#1E2
 .home-side-actions-inner{overflow:visible!important}
 .home-side-actions,.home-side-actions-inner,.home-user-shell{position:relative;z-index:300}
 .home-user-menu,.account-menu{z-index:500!important}
-.video-page .word-token.timing-active::after{background:#DCE8F2;border-color:#AFC3D5;box-shadow:none}
-html[data-theme="dark"] .video-page .word-token.timing-active::after{background:rgba(148,163,184,.18);border-color:rgba(148,163,184,.30)}
 /* Theme controls replace their data-icon child with a direct SVG at runtime. */
 .video-page .study-chip > svg,
 .study-chip > svg,
@@ -604,8 +588,6 @@ html[data-theme="dark"] .video-page .line.active{background:#1E293B;border-left-
 html[data-theme="dark"] .video-page .line-en{color:#E5E7EB}
 html[data-theme="dark"] .video-page .line-zh{color:#94A3B8}
 /* The timing marker only changes the surface; semantic word colours stay untouched. */
-.video-page .word-token.timing-active::after{inset:-2px -5px;border-radius:6px;background:#E3EDF5;border-color:#AFC3D5}
-html[data-theme="dark"] .video-page .word-token.timing-active::after{background:rgba(148,163,184,.18);border-color:rgba(148,163,184,.30)}
 @media(max-width:1100px) and (min-width:761px){.video-page .study-grid{grid-template-columns:minmax(0,1fr) minmax(330px,.82fr)}.video-page .study-left{padding:18px}.video-page .transcript{padding-left:26px;padding-right:18px}.video-page .player-controls{grid-template-columns:1fr auto}.video-page .study-modes{grid-column:1/-1;justify-content:center}}
 @media(max-width:760px){
   .video-page{height:auto!important;min-height:100vh;overflow:visible!important;padding-bottom:24px}
@@ -652,7 +634,6 @@ html[data-theme="dark"] .video-page .word-token.timing-active::after{background:
 @media(max-width:760px){.video-page .desktop-vocab-mode{display:block!important}.video-page .study-modes{grid-template-columns:repeat(5,minmax(0,1fr))}}
 
 /* Final word-marker alignment: no overlap with following punctuation. */
-.video-page .word-token.timing-active::after{inset:-2px 0 -2px -3px!important}
 /* Runtime theme toggles inject direct SVG nodes; keep them crisp and visible. */
 .video-page .study-chip > svg{width:16px!important;height:16px!important;display:block;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 
@@ -908,7 +889,6 @@ html[data-theme="dark"][data-track="outline"] .word-token.level-ielts{color:#C08
 }
 /* Phrase markers may wrap on narrow screens without escaping the viewport. */
 .video-page .word-token.phrase-token{white-space:normal;overflow-wrap:anywhere;max-width:100%}
-.video-page .word-token.phrase-token.timing-active::after{inset:-2px 0 -2px -3px!important;border-radius:6px}
 /* Use the app's common sans stack for low-effort subtitle reading. */
 .video-page .current-en,.video-page .line-en{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Arial,"PingFang SC","Microsoft YaHei",sans-serif!important}
 /* A simple E-mark keeps the new Eastudy name legible at a glance. */
@@ -1402,58 +1382,70 @@ html[data-auth-state="checking"] .signin-backdrop,html[data-auth-state="error"] 
  #mobileLoadMore{min-height:44px;width:100%;margin:16px 0;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--text)}
  #mobileLoadMore[hidden],#mobileResume[hidden]{display:none}
  #mobileNav{grid-template-columns:repeat(4,minmax(0,1fr))!important}
- #videoPage.active{position:fixed!important;inset:0;z-index:90;display:grid!important;grid-template-columns:minmax(0,1fr);grid-template-rows:44px minmax(90px,26dvh) 34px 44px 44px minmax(0,1fr) 54px 50px 32px;height:100vh!important;height:100dvh!important;min-height:0!important;max-height:100dvh;padding:0 10px env(safe-area-inset-bottom)!important;overflow:hidden!important;box-sizing:border-box;background:var(--bg)}
+ #videoPage.active{position:fixed!important;inset:0;z-index:90;display:grid!important;grid-template-columns:minmax(0,1fr);grid-template-rows:44px var(--mobile-video-height,180px) 44px minmax(0,1fr) auto;height:var(--player-viewport,100dvh)!important;min-height:0!important;max-height:none!important;padding:0 8px env(safe-area-inset-bottom)!important;overflow:hidden!important;box-sizing:border-box;background:var(--bg)}
  #videoPage .study-grid,#videoPage .study-left,#videoPage .player-controls{display:contents!important}
  #videoPage .study-top{grid-row:1;padding:0;min-width:0;gap:6px;height:44px}
  #videoPage .study-title{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
  #videoPage .study-back{min-width:38px}
- #videoPage #exportBtn,#videoPage .study-theme-toggle{display:none}
- #videoPage #openSettings{font-size:11px;padding:5px;white-space:nowrap}
- #videoPage .study-lang-toggle{display:flex!important;font-size:11px;padding:5px;flex-shrink:0}
- #videoPage .player{grid-row:2;position:relative!important;margin:0!important;height:100%!important;width:100%!important;max-height:none!important;aspect-ratio:auto!important}
- #videoPage .player video{max-height:100%!important;height:100%!important}
- #videoPage .timeline{grid-row:3;margin:0;padding:0 6px;height:34px;display:block!important}
+ #videoPage #exportBtn{display:none}
+ #videoPage .player{grid-row:2;grid-column:1;position:relative!important;inset:auto!important;margin:0!important;height:100%!important;width:100%!important;min-height:0!important;max-height:none!important;aspect-ratio:auto!important;overflow:hidden;align-self:stretch;order:0!important}
+ #videoPage .player video{min-height:0!important;max-height:100%!important;height:100%!important}
+ #videoPage .current-sentence,#videoPage .mobile-study-tabs,#videoPage .caption-modes{display:none!important}
+ #videoPage .mobile-learning-tools{grid-row:3;display:flex;align-items:center;gap:4px;min-width:0;overflow-x:auto}
+ #videoPage .mobile-learning-tools select{flex:none;max-width:95px;height:38px;border:0;border-radius:8px;padding:0 5px;background:var(--panel);color:var(--text);font-size:12px}
+ #videoPage .practice-modes{display:flex!important;align-items:center;justify-content:flex-start;margin:0;padding:0;border:0;gap:3px;overflow:visible;background:transparent;flex-wrap:nowrap}
+ #videoPage .practice-modes>span{display:none}
+ #videoPage .practice-mode{min-height:40px;padding:4px 7px;font-size:12px;white-space:nowrap;flex-shrink:0}
+ #videoPage .transcript-wrap{grid-row:4;grid-column:1;display:flex!important;flex-direction:column;height:100%!important;min-height:0!important;max-height:none!important;position:relative!important;overflow:hidden!important;margin:0!important;padding:0;border:0!important;border-radius:0}
+ #videoPage .transcript-head{position:absolute;right:4px;top:2px;z-index:2;min-height:0;height:auto;padding:0;border:0;background:transparent;flex:none}
+ #videoPage .transcript-head>div{display:none}
+ #videoPage #returnCurrentSentence{min-height:30px;padding:3px 8px;background:var(--panel)}
+ #videoPage .transcript{flex:1 1 0;min-height:0;height:auto!important;max-height:none!important;overflow-y:auto!important;overflow-x:hidden!important;padding:8px 4px 28px!important;overscroll-behavior-y:contain;scroll-padding:12px}
+ #videoPage .line{position:relative;padding:9px 8px!important;margin:0 0 6px!important;min-width:0}
+ #videoPage .line-time{display:none}
+ #videoPage .line-en{font-size:var(--mobile-font,17px)!important;line-height:1.5!important;letter-spacing:normal;word-spacing:normal;font-weight:500!important;overflow-wrap:anywhere}
+ #videoPage .line-zh{font-size:13px!important;line-height:1.45!important;margin-top:5px}
+ #videoPage .line-actions{display:none!important;margin:0!important}
+ #videoPage .line.active .line-actions{display:block!important}
+ #videoPage .line-actions>summary{width:38px;min-height:26px;text-align:center;list-style:none;color:var(--muted);cursor:pointer}
+ #videoPage .line-actions:not([open])>button{display:none!important}
+ #videoPage .mobile-learning-dock{grid-row:5;grid-column:1;display:flex;flex-direction:column;background:var(--panel);border-top:1px solid var(--line);min-width:0;z-index:3}
+ #videoPage .timeline{display:block!important;order:0!important;margin:0!important;padding:0 10px!important;height:40px;flex:none;width:100%;box-sizing:border-box}
  #videoPage .timeline .time{font-size:10px;line-height:10px;margin:0}
- #videoPage .caption-modes{grid-row:4}
- #videoPage .practice-modes{grid-row:5}
- #videoPage .caption-modes,#videoPage .practice-modes{display:flex!important;align-items:center;gap:5px;margin:0;padding:0;border:0;background:transparent;min-width:0;overflow-x:auto;flex-wrap:nowrap}
- #videoPage .caption-modes>span,#videoPage .practice-modes>span{display:none}
- #videoPage .caption-mode,#videoPage .practice-mode{min-height:40px;font-size:12px;padding:5px 10px;flex-shrink:0}
- #videoPage .current-sentence,#videoPage .mobile-study-tabs{display:none!important}
- #videoPage .transcript-wrap{grid-row:6;display:flex!important;flex-direction:column;height:100%!important;min-height:0!important;max-height:none!important;position:relative!important;overflow:hidden!important;margin:0!important;padding:0;border:0;border-radius:0}
- #videoPage .transcript-head{min-height:30px;height:30px;padding:0 8px;flex:none}
- #videoPage .transcript-head b{font-size:12px}
- #videoPage #returnCurrentSentence{min-height:28px;padding:3px 8px}
- #videoPage .transcript{flex:1 1 0;min-height:0;height:auto!important;max-height:none!important;overflow-y:auto!important;overflow-x:hidden!important;padding:8px 4px 24px!important;overscroll-behavior-y:contain;scroll-padding:12px}
- #videoPage .line{padding:10px 8px;margin-bottom:8px;min-width:0}
- #videoPage .line-en{font-size:var(--font,20px)!important;line-height:1.65!important;letter-spacing:normal}
- #videoPage .line-zh{font-size:14px;line-height:1.5}
- #videoPage .line-actions{gap:8px;margin-top:8px}
- #videoPage .line:not(.active):not(:focus-within) .line-actions{display:none}
- #videoPage .center-ctl{grid-row:7;display:flex!important;justify-content:center;align-items:center;margin:0;padding:4px 0;background:var(--panel)}
- #videoPage .center-ctl button{min-height:44px;height:44px}
- #videoPage .video-queue-controls{grid-row:8;display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;padding:2px 0;background:var(--panel)}
- #videoPage .video-queue-controls button{min-height:44px;font-size:11px;padding:4px}
- #videoPage .video-queue-controls>label{position:absolute;bottom:calc(6px + env(safe-area-inset-bottom));right:12px;height:26px;font-size:11px}
- #videoPage .playback-options{grid-row:9;display:block;margin:0;font-size:11px;min-width:0}
- #videoPage .playback-options summary{height:28px;line-height:28px;cursor:pointer;padding-right:86px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
- #videoPage .playback-options[open]{position:absolute;bottom:32px;left:8px;right:8px;z-index:10;max-height:65dvh;overflow:auto;padding:12px;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 0 40px #0005}
+ #videoPage .center-ctl{display:flex!important;order:1;justify-content:space-evenly;align-items:center;margin:0;padding:2px 0;height:48px}
+ #videoPage .center-ctl button{min-height:44px;height:44px!important;width:auto!important;min-width:48px;white-space:nowrap}
+ #videoPage .center-ctl .jump{display:flex;align-items:center;justify-content:center;gap:4px;min-width:88px;padding:0 8px;border-radius:10px;font-size:12px!important}
+ #videoPage .center-ctl .main-play{width:44px}
+ #videoPage .learning-dock-links{display:grid;order:2;grid-template-columns:repeat(3,minmax(0,1fr));min-width:0}
+ #videoPage .learning-dock-links button{min-height:42px;border:0;background:transparent;color:var(--text);font-size:12px;white-space:nowrap;padding:4px;cursor:pointer}
+ #videoPage .playback-options{position:static;display:block;margin:0;flex:none;font-size:12px}
+ #videoPage .playback-options>summary{min-height:40px;line-height:40px;cursor:pointer;list-style:none;padding:0 8px}
+ #videoPage .playback-options-body{position:absolute;right:8px;top:44px;left:8px;z-index:100;max-height:70%;overflow:auto;padding:16px;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 40px #0005}
  #videoPage .playback-options .ctl-left{padding:12px 0;display:flex!important;flex-wrap:wrap;gap:12px}
  #videoPage .playback-options .volume-control{flex:1;min-width:180px}
- #videoPage .playback-options .sentence-insight{display:block!important;margin:0}
+ #videoPage .playback-options .sentence-insight{display:block!important;margin:12px 0}
+ #videoPage .playback-options .study-theme-toggle,#videoPage .playback-options .study-lang-toggle{display:inline-flex!important;margin:6px}
+ #videoPage .video-queue-controls{display:flex;flex-wrap:wrap;gap:8px}
  .dict.mobile-dict{max-width:calc(100vw - 16px)!important;max-height:75dvh!important;overflow-y:auto!important}
 }
 @media(max-width:850px) and (max-height:500px) and (orientation:landscape){
- #videoPage.active{grid-template-columns:minmax(0,42%) minmax(0,58%);grid-template-rows:40px 40px 40px minmax(0,1fr) 48px 48px;column-gap:8px}
- #videoPage .study-top{grid-column:1/-1;grid-row:1}
- #videoPage .player{grid-column:1;grid-row:2/5}
- #videoPage .timeline{grid-column:1;grid-row:5}
- #videoPage .caption-modes{grid-column:2;grid-row:2}
- #videoPage .practice-modes{grid-column:2;grid-row:3}
- #videoPage .transcript-wrap{grid-column:2;grid-row:4}
- #videoPage .center-ctl{grid-column:2;grid-row:5}
- #videoPage .video-queue-controls{grid-column:1;grid-row:6}
- #videoPage .video-queue-controls button{min-height:44px;height:44px}
- #videoPage .playback-options{grid-column:2;grid-row:6}
- #videoPage .video-queue-controls>label{right:12px;bottom:2px}
+ #videoPage.active{grid-template-columns:minmax(0,42%) minmax(0,58%);grid-template-rows:40px 44px minmax(0,1fr) auto;column-gap:8px}
+ #videoPage .study-top{grid-column:1/-1;grid-row:1;height:40px}
+ #videoPage .player{grid-column:1;grid-row:2/4}
+ #videoPage .mobile-learning-tools{grid-column:2;grid-row:2}
+ #videoPage .transcript-wrap{grid-column:2;grid-row:3}
+ #videoPage .mobile-learning-dock{grid-column:1/-1;grid-row:4;display:grid;grid-template-columns:1fr 1fr}
+ #videoPage .timeline{grid-column:1;grid-row:1}
+ #videoPage .center-ctl{grid-column:2;grid-row:1}
+ #videoPage .learning-dock-links{grid-column:1/-1;grid-row:2}
 }
+.video-page .word-token.timing-active{background:color-mix(in srgb,var(--accent) 16%,transparent)!important;border:0!important;box-shadow:none!important;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+.video-page .line-actions>summary{cursor:pointer}
+@media(min-width:851px){.video-page .line-actions>summary{display:none}.video-page .line-actions{display:flex}.video-page .line-actions:not([open])>button{display:inline-flex}}
+.mobile-learning-dock[hidden],.mobile-learning-tools[hidden]{display:none!important}
+#playerWordPanel{width:min(480px,calc(100vw - 32px));max-height:75dvh;box-sizing:border-box;overflow:auto;border:1px solid var(--line);border-radius:16px;padding:16px;background:var(--panel);color:var(--text)}
+#playerWordPanel::backdrop{background:#0006}
+#playerWordPanel header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+#playerWordPanel button{min-height:44px;border:1px solid var(--line);border-radius:8px;padding:8px 12px;background:var(--panel);color:var(--text);cursor:pointer}
+#playerWordList{display:grid;gap:8px;margin-top:12px}
+#playerWordList button{text-align:left;overflow-wrap:anywhere}
