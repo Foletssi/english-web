@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
-from ai_tools import LEARNING_PROMPT, LEARNING_REPAIR_PROMPT, LEARNING_REEXTRACT_PROMPT, ai_concurrency, asr_profile, call_json, endpoint, enrich, prepare_asr_model, repair_learning, retry_ai
+from ai_tools import LEARNING_PROMPT, LEARNING_REPAIR_PROMPT, LEARNING_REEXTRACT_PROMPT, TEACHING_PROMPT_VERSION, ai_concurrency, asr_profile, call_json, endpoint, enrich, prepare_asr_model, repair_learning, retry_ai
 from contracts import StudioError
 
 
@@ -32,6 +32,33 @@ def v5_payload(payload):
 
 
 class AiTools(unittest.TestCase):
+    def test_locked_empty_analysis_and_cache_keep_real_provenance(self):
+        rows = [{'id': 's1', 'english': 'We love you.', 'keyWords': [],
+                 'selectionLocked': True, 'textRevision': 7, 'startTime': 0, 'endTime': 2}]
+        payload = v5_payload({'sentences': [{'id': 's1', 'chinese': '我们爱你。',
+                    'keyWords': [], 'expressions': [], 'grammar': ''}]})
+        with tempfile.TemporaryDirectory() as folder, patch('ai_tools.call_json', return_value=(payload, {})) as call:
+            learned, _ = repair_learning(rows, cache_dir=Path(folder), mode='reextract')
+            self.assertTrue(call.call_args.args[2]['sentences'][0]['selectionLocked'])
+            self.assertEqual(learned[0]['keyWords'], [])
+            self.assertEqual(learned[0]['teachingAnalysis'], {'status': 'completed',
+                'promptVersion': TEACHING_PROMPT_VERSION, 'sourceTextRevision': 7})
+            rows[0]['textRevision'] = 8
+            cached, evidence = repair_learning(rows, cache_dir=Path(folder), mode='reextract')
+            self.assertEqual(call.call_count, 1)
+            self.assertTrue(evidence[0]['cacheReused'])
+            self.assertEqual(cached[0]['teachingAnalysis']['sourceTextRevision'], 8)
+
+    def test_locked_empty_selection_rejects_new_ai_words(self):
+        rows = [{'id': 's1', 'english': 'We love you.', 'keyWords': [],
+                 'selectionLocked': True, 'startTime': 0, 'endTime': 2}]
+        payload = v5_payload({'sentences': [{'id': 's1', 'chinese': '我们爱你。',
+            'keyWords': ['love'], 'expressions': [{'surface': 'love', 'coreMeaningZh': '爱',
+                'contextMeaningZh': '表达爱意'}], 'grammar': ''}]})
+        with patch('ai_tools.call_json', return_value=(payload, {})), patch('ai_tools.time.sleep'):
+            with self.assertRaisesRegex(StudioError, 'AI_REPAIR_KEYWORDS_CHANGED'):
+                repair_learning(rows, mode='reextract')
+
     def test_asr_defaults_to_cached_multilingual_small(self):
         profile = asr_profile()
         self.assertEqual(profile['model'], 'small')

@@ -196,7 +196,9 @@
       const current=records.find(job=>['RUNNING','QUEUED','WAITING'].includes(job.rawStatus))||records.find(job=>job.rawStatus!=='CANCELLED')||records[0]||null;
       return {videoId:String(group.videoId),video:group.video||null,recordCount:Number(group.recordCount)||records.length,current,records};
     }).filter(group=>group.current);
-    return { rows: groups.flatMap(group=>group.records), groups, total:Number(data.total)||0, page:Number(data.page)||1, pageSize:Number(data.pageSize)||50, error:null };
+    const keys=['active','failed','review','completed','cancelled','total'];
+    const summary=data.summary&&keys.every(key=>Number.isSafeInteger(data.summary[key])&&data.summary[key]>=0)&&keys.slice(0,5).reduce((n,key)=>n+data.summary[key],0)===data.summary.total?data.summary:null;
+    return { summary, rows: groups.flatMap(group=>group.records), groups, total:Number(data.total)||0, page:Number(data.page)||1, pageSize:Number(data.pageSize)||50, error:null };
   }
 
   async function listProcessingHistory(videoId, page = 1, pageSize = 25) {

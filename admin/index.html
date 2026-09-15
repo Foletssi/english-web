@@ -10,7 +10,7 @@
 <script>
 try{const raw=localStorage.getItem('zs:admin:theme');const t=raw?JSON.parse(raw):'dark';document.documentElement.dataset.theme=(t==='light'?'light':'dark');document.documentElement.dataset.adminAuth='signed-out'}catch(e){document.documentElement.dataset.adminAuth='signed-out'}
 </script>
-<link rel="stylesheet" href="assets/admin.css?v=beta6.39.0">
+<link rel="stylesheet" href="assets/admin.css?v=beta6.40.0">
 </head>
 <body>
 <div class="admin-shell">
@@ -18,20 +18,10 @@ try{const raw=localStorage.getItem('zs:admin:theme');const t=raw?JSON.parse(raw)
     <a class="studio-brand" href="#/dashboard"><img class="eastudy-logo eastudy-logo--studio" src="../assets/images/eastudy-logo.png" alt="Eastudy · Learn English, the Easy Way."><span class="studio-brand-badge">STUDIO</span></a>
     <div class="workspace-chip"><span class="workspace-avatar">ZS</span><span><b>Production</b><small>Content Workspace</small></span><span class="chev">⌄</span></div>
     <nav class="side-nav">
-      <span class="nav-label">概览</span>
-      <a href="#/dashboard" data-nav="/dashboard"><i data-icon="dashboard"></i><span>控制台</span></a>
-      <span class="nav-label">内容管理</span>
-      <a href="#/videos" data-nav="/videos"><i data-icon="video"></i><span>视频库</span><em id="navVideoCount">0</em></a>
-      <a href="#/collections" data-nav="/collections"><i data-icon="grid"></i><span>合集</span></a>
-      <a href="#/creators" data-nav="/creators"><i data-icon="users"></i><span>创作者</span></a>
-      <span class="nav-label">智能处理</span>
-      <a href="#/pipeline" data-nav="/pipeline"><i data-icon="spark"></i><span>解析队列</span><em id="navJobCount">0</em></a>
-      <a href="#/subtitles" data-nav="/subtitles"><i data-icon="subtitles"></i><span>字幕审核</span></a>
-      <span class="nav-label">学员与数据</span>
-      <a href="#/learners" data-nav="/learners"><i data-icon="users"></i><span>学员管理</span></a>
-      <a href="#/invites" data-nav="/invites"><i data-icon="book"></i><span>邀请码管理</span></a>
-      <a href="#/analytics" data-nav="/analytics"><i data-icon="chart"></i><span>内容审计</span></a>
-      <span class="nav-label">系统</span>
+      <a href="#/dashboard" data-nav="/dashboard"><i data-icon="dashboard"></i><span>工作台</span></a>
+      <a href="#/videos" data-nav="/videos"><i data-icon="video"></i><span>视频内容</span><em id="navVideoCount">0</em></a>
+      <a href="#/pipeline" data-nav="/pipeline"><i data-icon="spark"></i><span>处理中心</span><em id="navJobCount">—</em></a>
+      <a href="#/learners" data-nav="/learners"><i data-icon="users"></i><span>学员与会员</span></a>
       <a href="#/settings" data-nav="/settings"><i data-icon="settings"></i><span>系统设置</span></a>
     </nav>
     <div class="sidebar-foot">
@@ -45,8 +35,8 @@ try{const raw=localStorage.getItem('zs:admin:theme');const t=raw?JSON.parse(raw)
       <button class="mobile-menu" id="mobileMenu"><i data-icon="menu"></i></button>
       <div class="breadcrumbs" id="breadcrumbs"><span>控制台</span><b>/</b><strong>概览</strong></div>
       <div class="top-actions">
-        <button class="search-btn" id="globalSearch"><i data-icon="search"></i><span>搜索视频、任务或创作者</span><kbd>Ctrl K</kbd></button>
-        <button class="icon-button" title="系统通知"><i data-icon="bell"></i><span class="notice"></span></button>
+        <button class="search-btn" id="globalSearch"><i data-icon="search"></i><span>搜索视频</span><kbd>Ctrl K</kbd></button>
+
         <button class="primary compact" id="newVideoTop"><i data-icon="plus"></i>导入视频</button>
       </div>
     </header>
@@ -159,24 +149,26 @@ try{const raw=localStorage.getItem('zs:admin:theme');const t=raw?JSON.parse(raw)
 
 <div class="modal-backdrop" id="searchModal">
   <section class="modal search-modal">
-    <header><div><span class="eyebrow">QUICK FIND</span><h2>全局搜索</h2></div><button class="modal-close" data-close="searchModal">×</button></header>
-    <div class="search-input-wrap"><i data-icon="search"></i><input id="searchInput" placeholder="输入标题、创作者、任务状态…"></div>
+    <header><div><span class="eyebrow">QUICK FIND</span><h2>搜索视频</h2></div><button class="modal-close" data-close="searchModal">×</button></header>
+    <div class="search-input-wrap"><i data-icon="search"></i><input id="searchInput" placeholder="输入视频标题、创作者…"></div>
     <div id="searchResults" class="search-results"></div>
   </section>
 </div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="../shared/supabase-config.js?v=beta6.39.0"></script>
-<script src="../shared/supabase-client.js?v=beta6.39.0"></script>
-<script src="../shared/learning-contract.js?v=beta6.39.0"></script>
-<script src="../shared/content-store.js?v=beta6.39.0"></script>
-<script src="../shared/content-taxonomy.js?v=beta6.39.0"></script>
-<script src="../shared/catalog-selectors.js?v=beta6.39.0"></script>
-<script src="../shared/cloud-content.js?v=beta6.39.0"></script>
-<script src="../shared/studio-client.js?v=beta6.39.0"></script>
-<script src="../shared/relative-time.js?v=beta6.39.0"></script>
-<script src="assets/studio-v2.js?v=beta6.39.0"></script>
-<script src="assets/admin.js?v=beta6.39.0"></script>
+<script src="../shared/supabase-config.js?v=beta6.40.0"></script>
+<script src="../shared/supabase-client.js?v=beta6.40.0"></script>
+<script src="../shared/learning-contract.js?v=beta6.40.0"></script>
+<script src="../shared/content-audit.js?v=beta6.40.0"></script>
+<script src="../shared/content-store.js?v=beta6.40.0"></script>
+<script src="../shared/content-taxonomy.js?v=beta6.40.0"></script>
+<script src="../shared/catalog-selectors.js?v=beta6.40.0"></script>
+<script src="../shared/cloud-content.js?v=beta6.40.0"></script>
+<script src="../shared/studio-client.js?v=beta6.40.0"></script>
+<script src="../shared/relative-time.js?v=beta6.40.0"></script>
+<script src="assets/studio-v2.js?v=beta6.40.0"></script>
+<script src="assets/content-check.js?v=beta6.40.0"></script>
+<script src="assets/admin.js?v=beta6.40.0"></script>
 </body>
 </html>

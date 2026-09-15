@@ -21,7 +21,8 @@
   function sentenceIssues(sentence, options = {}) {
     const issues = [];
     const id = String(sentence?.id ?? '');
-    const add = (code, field, message) => issues.push({code, field, sentenceId: id, message});
+    let expressionKey = null;
+    const add = (code, field, message) => issues.push({code, field, sentenceId: id, expressionKey, message});
     if (!id) add('SENTENCE_ID_MISSING', 'id', '句子缺少稳定编号');
     if (!String(sentence?.english ?? '').trim()) add('ENGLISH_MISSING', 'english', '缺少英文字幕');
     if (!String(sentence?.chinese ?? '').trim()) add('TRANSLATION_MISSING', 'chinese', '缺少中文翻译');
@@ -34,6 +35,7 @@
     if (new Set(keys).size !== keys.length) add('KEYWORD_DUPLICATE', 'keyWords', '重点表达不能重复');
     const source = ` ${normalizeSurface(sentence?.english)} `;
     for (const key of keys) {
+      expressionKey = key || null;
       if (!source.includes(` ${key} `)) {
         add('KEYWORD_NOT_IN_SENTENCE', 'keyWords', `原句中找不到重点表达：${key}`);
         continue;
@@ -58,9 +60,11 @@
         add('EXPRESSION_REVIEW_REQUIRED', `expressions.${key}.reviewStatus`, `${key} 的释义尚未确认`);
     }
     for (const expression of expressions) {
+      expressionKey = normalizeSurface(expression?.surface) || null;
       if (!keys.includes(normalizeSurface(expression?.surface)))
         add('EXPRESSION_ORPHAN', 'expressions', `释义没有对应重点表达：${String(expression?.surface || '空值')}`);
     }
+    expressionKey = null;
     if (options.forPublish && sentence?.reviewStatus !== 'APPROVED')
       add('SENTENCE_REVIEW_REQUIRED', 'reviewStatus', '本句尚未确认');
     return issues;

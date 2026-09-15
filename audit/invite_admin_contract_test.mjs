@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
+import vm from 'node:vm';
 
 const migration=fs.readFileSync('supabase/migrations/20260911153000_invite_admin_management_v1.sql','utf8');
 const hotfix=fs.readFileSync('supabase/migrations/20260911154000_production_function_type_fixes.sql','utf8');
@@ -44,7 +45,10 @@ for(const token of [
 assert.ok(!admin.includes('列表只显示安全尾号'));
 assert.ok(!admin.includes('明文只显示这一次'));
 
-assert.ok(html.includes('href="#/invites"'));
+const navigationContext = {window:{}};
+vm.runInNewContext(fs.readFileSync('admin/assets/content-check.js','utf8'),navigationContext);
+assert.ok(html.includes('assets/content-check.js'));
+assert.ok(navigationContext.window.EastudyContentCheck.tabs('/learners').includes('href="#/invites"'));
 assert.ok(student.includes("raw.includes('ATTEMPT_MISMATCH')"));
 assert.ok(student.includes("$('#signinInviteCode')?.addEventListener('input'"));
 

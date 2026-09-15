@@ -1,0 +1,32 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+const context={window:{}};
+for(const path of ['shared/learning-contract.js','shared/content-audit.js'])vm.runInNewContext(fs.readFileSync(path,'utf8'),context);
+const audit=context.window.EastudyContentAudit;
+const expression=surface=>({surface,coreMeaningZh:'推迟',contextMeaningZh:'这里指推迟安排',reviewStatus:'APPROVED'});
+const sentence={id:'s1',english:'We put off and put away the task.',chinese:'我们推迟并搁置任务。',startTime:0,endTime:3,
+  keyWords:['put off'],expressions:[expression('put off')],grammar:'动词短语',reviewStatus:'APPROVED'};
+const snapshot={videos:[{id:1,title:'Video',titleZh:'视频',creatorId:1,status:'DRAFT'}],creators:[{id:1}],sentences:{1:[sentence]}};
+let result=audit.inspect(snapshot);
+assert.equal(result.issues.length,3);
+assert.equal(result.summary.wordCards,1,'three missing fields belong to one card');
+const two=structuredClone(snapshot);
+two.sentences[1][0].keyWords.push('put away');two.sentences[1][0].expressions.push(expression('put away'));
+result=audit.inspect(two);
+assert.equal(result.issues.length,6);assert.equal(result.summary.wordCards,2);
+assert.equal(audit.deduplicate([...result.issues,...result.issues]).length,6);
+const empty=structuredClone(snapshot), row=empty.sentences[1][0];
+Object.assign(row,{keyWords:[],expressions:[],grammar:'',textRevision:3});
+assert.equal(audit.inspect(empty).issues.length,2,'unanalysed empty content stays visible');
+row.teachingAnalysis={status:'completed',promptVersion:'actual-v6',sourceTextRevision:3};
+assert.equal(audit.inspect(empty).issues.length,0,'validated empty analysis is intentional');
+row.teachingAnalysis.sourceTextRevision=2;
+assert.equal(audit.inspect(empty).issues[0].code,'ANALYSIS_PENDING');
+row.teachingAnalysis.status='failed';assert.equal(audit.inspect(empty).issues[0].code,'ANALYSIS_FAILED');
+const large=structuredClone(snapshot);large.sentences[1]=Array.from({length:1100},(_,i)=>({...sentence,id:`s${i}`,startTime:i*3,endTime:i*3+3}));
+result=audit.inspect(large);assert.equal(result.issues.length,3300);assert.equal(result.summary.wordCards,1100);
+const summary=audit.processingSummary([{videoId:1,status:'RUNNING',updatedAt:'2026-01-01'},
+ {videoId:1,status:'CANCELLED',updatedAt:'2026-01-03'},{videoId:2,status:'ERROR'},{videoId:3,status:'REVIEW'}]);
+assert.equal(summary.active,1);assert.equal(summary.failed,1);assert.equal(summary.review,1);assert.equal(summary.total,3);
+console.log('Content audit: exact card counts, issue identity, empty-analysis provenance and 3300 diagnoses passed.');

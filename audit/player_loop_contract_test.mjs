@@ -164,7 +164,10 @@ for (const forbidden of ['MediaRecorder', 'getUserMedia', 'recordPlayback', 'id=
 assert.ok(html.includes('data-practice="loop"') && html.includes('循环跟读'));
 assert.ok(css.includes('.word-token.teaching-keyword') && css.includes('text-decoration-color:currentColor'));
 assert.ok(css.includes('.word-token.keyword-tone-1{color:') && css.includes('.word-token.keyword-tone-4{color:'));
-assert.ok(adminHtml.includes('href="#/learners"') && adminHtml.includes('学员管理'));
+const navWindow = {};
+vm.runInNewContext(fs.readFileSync('admin/assets/content-check.js', 'utf8'), {window:navWindow});
+assert.ok(adminHtml.includes('href="#/learners"') && adminHtml.includes('学员与会员'));
+assert.ok(navWindow.EastudyContentCheck.tabs('/learners').includes('学员管理'));
 assert.ok(adminJs.includes('function renderLearners(') && adminJs.includes('function renderLearnerDetail('));
 assert.ok(adminCss.includes('.learner-toolbar') && adminCss.includes('.learner-history'));
 assert.ok(supabaseClient.includes("api.rpc('admin_list_learners_v1'") && supabaseClient.includes("api.rpc('touch_my_activity_v1'"));
