@@ -38,6 +38,11 @@ Object.assign(snapshot.sentences[9001][3],{english:'Take a break then carry on.'
 snapshot.sentences[9002] = [{ id: '9002-1', order: 0, startTime: 1, endTime: 2, english: 'Next video.', chinese: '下一条视频。', reviewStatus: 'APPROVED' }];
 for(let n=0;n<13;n++)snapshot.videos.push({...snapshot.videos[0],id:9010+n,title:'Catalog item '+n,titleZh:'目录视频 '+n});
 snapshot.videos.push({...snapshot.videos[0]}); // Duplicate catalog ID must render once.
+for (const rows of Object.values(snapshot.sentences)) for (const row of rows) {
+  row.keyWords ||= [];
+  row.expressions = row.keyWords.map(surface => ({surface,lemma:surface,expressionType:surface.includes(' ')?'collocation':'word',
+    coreMeaningZh:'测试核心含义',contextMeaningZh:'当前句子的具体含义',selectionReasonZh:'词汇语境教学',needsReview:false,reviewStatus:'APPROVED',sourceTextRevision:1}));
+}
 const browser = await chromium.launch({ headless: true, executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
 const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
 await context.route('https://cdn.jsdelivr.net/**', route => {
@@ -112,7 +117,7 @@ await page.setViewportSize({ width: 375, height: 812 });
 await page.waitForTimeout(250);
 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, 'mobile player must not overflow globally');
 await page.screenshot({ path: 'tmp/local-player-loop-mobile.png', fullPage: true });
-await page.locator('[data-practice="watch"]').click();
+await page.locator('#mobilePracticeMode').selectOption('watch');
 await page.setViewportSize({width:320,height:640});
 await page.locator('#video').evaluate(video=>{video.currentTime=6.5;video.dispatchEvent(new Event('timeupdate'))});
 const phraseTokens=page.locator('#transcript [data-i="2"] [data-phrase]');
@@ -142,9 +147,9 @@ for (const viewport of [{width:320,height:640},{width:360,height:800},{width:390
     const boxes=await page.evaluate(()=>Object.fromEntries(['.player','.mobile-learning-tools','.transcript-wrap','.mobile-learning-dock','.timeline','.center-ctl','.learning-dock-links'].map(selector=>[selector,document.querySelector('#videoPage '+selector).getBoundingClientRect().toJSON()])));
     const dock=boxes['.mobile-learning-dock'];
     assert.ok(dock.bottom<=viewport.height+1 && dock.top>=boxes['.transcript-wrap'].bottom-1,'dock and transcript do not overlap '+JSON.stringify(boxes));
-    for(const selector of ['.timeline','.center-ctl','.learning-dock-links'])assert.ok(boxes[selector].top>=dock.top-1 && boxes[selector].bottom<=dock.bottom+1,'all controls contained in dock '+selector+JSON.stringify(boxes));
+    for(const selector of (viewport.height<=500?['.center-ctl','.learning-dock-links']:['.timeline','.center-ctl','.learning-dock-links']))assert.ok(boxes[selector].top>=dock.top-1 && boxes[selector].bottom<=dock.bottom+1,'all controls contained in dock '+selector+JSON.stringify(boxes));
     if(viewport.height>500)assert.ok(boxes['.player'].top<=45 && boxes['.player'].bottom<=boxes['.mobile-learning-tools'].top+1 && boxes['.mobile-learning-tools'].bottom<=boxes['.transcript-wrap'].top+1,'video/tools/captions in separate rows');
-  }else assert.ok(await page.locator('#transcript .copySentence').first().isVisible(),'desktop sentence actions preserved');
+  }else assert.ok(await page.locator('#openLessonMore').isVisible(),'desktop sentence menu preserved');
   const visible = await page.locator('#transcript [data-i="20"]').evaluate(line => {
     const box = document.querySelector('#transcript').getBoundingClientRect(), rect = line.getBoundingClientRect();
     return rect.top >= box.top-2 && (rect.bottom <= box.bottom+2 || (rect.height > box.height && rect.top < box.top+16));
@@ -170,10 +175,10 @@ await page.keyboard.press('Escape');
 await page.evaluate(() => { location.hash = '#/home'; });
 await page.locator('#mobileVideoList [data-video="9001"]').click();
 await page.locator('#videoPage.active').waitFor();
-await page.locator('[data-practice="loop"]').click();
+await page.locator('#mobilePracticeMode').selectOption('loop');
 await page.locator('#video').evaluate(video => video.dispatchEvent(new Event('ended')));
 assert.equal(await page.locator('#lessonComplete').isVisible(), false, 'sentence loop must not advance the video queue');
-await page.locator('[data-practice="watch"]').click();
+await page.locator('#mobilePracticeMode').selectOption('watch');
 await page.locator('#video').evaluate(video => video.dispatchEvent(new Event('ended')));
 assert.match(await page.locator('#nextLessonTitle').innerText(), /下一条视频测试/);
 assert.equal(await page.locator('#nextLessonReason').innerText(), '来自当前视频列表');
@@ -183,7 +188,7 @@ assert.match(page.url(), /#\/video\/9001$/);
 await page.locator('#video').evaluate(video => video.dispatchEvent(new Event('ended')));
 await page.waitForURL('**/#/video/9002', { timeout: 8000 });
 assert.match(await page.locator('#videoPage .study-title').innerText(), /下一条视频测试/);
-await page.locator('#openQueueDirectory').click();
+await page.locator('#openVideoSwitch').click();
 await page.locator('#previousVideo').click();
 await page.waitForURL('**/#/video/9001');
 await page.waitForFunction(() => document.querySelector('#videoPage .study-title')?.textContent.includes('本地单句循环测试'));
@@ -199,15 +204,15 @@ await page.locator('#openQueueDirectory').click();
 assert.equal(await page.locator('#closeQueueDirectory').evaluate(el=>el===document.activeElement),true);
 await page.keyboard.press('Escape');
 assert.equal(await page.locator('#queueDirectory').isVisible(),false);
-await page.locator('#openQueueDirectory').click();
+await page.locator('#openVideoSwitch').click();
 await page.locator('#autoplayNext').uncheck();
-await page.locator('#closeQueueDirectory').click();
+await page.locator('#videoSwitchPanel [data-close]').click();
 await page.locator('#video').evaluate(video=>video.dispatchEvent(new Event('ended')));
 await page.waitForTimeout(5200);
 assert.match(page.url(), /#\/video\/9001$/);
 await page.locator('#cancelNextLesson').click();
 await page.locator('#closeLessonComplete').click();
-await page.locator('[data-practice="cloze"]').click();
+await page.locator('#mobilePracticeMode').selectOption('cloze');
 await page.locator('#video').evaluate(video=>{video.currentTime=1.25;video.dispatchEvent(new Event('timeupdate'))});
 const cloze=page.locator('#transcript .cloze-input');
 await cloze.fill('taking');
@@ -215,15 +220,15 @@ await page.locator('#video').evaluate(video=>video.dispatchEvent(new Event('seek
 assert.equal(await cloze.inputValue(),'taking','same-sentence seek does not erase typed answer');
 let warned=false;
 page.once('dialog',async dialog=>{warned=true;await dialog.dismiss()});
-await page.locator('#openQueueDirectory').click();
+await page.locator('#openVideoSwitch').click();
 await page.locator('#nextVideo').click();
-await page.locator('#closeQueueDirectory').click();
+await page.locator('#videoSwitchPanel [data-close]').click();
 assert.equal(warned,true,'unfinished dictation warns before manual video navigation');
 assert.match(page.url(), /#\/video\/9001$/);
 assert.equal(await cloze.inputValue(),'taking','cancelled navigation preserves the answer');
 await page.locator('#video').evaluate(video=>video.dispatchEvent(new Event('ended')));
 assert.equal(await page.locator('#lessonComplete').isVisible(),false,'cloze mode never advances the queue');
-await page.locator('[data-practice="watch"]').click();
+await page.locator('#mobilePracticeMode').selectOption('watch');
 const controlBefore=await page.locator('.mobile-learning-dock').boundingBox();
 assert.ok(controlBefore && controlBefore.height > 0);
 await page.locator('#transcript').evaluate(el=>el.scrollTop=el.scrollHeight);
@@ -231,8 +236,23 @@ assert.deepEqual(await page.locator('.mobile-learning-dock').boundingBox(),contr
 await page.locator('#mobileCaptionMode').selectOption('hidden');
 await page.locator('#transcript .line-en').first().click();
 assert.match(await page.locator('#transcript .line-en').first().innerText(),/Taking a short break/,'hidden captions can be revealed on mobile');
+await page.locator('#mobileCaptionMode').selectOption('chinese');
+assert.equal(await page.locator('#transcript .line-en').first().isVisible(),false,'Chinese mode hides English');
+assert.equal(await page.locator('#transcript .line-zh').first().isVisible(),true,'Chinese mode keeps translation');
 await page.locator('#mobileCaptionMode').selectOption('bilingual');
-await page.locator('.playback-options > summary').click();
+for(const viewport of [{width:320,height:640},{width:390,height:844},{width:844,height:390}]){
+ await page.setViewportSize(viewport);
+ await page.locator('#openLessonMore').click();
+ const panel=await page.locator('#lessonMore').boundingBox();
+ assert.ok(panel.width>=Math.min(300,viewport.width-20) && panel.x>=0 && panel.x+panel.width<=viewport.width+1,'More panel uses usable width');
+ assert.ok(panel.y>=0 && panel.y+panel.height<=viewport.height+1,'More remains in viewport');
+ const sizes=await page.locator('.center-ctl button').evaluateAll(nodes=>nodes.filter(x=>x.getClientRects().length).map(x=>({text:x.textContent,width:x.getBoundingClientRect().width,height:x.getBoundingClientRect().height})));
+ assert.ok(sizes.every(x=>x.width>=44 && x.height>=44),'sentence controls keep touch targets '+JSON.stringify(sizes));
+ await page.keyboard.press('Escape');
+ assert.equal(await page.locator('#openLessonMore').evaluate(el=>el===document.activeElement),true,'More restores trigger focus');
+}
+await page.setViewportSize({width:390,height:844});
+await page.locator('#openLessonMore').click();
 await page.locator('#openSettings').click();
 await page.locator('.font-choice[data-font-value="24"]').click();
 assert.equal(await page.locator('#transcript .line-en').first().evaluate(el=>getComputedStyle(el).fontSize),'24px','mobile font setting changes actual caption size');
@@ -249,7 +269,7 @@ assert.equal(await page.locator('#mobileVideoList [data-video]').count(),1);
 await page.locator('#mobileVideoList [data-video="9002"]').focus();
 await page.keyboard.press('Enter');
 await page.waitForURL('**/#/video/9002');
-await page.waitForFunction(()=>document.querySelector('#openQueueDirectory')?.textContent==='1 / 1 · 目录');
+await page.waitForFunction(()=>document.querySelector('#queueDirectoryPosition')?.textContent==='1 / 1');
 assert.equal(await page.locator('#nextVideo').isDisabled(),true,'filtered queue excludes unmatching videos');
 await page.locator('#videoPage .study-back').click();
 await page.waitForURL('**/#/home');

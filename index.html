@@ -23,7 +23,7 @@
   }catch(e){document.documentElement.dataset.theme='dark'}
 })();
 </script>
-<link rel="stylesheet" href="assets/css/app.css?v=beta6.40.0">
+<link rel="stylesheet" href="assets/css/app.css?v=beta6.41.0">
 </head>
 <body class="production-build">
 <div class="shell">
@@ -245,7 +245,7 @@
 <main id="videoPage" class="page video-page" data-mobile-pane="learn">
   <div class="study-top"><button class="study-back" data-route="/videos">‹</button><div class="study-title" data-no-ui-translate>视频正在加载中</div><div class="spacer"></div><button class="study-chip" id="exportBtn">导出生词</button><button class="study-chip study-theme-toggle" id="studyThemeBtn" title="切换主题"><i data-icon="sun"></i></button><button class="study-chip lang-toggle study-lang-toggle" id="studyLangBtn" data-no-ui-translate data-lang="zh" title="切换界面语言"><span class="lang-option zh">中文</span><span class="lang-separator" aria-hidden="true">/</span><span class="lang-option en">EN</span></button><button class="study-chip" id="openSettings">偏好设置</button></div>
   <div class="study-grid"><section class="study-left"><div class="player"><video id="video" preload="metadata" playsinline webkit-playsinline></video><div class="player-overlay"></div><div class="media-state" id="mediaState" role="status"><b id="mediaStateTitle">视频正在加载中…</b><span id="mediaStateCopy">正在读取封面、播放地址和学习字幕。</span><button type="button" id="mediaRetry" hidden>重试加载</button></div></div>
-      <div class="mobile-study-tabs"><button class="active" data-mobile-study="learn"><i data-icon="spark"></i><span>当前句</span></button><button data-mobile-study="transcript"><i data-icon="list"></i><span>全部字幕</span></button></div><div class="current-sentence" id="sentenceCard"><div><div class="current-en" id="currentEn"></div><div class="current-zh" id="currentZh"></div></div></div><div class="timeline"><div id="seek" class="seek" role="slider" tabindex="0" aria-label="视频播放进度" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="0:00 / --:--" aria-disabled="true"><i class="seek-fill"></i><b class="seek-thumb" aria-hidden="true"></b></div><div class="time"><span id="curTime">0:00</span><span id="duration">--:--</span></div><output id="seekPreview" class="seek-preview" hidden></output></div><div class="player-controls"><div class="ctl-left"><label class="speed-control" aria-label="播放速度"><select id="speedSelect"><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label><label class="volume-control"><span>音量</span><input id="volumeRange" type="range" min="0" max="100" step="1" value="100" aria-label="视频音量"><output id="volumeValue" for="volumeRange">100%</output></label></div><div class="center-ctl"><button class="jump" id="prevBtn" aria-label="上一句"><i data-icon="chevron-left"></i><span>上一句</span></button><button class="main-play" id="playBtn" aria-label="播放">▶</button><button class="jump" id="nextBtn" aria-label="下一句"><span>下一句</span><i data-icon="chevron-right"></i></button></div><div class="caption-modes" role="group" aria-label="字幕设置"><span>字幕设置</span><button class="caption-mode active" data-caption="bilingual" aria-pressed="true">双语</button><button class="caption-mode" data-caption="english" aria-pressed="false">英文</button><button class="caption-mode" data-caption="hidden" aria-pressed="false">隐藏</button></div></div><div class="practice-modes" aria-label="播放方式"><span>播放方式</span><button class="practice-mode active" data-practice="watch" aria-pressed="true">连续播放</button><button class="practice-mode" data-practice="intensive" aria-pressed="false">逐句练习</button><button class="practice-mode" data-practice="loop" aria-pressed="false">↻ 循环跟读</button><button class="practice-mode" data-practice="cloze" aria-pressed="false">听写填空</button></div><section class="sentence-insight" id="sentenceInsight"><div class="insight-head"><div><b>当前句解析</b><span>理解之后再模仿，会记得更牢</span></div><button id="insightCollapse" aria-label="展开或收起当前句解析"><i data-icon="chevron-down"></i></button></div><div class="insight-grid"><article><span class="insight-icon purple"><i data-icon="book"></i></span><div><b>重点表达</b><p id="insightVocab">随当前字幕加载</p></div></article><article><span class="insight-icon mint"><i data-icon="spark"></i></span><div><b>语法提示</b><p id="insightGrammar">随当前字幕加载</p></div></article><article class="insight-shadow"><span class="insight-icon amber" aria-hidden="true">↻</span><div><b>循环跟读</b><p>当前句结束后自动重播；手动选择上一句或下一句。</p></div><button class="mini-action" data-mode-trigger="loop">循环当前句</button></article></div></section></section><aside class="transcript-wrap"><div class="transcript-head"><div><b>全部字幕</b><span>点击句子跳转 · 点击词语查看释义</span></div><button type="button" id="returnCurrentSentence" hidden>回到当前句</button></div><div class="transcript" id="transcript" tabindex="0" aria-label="全部字幕"><div class="transcript-empty" role="status"><b>学习字幕正在加载中</b><span></span></div></div></aside></div>
+      <div class="mobile-study-tabs"><button class="active" data-mobile-study="learn"><i data-icon="spark"></i><span>当前句</span></button><button data-mobile-study="transcript"><i data-icon="list"></i><span>全部字幕</span></button></div><div class="current-sentence" id="sentenceCard"><div><div class="current-en" id="currentEn"></div><div class="current-zh" id="currentZh"></div></div></div><div class="timeline"><div id="seek" class="seek" role="slider" tabindex="0" aria-label="视频播放进度" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="0:00 / --:--" aria-disabled="true"><i class="seek-fill"></i><b class="seek-thumb" aria-hidden="true"></b></div><div class="time"><span id="curTime">0:00</span><span id="duration">--:--</span></div><output id="seekPreview" class="seek-preview" hidden></output></div><div class="player-controls"><div class="ctl-left"><label class="speed-control" aria-label="播放速度"><select id="speedSelect"><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label><label class="volume-control"><span>音量</span><input id="volumeRange" type="range" min="0" max="100" step="1" value="100" aria-label="视频音量"><output id="volumeValue" for="volumeRange">100%</output></label></div><div class="center-ctl"><button class="jump" id="prevBtn" aria-label="上一句"><i data-icon="chevron-left"></i><span>上一句</span></button><button class="main-play" id="playBtn" aria-label="播放">▶</button><button class="jump" id="nextBtn" aria-label="下一句"><span>下一句</span><i data-icon="chevron-right"></i></button></div><div class="caption-modes" role="group" aria-label="字幕设置"><span>字幕设置</span><button class="caption-mode active" data-caption="bilingual" aria-pressed="true">双语</button><button class="caption-mode" data-caption="english" aria-pressed="false">英文</button><button class="caption-mode" data-caption="chinese" aria-pressed="false">中文</button><button class="caption-mode" data-caption="hidden" aria-pressed="false">隐藏</button></div></div><div class="practice-modes" aria-label="播放方式"><span>播放方式</span><button class="practice-mode active" data-practice="watch" aria-pressed="true">连续播放</button><button class="practice-mode" data-practice="intensive" aria-pressed="false">逐句练习</button><button class="practice-mode" data-practice="loop" aria-pressed="false">↻ 循环跟读</button><button class="practice-mode" data-practice="cloze" aria-pressed="false">听写填空</button></div><section class="sentence-insight" id="sentenceInsight"><div class="insight-head"><div><b>当前句解析</b><span>理解之后再模仿，会记得更牢</span></div><button id="insightCollapse" aria-label="展开或收起当前句解析"><i data-icon="chevron-down"></i></button></div><div class="insight-grid"><article><span class="insight-icon purple"><i data-icon="book"></i></span><div><b>重点表达</b><p id="insightVocab">随当前字幕加载</p></div></article><article><span class="insight-icon mint"><i data-icon="spark"></i></span><div><b>语法提示</b><p id="insightGrammar">随当前字幕加载</p></div></article><article class="insight-shadow"><span class="insight-icon amber" aria-hidden="true">↻</span><div><b>循环跟读</b><p>当前句结束后自动重播；手动选择上一句或下一句。</p></div><button class="mini-action" data-mode-trigger="loop">循环当前句</button></article></div></section></section><aside class="transcript-wrap"><div class="transcript-head"><div><b>全部字幕</b><span>点击句子跳转 · 点击词语查看释义</span></div><button type="button" id="returnCurrentSentence" hidden>回到当前句</button></div><div class="transcript" id="transcript" tabindex="0" aria-label="全部字幕"><div class="transcript-empty" role="status"><b>学习字幕正在加载中</b><span></span></div></div></aside></div>
 </main>
 </div>
 
@@ -345,23 +345,24 @@
 
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="shared/supabase-config.js?v=beta6.40.0"></script>
-<script src="shared/supabase-client.js?v=beta6.40.0"></script>
-<script src="shared/access-guard.js?v=beta6.40.0"></script>
-<script src="shared/learning-contract.js?v=beta6.40.0"></script>
-<script src="shared/content-store.js?v=beta6.40.0"></script>
-<script src="shared/cloud-content.js?v=beta6.40.0"></script>
-<script src="shared/content-taxonomy.js?v=beta6.40.0"></script>
-<script src="shared/catalog-selectors.js?v=beta6.40.0"></script>
-<script src="shared/study-utils.js?v=beta6.40.0"></script>
-<script src="shared/personal-library.js?v=beta6.40.0"></script>
-<script src="shared/learning-queue.js?v=beta6.40.0"></script>
-<script src="shared/playback-controller.js?v=beta6.40.0"></script>
-<script src="shared/sentence-loop.js?v=beta6.40.0"></script>
+<script src="shared/supabase-config.js?v=beta6.41.0"></script>
+<script src="shared/supabase-client.js?v=beta6.41.0"></script>
+<script src="shared/access-guard.js?v=beta6.41.0"></script>
+<script src="shared/learning-contract.js?v=beta6.41.0"></script>
+<script src="shared/content-store.js?v=beta6.41.0"></script>
+<script src="shared/cloud-content.js?v=beta6.41.0"></script>
+<script src="shared/content-taxonomy.js?v=beta6.41.0"></script>
+<script src="shared/catalog-selectors.js?v=beta6.41.0"></script>
+<script src="shared/study-utils.js?v=beta6.41.0"></script>
+<script src="shared/personal-library.js?v=beta6.41.0"></script>
+<script src="shared/learning-queue.js?v=beta6.41.0"></script>
+<script src="shared/playback-controller.js?v=beta6.41.0"></script>
+<script src="shared/sentence-loop.js?v=beta6.41.0"></script>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.6.13/dist/hls.min.js"></script>
-<script src="shared/player-state.js?v=beta6.40.0"></script>
-<script src="shared/media-player.js?v=beta6.40.0"></script>
-<script src="assets/js/creator-avatars.js?v=beta6.40.0"></script>
-<script src="assets/js/app.js?v=beta6.40.0"></script>
+<script src="shared/player-state.js?v=beta6.41.0"></script>
+<script src="shared/media-player.js?v=beta6.41.0"></script>
+<script src="assets/js/creator-avatars.js?v=beta6.41.0"></script>
+<script src="shared/mobile-player.js?v=beta6.41.0"></script>
+<script src="assets/js/app.js?v=beta6.41.0"></script>
 </body>
 </html>

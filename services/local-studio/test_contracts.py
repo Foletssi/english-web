@@ -43,7 +43,7 @@ class Contracts(unittest.TestCase):
             validate_learning(SOURCE, missing_version)
 
     def test_hallucinated_phrase_is_error(self):
-        wrong = {'teachingSchemaVersion': 3, 'sentences': [{**GOOD['sentences'][0], 'keyWords': ['rocket science']}]}
+        wrong = {'teachingSchemaVersion': 3, 'sentences': [{**GOOD['sentences'][0], 'keyWords': ['rocket science'], 'expressions': [{**GOOD['sentences'][0]['expressions'][0], 'surface': 'rocket science'}]}]}
         with self.assertRaisesRegex(StudioError, 'AI_PHRASE_NOT_FOUND'):
             validate_learning(SOURCE, wrong)
 

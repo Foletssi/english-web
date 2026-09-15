@@ -163,7 +163,7 @@ for (const forbidden of ['MediaRecorder', 'getUserMedia', 'recordPlayback', 'id=
 }
 assert.ok(html.includes('data-practice="loop"') && html.includes('循环跟读'));
 assert.ok(css.includes('.word-token.teaching-keyword') && css.includes('text-decoration-color:currentColor'));
-assert.ok(css.includes('.word-token.keyword-tone-1{color:') && css.includes('.word-token.keyword-tone-4{color:'));
+assert.ok(css.includes(':is(.word-token,.teaching-expression).keyword-tone-1{color:') && css.includes(':is(.word-token,.teaching-expression).keyword-tone-4{color:'));
 const navWindow = {};
 vm.runInNewContext(fs.readFileSync('admin/assets/content-check.js', 'utf8'), {window:navWindow});
 assert.ok(adminHtml.includes('href="#/learners"') && adminHtml.includes('学员与会员'));

@@ -35,3 +35,20 @@ const taggedVideo = {mediaUrl:'/1.m3u8',pipelineStatus:'READY',tagAssignments:[{
 equal(learningContract.videoPublishIssues(taggedVideo,[validSentence]), [], 'video publication accepts approved controlled tags with evidence');
 equal(learningContract.videoPublishIssues({...taggedVideo,tagAssignments:[]},[validSentence]).map(x=>x.code), ['PUBLISHED_TAGS_MISSING'], 'publication blocks missing approved tags');
 console.log('Learning content contract: 13/13 checks passed.');
+
+equal(learningContract.approvedTeachingExpressions({...validSentence, textRevision: 2}), [], 'unstamped old expression must not follow revised English');
+equal(learningContract.approvedTeachingExpressions({...validSentence, keyWords: []}), [], 'empty selection stays empty');
+equal(learningContract.approvedTeachingExpressions({...validSentence, expressions: [{...validSentence.expressions[0], needsReview: true}]}), [], 'uncertain expression never highlights');
+equal(learningContract.meaningful({meaning:'fake'},300), false, 'objects cannot masquerade as meanings');
+const overlap = {...validSentence, keyWords: ["Don't stop", 'stop'], expressions: [...validSentence.expressions, {...validSentence.expressions[0], surface:'stop'}]};
+if(!learningContract.sentenceIssues(overlap).some(x=>x.code==='EXPRESSION_OVERLAP')) throw new Error('overlap accepted');
+console.log('Teaching selector and malformed-content regressions passed.');
+
+const legacyExpression = {...validSentence.expressions[0]};
+delete legacyExpression.needsReview;
+const legacySentence = {...validSentence, expressions:[legacyExpression]};
+equal(learningContract.approvedTeachingExpressions(legacySentence).length, 1, 'legacy approved content remains visible before text changes');
+equal(learningContract.approvedTeachingExpressions({...legacySentence, teachingAnalysis:{promptVersion:'adult-vlog-v7-20260915'}}), [], 'new teaching content cannot use legacy compatibility');
+equal(learningContract.approvedTeachingExpressions({...legacySentence, textRevision:2}), [], 'legacy content cannot follow revised source');
+equal(learningContract.approvedTeachingExpressions({...legacySentence, expressions:[{...legacyExpression, reviewStatus:'REVIEW'}]}), [], 'legacy compatibility never approves an unreviewed expression');
+console.log('Legacy published teaching compatibility: 4/4 passed.');

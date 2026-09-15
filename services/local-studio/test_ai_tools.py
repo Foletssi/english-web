@@ -56,7 +56,7 @@ class AiTools(unittest.TestCase):
             'keyWords': ['love'], 'expressions': [{'surface': 'love', 'coreMeaningZh': '爱',
                 'contextMeaningZh': '表达爱意'}], 'grammar': ''}]})
         with patch('ai_tools.call_json', return_value=(payload, {})), patch('ai_tools.time.sleep'):
-            with self.assertRaisesRegex(StudioError, 'AI_REPAIR_KEYWORDS_CHANGED'):
+            with self.assertRaisesRegex(StudioError, 'AI_LOCKED_SELECTION_CHANGED'):
                 repair_learning(rows, mode='reextract')
 
     def test_asr_defaults_to_cached_multilingual_small(self):

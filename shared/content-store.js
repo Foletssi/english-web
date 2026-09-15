@@ -30,7 +30,7 @@
       ...deep(item),surface:String(item?.surface||'').trim(),coreMeaningZh:String(item?.coreMeaningZh||'').trim(),
       contextMeaningZh:String(item?.contextMeaningZh||'').trim(),usageNoteZh:String(item?.usageNoteZh||'').trim(),
       reviewStatus:item?.reviewStatus||'REVIEW',source:item?.source||'ai',
-      sourceTextRevision:Math.max(1,Number(item?.sourceTextRevision)||row.textRevision)
+      sourceTextRevision:Math.max(1,Number(item?.sourceTextRevision)||1)
     })).filter(item=>item.surface):[];
     const suppliedTimings=Array.isArray(row.wordTimings)&&row.wordTimings.some(x=>Number.isFinite(Number(x?.start))&&Number.isFinite(Number(x?.end))&&Number(x.end)>Number(x.start));
     row.wordTimings=normalizeWordTimings(row.wordTimings,row.english,row.startTime,row.endTime);
@@ -85,7 +85,7 @@
       const seedRows=new Map((seed.sentences[videoId]||[]).map(row=>[String(row.id),row]));
       parsed.sentences[videoId]=(rows||[]).map(row=>{
         const base=seedRows.get(String(row.id))||{};
-        return normalizeSentence({...row,keyWords:Array.isArray(row.keyWords)&&row.keyWords.length?row.keyWords:(base.keyWords||[]),expressions:Array.isArray(row.expressions)?row.expressions:(base.expressions||[]),grammar:row.grammar||row.grammarNote||base.grammar||''},videoId,row.order||0);
+        return normalizeSentence({...row,keyWords:Array.isArray(row.keyWords)?row.keyWords:[],expressions:Array.isArray(row.expressions)?row.expressions:(base.expressions||[]),grammar:row.grammar||row.grammarNote||base.grammar||''},videoId,row.order||0);
       });
     }
     parsed.jobs=(parsed.jobs||[]).map(job=>{

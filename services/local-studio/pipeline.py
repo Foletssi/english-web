@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from ai_tools import asr_profile, enrich, transcribe
+from ai_tools import asr_profile, enrich, transcribe, semantic_segments
 from checkpoint import canonical_hash, file_sha256, read_valid_json, save_json_checkpoint
 from contracts import StudioError, validate_transcript
 from media_tools import extract_audio, make_cover, probe, transcode
@@ -48,7 +48,7 @@ def process_job(store, job_id, source_path, cover_path, ai_config, media_root,
         audio = extract_audio(source_path, output / 'audio.wav')
         profile = asr_profile()
         transcript_key = canonical_hash({'source': source_identity, 'audio': 'pcm16k-mono-v1',
-            'profile': profile, 'beamSize': 5, 'vad': True, 'wordTimestamps': True})
+            'profile': profile, 'beamSize': 5, 'vad': True, 'wordTimestamps': True, 'rawWordsVersion': 1})
         rows = read_valid_json(checkpoints / 'transcript.json', transcript_key,
                                lambda value: validate_transcript(value, info['duration']))
         if rows is None:
@@ -56,6 +56,7 @@ def process_job(store, job_id, source_path, cover_path, ai_config, media_root,
             save_json_checkpoint(checkpoints / 'transcript.json', transcript_key, rows)
         else:
             progress('asr', 70, f'已复用 {len(rows)} 句英文字幕')
+        rows = semantic_segments(rows, job_id, info['duration'], ai_config, progress, checkpoints / 'segmentation')
         word_count = sum(len(str(row['english']).split()) for row in rows)
         learning, metadata, provenance = enrich(rows, {
             'title': job['metadata'].get('title') or Path(job['sourceName']).stem,

@@ -1,6 +1,7 @@
 import json
 import math
 import re
+import unicodedata
 
 
 class StudioError(Exception):
@@ -19,7 +20,8 @@ def normalize_words(value):
     # Keep this identical to the browser and Supabase learning contract.
     # Numbers are context (for example, "11 a.m."), not part of a reusable
     # teaching expression, so both the source and selected phrase omit them.
-    return re.sub(r"\s+", " ", re.sub(r"[^a-z' -]", " ", str(value).lower())).strip()
+    text = unicodedata.normalize('NFKC', str(value)).translate(str.maketrans({'’': "'", '‘': "'", '‐': '-', '‑': '-', '–': '-', '—': '-'}))
+    return re.sub(r"\s+", " ", re.sub(r"[^a-z' -]", " ", text.lower())).strip()
 
 
 def validate_transcript(rows, duration):
@@ -52,15 +54,16 @@ def validate_learning(source, payload, minimum_schema_version=3):
     if {row.get('id') for row in output if isinstance(row, dict)} != expected:
         raise StudioError('AI_SENTENCE_IDS', 'AI 返回了错误的字幕编号。', True)
     by_id = {row['id']: row for row in output}
-    try:
-        schema_version = int(payload.get('teachingSchemaVersion', 0))
-    except (TypeError, ValueError):
+    schema_version = payload.get('teachingSchemaVersion', 0)
+    if type(schema_version) is not int:
         raise StudioError('AI_TEACHING_SCHEMA', 'AI 教学内容版本无效。', True)
     if schema_version < minimum_schema_version:
         raise StudioError('AI_TEACHING_SCHEMA', 'AI 教学内容版本过旧或缺失。', True)
     merged = []
     for original in source:
         row = by_id[original['id']]
+        if any(not isinstance(row.get(field, ''), str) for field in ('chinese', 'grammar')):
+            raise StudioError('AI_SENTENCE_SCHEMA', 'AI 翻译和语法必须是文本。', True)
         chinese = str(row.get('chinese', '')).strip()
         grammar = str(row.get('grammar', '')).strip()
         key_words = row.get('keyWords', [])
@@ -69,15 +72,29 @@ def validate_learning(source, payload, minimum_schema_version=3):
             raise StudioError('AI_SENTENCE_SCHEMA', 'AI 字幕翻译或重点表达格式错误。', True)
         if not isinstance(expressions, list) or len(expressions) != len(key_words):
             raise StudioError('AI_EXPRESSION_COUNT', 'AI 重点表达与释义数量不一致。', True)
+        if any(not isinstance(x, dict) for x in expressions) or key_words != [x.get('surface') for x in expressions]:
+            raise StudioError('AI_EXPRESSION_ORDER', 'AI 释义必须与选词逐项同序对应。', True)
+        if original.get('selectionLocked') and key_words != original.get('keyWords', []):
+            raise StudioError('AI_LOCKED_SELECTION_CHANGED', 'AI 改变了人工锁定选词。', True)
         english = ' ' + normalize_words(original['english']) + ' '
+        selected_ranges = []
         for phrase in key_words:
+            if not isinstance(phrase, str):
+                raise StudioError('AI_PHRASE_TYPE', 'AI 重点表达必须是文本。', True)
             normalized = normalize_words(phrase)
             if not normalized or (' ' + normalized + ' ') not in english:
                 raise StudioError('AI_PHRASE_NOT_FOUND', 'AI 重点表达不在英文原句中。', True)
+            start = english.find(' ' + normalized + ' ') + 1
+            end = start + len(normalized)
+            if any(start < b and end > a for a, b in selected_ranges):
+                raise StudioError('AI_EXPRESSION_OVERLAP', 'AI 重点表达互相重叠，请重新选择完整表达。', True)
+            selected_ranges.append((start, end))
         by_surface = {}
         for expression in expressions:
             if not isinstance(expression, dict):
                 raise StudioError('AI_EXPRESSION_SCHEMA', 'AI 重点表达释义格式错误。', True)
+            if any(not isinstance(expression.get(field, ''), str) for field in ('surface', 'lemma', 'expressionType', 'coreMeaningZh', 'contextMeaningZh', 'usageNoteZh', 'selectionReasonZh')):
+                raise StudioError('AI_EXPRESSION_SCHEMA', 'AI 词卡字段必须是文本。', True)
             surface = normalize_words(expression.get('surface', ''))
             if surface in by_surface or surface not in {normalize_words(x) for x in key_words}:
                 raise StudioError('AI_EXPRESSION_SURFACE', 'AI 重点表达释义与重点词不一致。', True)
@@ -90,13 +107,14 @@ def validate_learning(source, payload, minimum_schema_version=3):
                 reason = str(expression.get('selectionReasonZh', '')).strip()
                 if expression_type not in {'word', 'phrasal_verb', 'collocation', 'idiom', 'pattern'}:
                     raise StudioError('AI_EXPRESSION_TYPE', 'AI 重点表达类型无效。', True)
-                if not lemma or not reason or not isinstance(expression.get('needsReview'), bool):
+                if not lemma or len(lemma) > 160 or not reason or len(reason) > 300 or not isinstance(expression.get('needsReview'), bool):
                     raise StudioError('AI_TEACHING_FIELDS', 'AI 重点表达缺少教学判断字段。', True)
-            if not core or not context or len(core) > 300 or len(context) > 500 or len(usage) > 500:
+            if re.search('释义待生成|尚未生成|等待生成|待补充', core + context) or not core or not context or len(core) > 300 or len(context) > 500 or len(usage) > 500:
                 raise StudioError('AI_EXPRESSION_MEANING', 'AI 重点表达释义为空或过长。', True)
             by_surface[surface] = {**expression, 'surface': str(expression['surface']).strip(),
                                    'coreMeaningZh': core, 'contextMeaningZh': context,
-                                   'usageNoteZh': usage, 'reviewStatus': 'REVIEW', 'source': 'ai'}
+                                   'usageNoteZh': usage, 'reviewStatus': 'REVIEW', 'source': 'ai',
+                                   'sourceTextRevision': max(1, int(original.get('textRevision') or 1))}
         merged.append({**original, 'chinese': chinese, 'grammar': grammar,
                        'keyWords': key_words,
                        'expressions': [by_surface[normalize_words(x)] for x in key_words],

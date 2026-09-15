@@ -14,7 +14,7 @@
   }
 
   function meaningful(value, max) {
-    const text = String(value ?? '').trim();
+    const text = typeof value === 'string' ? value.trim() : '';
     return Boolean(text && text.length <= max && !PLACEHOLDER.test(text));
   }
 
@@ -30,7 +30,12 @@
     const expressions = Array.isArray(sentence?.expressions) ? sentence.expressions : [];
     if (!Array.isArray(sentence?.keyWords)) add('KEYWORDS_INVALID', 'keyWords', '重点表达必须是数组');
     if (!Array.isArray(sentence?.expressions)) add('EXPRESSIONS_INVALID', 'expressions', '释义必须是数组');
+    if (keywords.length > 5) add('KEYWORDS_LIMIT', 'keyWords', '每句重点表达最多五项');
+    if (keywords.some(key => typeof key !== 'string')) add('KEYWORDS_INVALID', 'keyWords', '重点表达必须是文本');
     const keys = keywords.map(normalizeSurface);
+    if (keys.length !== expressions.length || keys.some((key, i) => key !== normalizeSurface(expressions[i]?.surface)))
+      add('EXPRESSION_ORDER', 'expressions', '释义必须与重点表达逐项同序对应');
+    const ranges = [];
     if (keys.some(key => !key)) add('KEYWORD_EMPTY', 'keyWords', '重点表达不能为空');
     if (new Set(keys).size !== keys.length) add('KEYWORD_DUPLICATE', 'keyWords', '重点表达不能重复');
     const source = ` ${normalizeSurface(sentence?.english)} `;
@@ -40,6 +45,9 @@
         add('KEYWORD_NOT_IN_SENTENCE', 'keyWords', `原句中找不到重点表达：${key}`);
         continue;
       }
+      const start = source.indexOf(` ${key} `) + 1, end = start + key.length;
+      if (ranges.some(([a, b]) => start < b && end > a)) add('EXPRESSION_OVERLAP', 'keyWords', '重点表达不能互相重叠');
+      ranges.push([start, end]);
       const matches = expressions.filter(item => normalizeSurface(item?.surface) === key);
       if (matches.length !== 1) {
         add('EXPRESSION_MATCH', 'expressions', `缺少唯一对应释义：${key}`);
@@ -58,6 +66,10 @@
         add('EXPRESSION_TEACHING_FIELDS_MISSING', `expressions.${key}`, `${key} 缺少教学选择依据`);
       if (options.forPublish && expression.reviewStatus !== 'APPROVED' && expression.approved !== true)
         add('EXPRESSION_REVIEW_REQUIRED', `expressions.${key}.reviewStatus`, `${key} 的释义尚未确认`);
+      if (options.forPublish && expression.needsReview === true)
+        add('EXPRESSION_UNCERTAIN', `expressions.${key}.needsReview`, `${key} 的教学含义仍待核对`);
+      if (options.forPublish && (expression.sourceTextRevision == null ? Number(sentence.textRevision || 1) !== 1 : Number(expression.sourceTextRevision) !== Number(sentence.textRevision || 1)))
+        add('EXPRESSION_STALE', `expressions.${key}.sourceTextRevision`, `${key} 的释义与当前英文版本不一致`);
     }
     for (const expression of expressions) {
       expressionKey = normalizeSurface(expression?.surface) || null;
@@ -67,7 +79,40 @@
     expressionKey = null;
     if (options.forPublish && sentence?.reviewStatus !== 'APPROVED')
       add('SENTENCE_REVIEW_REQUIRED', 'reviewStatus', '本句尚未确认');
+    if (options.forPublish && sentence?.segmentationNeedsReview === true)
+      add('SEGMENTATION_REVIEW_REQUIRED', 'segmentationNeedsReview', '本句分句或词级对齐仍需核对');
     return issues;
+  }
+
+  function approvedTeachingExpressions(sentence) {
+    if (!sentence || !Array.isArray(sentence.keyWords)) return [];
+    const source = ` ${normalizeSurface(sentence.english)} `;
+    const revision = Number(sentence.textRevision || 1);
+    const seen = new Set();
+    return sentence.keyWords.flatMap(surface => {
+      const key = normalizeSurface(surface);
+      if (!key || seen.has(key) || !source.includes(` ${key} `)) return [];
+      seen.add(key);
+      const matches = (Array.isArray(sentence.expressions) ? sentence.expressions : []).filter(item => normalizeSurface(item?.surface) === key);
+      if (matches.length !== 1) return [];
+      const expression = matches[0];
+      // Legacy published expressions may lack a stamp only before any text revision.
+      const fresh = expression.sourceTextRevision == null ? revision === 1 : Number(expression.sourceTextRevision) === revision;
+      const legacyApproved = revision === 1 && !sentence.teachingAnalysis?.promptVersion && expression.needsReview == null;
+      if (!fresh || (expression.needsReview !== false && !legacyApproved) ||
+          (expression.reviewStatus !== 'APPROVED' && expression.approved !== true) ||
+          !meaningful(expression.coreMeaningZh, 300) || !meaningful(expression.contextMeaningZh, 500)) return [];
+      return [{...expression, surface: String(surface)}];
+    });
+  }
+
+  function teachingSelectionDiff(before, after) {
+    const oldKeys = new Set((Array.isArray(before?.keyWords) ? before.keyWords : []).map(normalizeSurface));
+    const newKeys = new Set((Array.isArray(after?.keyWords) ? after.keyWords : []).map(normalizeSurface));
+    return {added: [...newKeys].filter(key => !oldKeys.has(key)),
+      removed: [...oldKeys].filter(key => !newKeys.has(key)),
+      retained: [...newKeys].filter(key => oldKeys.has(key)),
+      review: (Array.isArray(after?.expressions) ? after.expressions : []).filter(item => item?.needsReview === true).map(item => item.surface)};
   }
 
   function tagIssues(video, sentences, options = {}) {
@@ -111,6 +156,6 @@
 
   global.EastudyLearningContract = Object.freeze({
     VERSION: 5, TEACHING_SCHEMA_VERSION: 3, ALLOWED_TAGS, normalizeSurface, meaningful, sentenceIssues,
-    tagIssues, videoPublishIssues, firstMessage
+    tagIssues, videoPublishIssues, firstMessage, approvedTeachingExpressions, teachingSelectionDiff
   });
 })(window);
