@@ -4,7 +4,7 @@
 
 ## 发布状态
 
-- 本地实现和最终全量回归已完成；正在提交并通过 Cloudflare Pages 的 Git 集成发布，生产证明待补充。
+- 本地实现、最终全量回归、main推送和Cloudflare生产发布已完成；应用提交：80de483b21a57086cfcc007154372a58d678070a。后续提交仅补充本记录和清单，不改变应用产物。
 - 本轮仅前端和测试/规格变更，不需要 Supabase 迁移；不改 VIP、邀请码、处理 Worker、540P 配置或任何 R2 媒体对象。
 - Chrome 连接器此前拒绝 Codex apikey 认证；按仓库授权备用通道使用 Git → Pages Git 集成 → HTTPS 校验，不使用桌面、CDP 或内置浏览器绕过。
 - Git 命令单独指定已有代理 127.0.0.1:18809，不修改全局配置、不强推。部署前 fetch 确认 main 与 origin/main 一致。
@@ -38,6 +38,8 @@
 - 定向 student_player_interaction_test：9/9；npm run test:m04 通过；node --check assets/js/app.js 与 git diff --check 通过。
 - 本地浏览器测试使用隔离的模拟API和媒体事件，不向生产写入测试记录。日志 tmp/release-6380-regression.log；截图 tmp/local-player-loop-mobile.png，不提交临时目录。
 - audit/AUDIT_REPORT 为现有静态审计生成器输出，其旧版标题是历史固定标签；本轮版本和结果以本记录及 package.json 为准。
+- 生产HTTPS验证：2026-09-15T02:22:13Z（北京时间10:22），学生端 https://english-web-lce.pages.dev/ 和管理端 https://english-web-lce.pages.dev/admin/ 均为beta6.38.0。两份HTML及所有关联本地JS/CSS共25项全部HTTP200，统一CRLF/LF后逐项完整文本比较一致。检查使用正式URL及页面中的实际版本参数，未用随机查询参数掩盖旧缓存。
+- 生产核验报告：tmp/production-6380-verification.json；核验脚本：tmp/verify-release-6380.mjs。仅为本地证据，不提交临时目录。该验证证明部署资源一致，不能替代生产登录后的真实媒体播放。
 
 ## 未实测与回滚
 
