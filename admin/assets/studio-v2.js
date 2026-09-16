@@ -79,7 +79,7 @@ function recoveryMessage(key){return state.recovery.get(String(key))||''}
 function reportRecovery(key,message){state.recovery.set(String(key),message);global.dispatchEvent(new CustomEvent('eastudy:studio-job-updated'))}
 async function refreshJobs(){
  if(state.refreshing)return;state.refreshing=true;reportRecovery('refresh','正在刷新任务状态…');
- try{if(!Store.localOnly&&bridge()?.refreshJobs)await bridge().refreshJobs();else await syncJobs();reportRecovery('refresh','状态已刷新；后台任务会继续处理，无需重复上传')}
+ try{if(!Store.localOnly&&bridge()?.refreshJobs)await bridge().refreshJobs();else await syncJobs();reportRecovery('refresh','已读取最新状态。刷新不会重启任务，请查看当前步骤与最近进展。')}
  catch{reportRecovery('refresh','暂时无法读取任务状态，请检查网络后再次刷新。已提交的后台任务不会因此取消。')}
  finally{state.refreshing=false}
 }

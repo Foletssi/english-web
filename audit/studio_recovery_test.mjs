@@ -23,6 +23,7 @@ assert.equal(studio.isRetrying('job-1'),false);
 await studio.refreshJobs();
 assert.equal(refreshes,1);
 assert.equal(retries,1,'refresh must never submit a retry');
+assert.match(studio.recoveryMessage('refresh'),/刷新不会重启任务/);
 const second=studio.retry('job-1',1);resolveRetry({});await second;
 assert.match(studio.recoveryMessage('job-1'),/已加入处理队列/);
 assert.equal(refreshes,2,'retry reconciles through the current paged query');
