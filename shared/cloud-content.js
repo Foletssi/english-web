@@ -218,13 +218,28 @@
     return apiRequest('/api/admin/video-deletions/status?id=' + encodeURIComponent(deletionId), { method: 'GET' });
   }
 
+  async function getVideoDeletionCapability() {
+    return apiRequest('/api/admin/video-deletions/capability', { method: 'GET' });
+  }
+
+  async function retryVideoDeletion(deletionId) {
+    return apiRequest('/api/admin/video-deletions/retry', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deletionId: String(deletionId) })
+    });
+  }
+
   async function processingHealth() {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
     try {
-      const response = await fetch('https://ehxqtgakjgqgmghhdmjg.supabase.co/functions/v1/video-processing', { cache: 'no-store' });
+      const response = await fetch('https://ehxqtgakjgqgmghhdmjg.supabase.co/functions/v1/video-processing', { cache: 'no-store', signal: controller.signal });
       const data = await response.json().catch(() => ({}));
       return { data, error: response.ok ? null : new Error(data.error || ('PROCESSING_HEALTH_' + response.status)) };
     } catch (error) {
       return { data: null, error };
+    } finally {
+      clearTimeout(timeout);
     }
   }
 
@@ -425,7 +440,7 @@
     return { key: payload.key, url: payload.url, size: Number(payload.size) || file.size, type: 'image/webp' };
   }
 
-  global.EastudyCloudContent = Object.freeze({ pullPublished, pullVideoTeaching, pullAdmin, saveDraft, publish, publishEntity, setCreatorStatus, setVideoPublication, createLearningRepair, listTrash, trashVideos, restoreVideo,planPermanentVideoDeletion,confirmPermanentVideoDeletion,getVideoDeletion,
+  global.EastudyCloudContent = Object.freeze({ pullPublished, pullVideoTeaching, pullAdmin, saveDraft, publish, publishEntity, setCreatorStatus, setVideoPublication, createLearningRepair, listTrash, trashVideos, restoreVideo,planPermanentVideoDeletion,confirmPermanentVideoDeletion,getVideoDeletion,getVideoDeletionCapability,retryVideoDeletion,
     processingHealth, createProcessingJob, listProcessingJobs, listProcessingHistory, getProcessingJob, retryProcessingJob,
     syncMediaSession, clearMediaSession, uploadVideo, uploadCreatorAvatar });
 })(window);

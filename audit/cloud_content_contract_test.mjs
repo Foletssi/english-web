@@ -83,7 +83,9 @@ assert.ok(jobTitleSql.includes("trash.payload->'draft'->'video'"), 'deleted job 
 assert.ok(requeueSql.includes("not like '%VIDEO_NOT_FOUND%'"), 'only the catalog-loss failure may be automatically requeued');
 assert.ok(requeueSql.includes('REPAIRED_VIDEO_NOT_ACTIVE') && requeueSql.includes('REPAIRED_VIDEO_IN_TRASH'), 'requeue must require an active restored catalog row');
 assert.ok(!requeueSql.toLowerCase().includes('delete from') && !requeueSql.includes('VIDEO_BUCKET'), 'requeue must retain media and task history');
-assert.ok(processingOutput.includes('resolve_processing_output'), 'R2 output writes must use a scoped database token');
+assert.ok(processingOutput.includes('begin_processing_output_write'), 'R2 output writes must reserve an authorized database-scoped object');
+const outputFenceSql = read('../supabase/migrations/20260917121000_processing_ownership_and_output_fence.sql');
+assert.ok(outputFenceSql.includes('public.resolve_processing_output_v2(p_job_id,p_run_id,p_token,p_path)'), 'reservation must preserve run-scoped token authorization');
 assert.ok(processingOutput.includes('MAX_ASSET_BYTES'), 'R2 output writes must be bounded');
 assert.ok(processingOutput.includes("crypto.subtle.digest('SHA-256'"), 'R2 output writes must hash actual bytes');
 assert.ok(processingMedia.includes("openPlaybackTicket(cookieValue(request,'eastudy_playback')"), 'processed media must require an opaque job-scoped playback ticket');

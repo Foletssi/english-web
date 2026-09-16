@@ -19,7 +19,7 @@ try {
  await context.addInitScript(()=>{
   const fixture={revision:10,failSave:true,failTrashRefresh:false,calls:[],publishedVideos:[{id:202,creatorId:'public-only'}],snapshot:{videos:[{id:202,creatorId:'draft-owner',status:'DRAFT'}],sentences:{},jobs:[],collections:[],creators:[{id:7,name:'Original',status:'ACTIVE'},{id:'next',name:'Replacement',status:'ACTIVE'},{id:'public-only',name:'Published owner',status:'ACTIVE'},{id:'draft-owner',name:'Draft owner',status:'ACTIVE'}]}};
   window.catalogFixture=fixture;
-  const auth={getContext:async()=>({user:{id:'admin-test'},profile:{role:'admin'}})};
+  const auth={getContext:async()=>({user:{id:'admin-test'},profile:{role:'admin'}}),signOut:()=>new Promise(resolve=>{fixture.finishLogout=resolve})};
   const cloud={syncMediaSession:async()=>({}),pullAdmin:async()=>({revision:fixture.revision,snapshot:fixture.snapshot}),
    saveDraft:async()=>({data:{revision:++fixture.revision}}),
    publishEntity:async(kind,entity,revision)=>{
@@ -40,7 +40,12 @@ try {
     fixture.snapshot.creators=fixture.snapshot.creators.map(row=>String(row.id)===String(id)?{...row,status}:row);
     return {data:{revision:++fixture.revision,snapshot:fixture.snapshot}};
    },
-   listTrash:async()=>fixture.failTrashRefresh?{error:new Error('REFRESH_FAILED')}:{rows:[{video_id:101,video:{id:101,creatorId:7},deleted_at:new Date().toISOString()}]},
+   listTrash:async()=>fixture.failTrashRefresh?{error:new Error('REFRESH_FAILED')}:{rows:[{video_id:101,video:{id:101,creatorId:7},deleted_at:new Date().toISOString(),deletion:fixture.deletion||null}]},
+   getVideoDeletionCapability:async()=>({ready:!!fixture.deletionReady,reasons:fixture.deletionReady?[]:['VIDEO_DELETION_DISABLED']}),
+   planPermanentVideoDeletion:async()=>{fixture.plans=(fixture.plans||0)+1;return {planId:'fixture-plan',expectedRevision:fixture.revision}},
+   confirmPermanentVideoDeletion:async()=>{fixture.confirms=(fixture.confirms||0)+1;throw Error('FIXTURE_UNAVAILABLE')},
+   retryVideoDeletion:async()=>{fixture.retries=(fixture.retries||0)+1;return fixture.deletion={...fixture.deletion,state:'QUEUED'}},
+   getVideoDeletion:()=>new Promise(resolve=>{fixture.finishPoll=resolve}),clearMediaSession:async()=>{},
    listProcessingJobs:async()=>({rows:[],groups:[],total:0}),processingHealth:async()=>({data:{}})};
   for(const [name,value] of Object.entries({EastudyAuth:auth,EastudyCloudContent:cloud}))Object.defineProperty(window,name,{configurable:true,get:()=>value,set:()=>{}});
  });
@@ -93,6 +98,45 @@ try {
  assert.ok((await page.locator('body').innerText()).includes('已保存为草稿，学生端不展示'));
  assert.equal(await page.evaluate(()=>window.ZoContent.listCollections()[0].status),'DRAFT');
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+ // Exercise the permanent-deletion consumers in the actual admin DOM.
+ await page.evaluate(()=>{catalogFixture.failTrashRefresh=false;location.hash='#/trash'});
+ await page.locator('[data-refresh-deletion]').waitFor();
+ assert.equal(await page.locator('[data-permanent-delete-video="101"]').isDisabled(),true);
+ assert.match(await page.locator('#view [role=status]').innerText(),/永久删除服务尚未启用/);
+ await page.evaluate(()=>catalogFixture.deletionReady=true);
+ await page.locator('[data-refresh-deletion]').click();
+ await page.waitForFunction(()=>!document.querySelector('[data-permanent-delete-video="101"]').disabled);
+ page.once('dialog',dialog=>dialog.dismiss());
+ await page.locator('[data-permanent-delete-video="101"]').click();
+ await page.waitForFunction(()=>!document.querySelector('[data-permanent-delete-video="101"]').disabled);
+ assert.equal(await page.evaluate(()=>catalogFixture.confirms||0),0,'cancel must never confirm deletion');
+ page.once('dialog',dialog=>dialog.accept());
+ await page.locator('[data-permanent-delete-video="101"]').click();
+ await page.waitForFunction(()=>!document.querySelector('[data-permanent-delete-video="101"]').disabled);
+ assert.equal(await page.evaluate(()=>catalogFixture.confirms),1,'cancel leaves a usable retry button');
+ assert.match(await page.locator('#toast').innerText(),/暂未确认清理结果/,'lost confirmation response cannot be reported as deletion not started');
+ await page.evaluate(()=>{catalogFixture.deletion={deletionId:'fixture-deletion',videoId:101,state:'NEEDS_ATTENTION',confirmedAt:'2026-09-17T00:00:00Z'};location.hash='#/videos'});
+ await page.waitForFunction(()=>location.hash==='#/videos'&&!document.querySelector('[data-permanent-delete-video]'));
+ await page.evaluate(()=>location.hash='#/trash');
+ await page.getByRole('button',{name:'继续清理',exact:true}).click();
+ await page.waitForFunction(()=>typeof catalogFixture.finishPoll==='function');
+ assert.equal(await page.evaluate(()=>catalogFixture.retries),1,'confirmed failures use the dedicated resume endpoint');
+ assert.equal(await page.evaluate(()=>catalogFixture.plans),2,'resume must not recreate the deletion plan');
+ await page.evaluate(()=>location.hash='#/creators');
+ await page.locator('[data-edit-creator="7"]').waitFor();
+ await page.evaluate(()=>{catalogFixture.finishPoll({...catalogFixture.deletion,state:'NEEDS_ATTENTION'});catalogFixture.finishPoll=null});
+ await page.waitForTimeout(50);
+ assert.equal(await page.locator('[data-permanent-delete-video]').count(),0,'late status must not repaint another route');
+ await page.evaluate(()=>location.hash='#/trash');
+ await page.waitForFunction(()=>typeof catalogFixture.finishPoll==='function');
+ await page.locator('#mobileMenu').click();
+ await page.locator('#adminLogoutBtn').click();
+ await page.evaluate(()=>catalogFixture.finishPoll({...catalogFixture.deletion,state:'DONE'}));
+ await page.waitForTimeout(50);
+ assert.equal(await page.locator('[data-permanent-delete-video]').count(),1,'pending logout invalidates the poll before signOut resolves');
+ await page.evaluate(()=>catalogFixture.finishLogout({}));
+ await page.waitForFunction(()=>!document.querySelector('[data-permanent-delete-video]'));
  assert.deepEqual(errors,[]);
  console.log('Catalog admin browser: edit, failed save, retry, trash replacement, explicit published-only replacement, restore, draft visibility and mobile width passed.');
+ console.log('Deletion admin browser: capability gate, cancel, resume, late route response and logout invalidation passed.');
 } finally {await browser.close();}

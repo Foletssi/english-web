@@ -29,6 +29,7 @@ const fetch = async (url,init={}) => {
   if(name==='deletion_stage_items')for(const item of body.p_items||[])staged.set(item.objectKey,item.objectBytes);
   if(name==='deletion_ack_items')for(const key of body.p_object_keys||[])staged.delete(key);
   const value = name === 'deletion_claim_job' ? lease
+    : name === 'deletion_pending_output_writes' ? []
     : name === 'deletion_next_items' ? [...staged].slice(0,body.p_limit||200).map(([objectKey,objectBytes])=>({objectKey,objectBytes}))
     : { ok: true, state: name === 'deletion_finalize_job' ? 'DONE' : undefined };
   return { ok: true, async json(){ return value; } };
@@ -38,7 +39,7 @@ const bucket = {
   async list({prefix,limit}){ return { objects:[...objects].filter(([key])=>key.startsWith(prefix)).slice(0,limit).map(([key,size])=>({key,size})) }; },
   async delete(keys){ for(const key of Array.isArray(keys)?keys:[keys])objects.delete(key); }
 };
-const context = vm.createContext({ console, fetch, URL, setTimeout, clearTimeout,
+const context = vm.createContext({ console, fetch, URL, AbortSignal, setTimeout, clearTimeout,
   authenticate(){}, json(){}, readJson(){}, requireBucket(env){return env.VIDEO_BUCKET?null:{};} });
 vm.runInContext(source, context, { filename: file });
 const result = await context.__runDeletionWorker({

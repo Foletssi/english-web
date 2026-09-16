@@ -47,6 +47,7 @@ const uploadWindow={
    assert.equal(existingJob.idempotency,idempotency);return {data:{job:existingJob,revision:serverRevision,snapshot:{}}};
   },
   pullAdmin:async()=>({revision:serverRevision}),
+  processingHealth:async()=>({data:{ready:true}}),
  },
  EastudyAdminCloudBridge:{flush:async()=>{},revision:()=>clientRevision,importMutation:r=>{clientRevision=r.data.revision}},
  dispatchEvent(){},
@@ -66,6 +67,11 @@ assert.equal(element('#studioV2Submit').disabled,true);
 resolveUpload({key:'source',url:'source.mp4',size:10});await pending;
 assert.equal(upload.state.rows[0].submitted,undefined);
 assert.equal(upload.state.submitting,false);
+uploadWindow.EastudyStudioV2.open();
+await upload.checkService();
+assert.equal(upload.state.rows.length,1,'reopening preserves failed upload');
+assert.equal(upload.state.rows[0].id,'same-key','reopening preserves idempotency key');
+assert.ok(upload.state.rows[0].uploaded,'reopening preserves completed upload');
 await upload.submitQueue(event);
 assert.equal(uploads,1,'resume reuses uploaded source');
 assert.equal(creates,3,'stale revision reconciles once using the same idempotency key');

@@ -96,7 +96,7 @@ async function retry(jobId,videoId){
    Store.updatePipeline(videoId,{id:jobId,status:'PROCESSING',currentStep:job.currentStep,progress:job.progress,error:null});
    pollJob(jobId,videoId);reportRecovery(jobId,'已加入处理队列，将复用已完成的结果');
   }
- }catch{reportRecovery(jobId,'暂未确认继续处理成功。请先刷新状态；如果任务仍然失败，再点击继续处理。')}
+ }catch(error){reportRecovery(jobId,String(error?.message||error).includes('JOB_SUPERSEDED')?'此任务已被新版视频替代，请在当前视频卡片中继续处理。':'暂未确认继续处理成功。请先刷新状态；如果任务仍然失败，再点击继续处理。')}
  finally{state.retrying.delete(jobId);global.dispatchEvent(new CustomEvent('eastudy:studio-job-updated'))}
 }
 async function checkService(){
@@ -114,7 +114,7 @@ async function checkService(){
     state.serviceReady=true;health.dataset.state='ok';health.textContent='本机视频处理服务已连接';button.disabled=false;button.textContent='开始批量处理';
   }catch{health.dataset.state='error';health.textContent='本机处理程序未连接，请启动 START_EASTUDY_STUDIO_V2.bat 后重新检查。';button.textContent='请先连接处理服务'}
 }
-function open(){if(state.submitting){$('#studioV2Modal').classList.add('show');return}state.rows=[];renderRows();const creator=$('#studioV2Creator');if(/^(null|undefined)$/i.test(creator.value.trim()))creator.value='';$('#studioV2Videos').value='';$('#studioCreatorOptions').innerHTML=Store.listCreators().filter(row=>row.name&&!/^(null|undefined)$/i.test(String(row.name))).map(row=>`<option value="${escapeHtml(row.name)}"></option>`).join('');$('#studioV2Modal').classList.add('show');void checkService()}
+function open(){if(state.submitting){$('#studioV2Modal').classList.add('show');return}state.rows=state.rows.filter(row=>!row.submitted);renderRows();const creator=$('#studioV2Creator');if(/^(null|undefined)$/i.test(creator.value.trim()))creator.value='';$('#studioV2Videos').value='';$('#studioCreatorOptions').innerHTML=Store.listCreators().filter(row=>row.name&&!/^(null|undefined)$/i.test(String(row.name))).map(row=>`<option value="${escapeHtml(row.name)}"></option>`).join('');$('#studioV2Modal').classList.add('show');void checkService()}
 
 function bind(){const form=$('#studioV2Form');if(!form)return;form.addEventListener('submit',submitQueue);$('#studioV2Recheck').addEventListener('click',checkService);$('#studioV2Videos').addEventListener('change',event=>addFiles(event.target.files));$('#studioV2Rows').addEventListener('input',event=>{const row=state.rows.find(item=>item.id===event.target.dataset.rowTitle);if(row)row.title=event.target.value});$('#studioV2Rows').addEventListener('change',event=>{const row=state.rows.find(item=>item.id===event.target.dataset.rowCover);if(row){row.cover=event.target.files[0]||null;renderRows()}});$('#studioV2Rows').addEventListener('click',event=>{const button=event.target.closest('[data-remove-row]');if(button)state.rows=state.rows.filter(row=>row.id!==button.dataset.removeRow),renderRows()});document.addEventListener('click',event=>{if(event.target.closest('[data-refresh-studio-jobs]'))void refreshJobs();const retryButton=event.target.closest('[data-retry-studio-job]');if(retryButton)retry(retryButton.dataset.retryStudioJob,retryButton.dataset.videoId)});global.addEventListener('online',wakeCloudPoll);document.addEventListener('visibilitychange',()=>{if(!document.hidden)wakeCloudPoll()});if(Store.localOnly)void syncJobs().catch(()=>{});else wakeCloudPoll()}
 global.EastudyStudioV2={open,retry,syncJobs,refreshJobs,recoveryMessage,isRetrying:jobId=>state.retrying.has(jobId),localOnly:Store.localOnly};
