@@ -50,7 +50,8 @@ def _input(rows):
         for row in rows]
 
 
-def complete_coverage(rows, config=None, progress=None, cache_dir=None, request=None):
+def complete_coverage(rows, config=None, progress=None, cache_dir=None, request=None,
+                      recheck_pairs=None):
     from ai_tools import call_json, _cached_ai, mark_teaching_complete
     config, progress = config or {}, progress or (lambda *a, **k: None)
     request = request or (lambda prompt, payload: call_json(config, prompt, payload))
@@ -73,7 +74,7 @@ def complete_coverage(rows, config=None, progress=None, cache_dir=None, request=
                 progress('enrich', 86, '正在重新核对教学内容', substage='coverage-retry',
                          current=attempt + 1, total=2, unit='retries')
 
-    for offset in range(0, len(merged), 16):
+    for offset in (range(0, len(merged), 16) if recheck_pairs is None else []):
         batch = merged[offset:offset + 16]
         payload = {'sentences': _input(batch), 'candidate': {'sentences': _input(batch)},
                    'contextBefore': [r['english'] for r in merged[max(0, offset-2):offset]],
@@ -88,11 +89,16 @@ def complete_coverage(rows, config=None, progress=None, cache_dir=None, request=
                  substage='selection-review', current=offset+len(batch), total=len(merged), unit='sentences')
 
     evidence = {}
+    if recheck_pairs is not None:
+        for i in range(len(merged)-1):
+            report = next(p for p in merged[i]['coverageAnalysis']['pairs'] if p['pairId'] == f'p{i}')
+            evidence[i] = copy.deepcopy(report)
     # Alternating disjoint pairs allow additions to benefit the next overlapping
     # pass without one batch writing two competing versions of the same sentence.
     for parity in (0, 1):
         missing = [i for i in range(parity, len(merged)-1, 2)
-                   if not (merged[i].get('keyWords') or merged[i+1].get('keyWords'))]
+                   if not (merged[i].get('keyWords') or merged[i+1].get('keyWords'))
+                   and (recheck_pairs is None or i in recheck_pairs)]
         for offset in range(0, len(missing), 8):
             indices = missing[offset:offset+8]
             batch = [merged[j] for i in indices for j in (i, i+1)]
@@ -102,6 +108,13 @@ def complete_coverage(rows, config=None, progress=None, cache_dir=None, request=
 
             def validate(result):
                 checked = _preserve_locks(batch, validate_learning(batch, result))
+                if recheck_pairs is not None:
+                    from teaching_details import validate_pronunciation_hint
+                    for row in checked:
+                        if not row.get('selectionLocked'):
+                            for expression in row['expressions']:
+                                expression['pronunciationHint'] = validate_pronunciation_hint(
+                                    expression.get('pronunciationHint', ''), expression['surface'], required=True)
                 decisions = result.get('decisions')
                 if not isinstance(decisions, list) or len(decisions) != len(pairs) or any(
                     not isinstance(d, dict) or not isinstance(d.get('pairId'), str) for d in decisions):
@@ -120,16 +133,28 @@ def complete_coverage(rows, config=None, progress=None, cache_dir=None, request=
                         raise StudioError('AI_COVERAGE_EVIDENCE', '相邻句结论与原文选词不一致。', True)
                 return checked, mapping
 
-            checked, decisions = invoke(f'coverage-{parity}-{offset:04d}', COVERAGE_PROMPT, payload, validate)
+            # Recheck removed highlights against the entire source, not just the
+            # rejected candidates. Carry the same adult threshold into both calls.
+            suffix = ''
+            if recheck_pairs is not None:
+                from teaching_eligibility import CRITERIA
+                suffix = '\n' + CRITERIA + '\n每个新增 expression 还必须给 pronunciationHint，结合本句给整个表达的一组美式 IPA，格式 /.../。'
+            checked, decisions = invoke(f'coverage-{parity}-{offset:04d}', COVERAGE_PROMPT + suffix, payload, validate)
             reviewed_payload = {**payload, 'candidate': {'sentences': _input(checked),
                                                        'decisions': list(decisions.values())}}
-            checked, decisions = invoke(f'coverage-review-{parity}-{offset:04d}', COVERAGE_REVIEW_PROMPT,
+            checked, decisions = invoke(f'coverage-review-{parity}-{offset:04d}', COVERAGE_REVIEW_PROMPT + suffix,
                                         reviewed_payload, validate)
             mark_teaching_complete(checked, batch)
             for n, i in enumerate(indices):
                 for j in range(2):
                     checked[n*2+j]['teachingAnalysis']['reviewVersion'] = REVIEW_VERSION
-                    merged[i+j] = checked[n*2+j]
+                    if recheck_pairs is None:
+                        merged[i+j] = checked[n*2+j]
+                    else:
+                        # A selection-only retry must not replace completed word
+                        # meanings, translations, timing or their provenance.
+                        for field in ('keyWords', 'expressions'):
+                            merged[i+j][field] = checked[n*2+j][field]
                 evidence[i] = decisions[f'p{i}']
             progress('enrich', 87, '已核对相邻句重点覆盖', substage='coverage-review',
                      current=min(offset+8, len(missing)), total=len(missing), unit='pairs')
