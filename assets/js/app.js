@@ -301,7 +301,7 @@ function renderMobileHome({restoreScroll=true}={}){
  const categoryButton=category=>{const button=document.createElement('button');button.type='button';button.textContent=category;button.setAttribute('aria-pressed',String(category===homeBrowse.category));button.onclick=()=>{homeBrowse.category=category;update()};return button};
  categoryBox.append(...categories.slice(0,3).map(categoryButton));
  if(categories.length>3){const more=document.createElement('button');more.id='openMobileCategories';more.type='button';more.textContent=categories.slice(3).includes(homeBrowse.category)?homeBrowse.category:'更多分类';more.setAttribute('aria-haspopup','dialog');more.onclick=()=>window.EastudyCategoryDialog.open({categories,selected:homeBrowse.category,trigger:more,onSelect:category=>{homeBrowse.category=category;update()}});categoryBox.append(more)}
- let trackSelect=$('#mobileVideoTrack');if(!trackSelect){trackSelect=document.createElement('select');trackSelect.id='mobileVideoTrack';trackSelect.setAttribute('aria-label','适合人群');trackSelect.innerHTML='<option value="">全部难度</option>'+Object.entries(window.EastudyTaxonomy.TRACK_LABELS).map(([key,label])=>'<option value="'+key+'">'+label+'</option>').join('');sort.before(trackSelect)}trackSelect.value=homeBrowse.track||'';trackSelect.onchange=()=>{homeBrowse.track=trackSelect.value;update()};
+ let trackSelect=$('#mobileVideoTrack');if(!trackSelect){trackSelect=document.createElement('select');trackSelect.id='mobileVideoTrack';trackSelect.setAttribute('aria-label','视频难度');sort.before(trackSelect)}const tracks=window.EastudyTaxonomy.availableTracks(HOME_VIDEOS_DATA);trackSelect.innerHTML='<option value="">全部难度</option>'+tracks.map(([key,label])=>'<option value="'+key+'">'+label+'</option>').join('');if(homeBrowse.track&&!tracks.some(([key])=>key===homeBrowse.track)){homeBrowse.track='';Storage.set('homeBrowse',homeBrowse)}trackSelect.value=homeBrowse.track||'';trackSelect.onchange=()=>{homeBrowse.track=trackSelect.value;update()};
  const rows=mobileHomeRows(),visible=rows.slice(0,Math.max(1,homeBrowse.page)*12),list=$('#mobileVideoList');
  $('#mobileResultCount').textContent=rows.length+' 个视频';
  if(State.catalogError&&!HOME_VIDEOS_DATA.length){list.innerHTML='<p role="status">视频列表暂时加载失败</p><button type="button" id="retryMobileCatalog">重试</button>';$('#retryMobileCatalog').onclick=async()=>{list.textContent='视频正在加载中…';await hydrateCloudContent();renderMobileHome({restoreScroll:false})}}
@@ -689,7 +689,12 @@ async function openDict(el,e,savedSource=null){
   bindDictionaryVoice(w,State.dictSource);
   $('#dictWord').textContent=w;$('#dictPhon').textContent=d.phon;$('#dictMeaning').textContent=d.meaning;$('#dictExplain').textContent=d.explain;$('#dictContext').textContent=DATA.sentences[idx]?.en||'';
   if(savedSource)$('#dictContext').textContent=savedSource.context||'';
-  $('#dictBadges').innerHTML=(d.levels||[]).map(x=>`<span class="level-badge">${({cet4:'CET-4',cet6:'CET-6',ielts:'IELTS',phrase:'短语'})[x]||x}</span>`).join('');
+  const labels={...window.EastudyTaxonomy.TRACK_LABELS,phrase:'短语',slang:'俚语'};
+  $('#dictBadges').replaceChildren(...(d.levels||[]).filter(x=>labels[x]).map(x=>{const badge=document.createElement('span');badge.className='level-badge';badge.textContent=labels[x];return badge}));
+  $('#dictPhon').hidden=!d.phon;$('#dictBadges').hidden=!$('#dictBadges').childElementCount;
+  $('#dictMeaning').parentElement.hidden=!d.meaning;$('#dictExplain').parentElement.hidden=!d.explain;
+  const context=$('#dictContext');context.hidden=!context.textContent;
+  if(!savedSource&&sentence.zh){const translation=document.createElement('p');translation.className='dict-translation';translation.textContent=sentence.zh;context.append(translation)}
   const saveButton=$('#saveWord');delete saveButton.__saveRequest;saveButton.disabled=false;const isSaved=isVocabSaved(w);$('#saveWord').classList.toggle('saved',isSaved);$('#saveWord').textContent=isSaved?'✓ 已加入生词本':'＋ 加入生词本';
   const box=$('#dict');if(!box)return;
   box.classList.add('show');

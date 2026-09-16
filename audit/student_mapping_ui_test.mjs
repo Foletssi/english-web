@@ -188,7 +188,7 @@ try {
   assert.ok(Number.isFinite(countBefore),'cloud hydration makes count known');
   await page.locator('#video').evaluate(video=>{video.currentTime=1;video.dispatchEvent(new Event('timeupdate'))});
   await page.locator('#transcript .line[data-i="1"] .word-token').first().click();
-  assert.equal(await page.locator('#dictContext').innerText(),'Good morning.');
+  assert.equal(await page.locator('#dictContext').innerText(),'Good morning.\n\n早上好。');
   await page.evaluate(()=>window.mappingFixture.fail=true);await page.locator('#saveWord').click();
   await page.waitForFunction(()=>!document.querySelector('#saveWord').disabled);
   assert.equal(Number(await page.locator('#savedWordCount').innerText()),countBefore,'failed cloud save does not increase count');

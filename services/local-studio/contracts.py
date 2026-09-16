@@ -130,7 +130,7 @@ def validate_learning(source, payload, minimum_schema_version=3):
 def validate_difficulty(value, sentence_ids):
     if value is None:
         return None  # Older cached content remains reviewable without inventing a label.
-    tracks = {'cet4', 'cet6', 'ielts', 'toefl'}
+    tracks = {'gaokao', 'zsb', 'cet4', 'cet6', 'tem4', 'tem8', 'ielts', 'toefl'}
     if not isinstance(value, dict) or not {'primaryTrack', 'targetTracks', 'evidence'} <= value.keys():
         raise StudioError('AI_DIFFICULTY_INVALID', '学习难度格式错误。', True)
     primary, targets, evidence = value.get('primaryTrack'), value.get('targetTracks', []), value.get('evidence', [])

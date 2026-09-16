@@ -126,3 +126,30 @@ html[data-theme="dark"] :is(#settingsBackdrop,#lessonMore,#videoSwitchPanel,.lea
 .dict-voice[data-state="playing"]{background:var(--accentSoft)}
 .dict-voice-status{font-size:12px;color:var(--muted)}
 .dict-voice-status:empty{display:none}
+/* Word card: fixed header/actions, only the content scrolls. */
+#dict{--card-surface:#fff;--card-text:#17263d;--card-action:#346da5;box-sizing:border-box;width:min(480px,calc(100vw - 16px))!important;max-height:min(80dvh,calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 24px))!important;border:1px solid var(--line);border-radius:18px!important;background:var(--card-surface);color:var(--card-text);overflow:hidden!important;box-shadow:0 12px 40px #10243b24}
+html[data-theme="dark"] #dict{--card-surface:#172536;--card-text:#e8eff8;--card-action:#85b7e7}
+#dict.show{display:flex;flex-direction:column}
+#dict .dict-top{flex:none;padding:16px;border-bottom:1px solid var(--line);background:transparent}
+#dict .dict-row{display:flex;align-items:flex-start;gap:4px}
+#dict .dict-word{font-size:22px;line-height:1.25;overflow-wrap:anywhere;color:var(--card-text)}
+#dict .dict-phon,#dict .level-badges{font-size:13px;line-height:1.4}
+#dict .level-badges{flex-wrap:wrap;gap:4px;margin-top:8px}
+#dict .level-badge{color:var(--card-action);background:var(--accentSoft);border:0;padding:3px 8px;border-radius:6px}
+#dict :is(.dict-voice,.dict-close){position:relative;flex:0 0 44px;width:44px;height:44px;min-width:44px;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:50%;padding:0;background:transparent;color:var(--card-action)}
+#dict .dict-voice:before{content:'';position:absolute;inset:4px;border-radius:50%;background:var(--accentSoft)}
+#dict .dict-voice svg{position:relative;width:18px;height:18px;flex:none}
+#dict .dict-voice[data-state="playing"]:before{box-shadow:0 0 0 2px var(--card-action)}
+#dict .dict-body{min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:16px;display:flex;flex-direction:column;gap:14px}
+#dict .sense{margin:0}
+#dict .sense b{font-size:12px;font-weight:500;color:var(--muted)}
+#dict .sense p{margin:4px 0 0;font-size:14px;line-height:1.55;overflow-wrap:anywhere}
+#dict #dictMeaning{font-size:17px;line-height:1.5;color:var(--card-text)}
+#dict .context-box{margin:0;padding:12px;border:0;border-radius:12px;background:var(--accentSoft);font-size:14px;line-height:1.55;overflow-wrap:anywhere}
+#dict .dict-translation{margin:8px 0 0;font-size:13px;color:var(--muted)}
+#dict .dict-actions{flex:none;display:flex;flex-wrap:wrap;gap:4px;min-height:56px;box-sizing:border-box;border-top:1px solid var(--line);margin:0;padding:6px 8px max(6px,env(safe-area-inset-bottom));background:var(--card-surface)}
+#dict .dict-actions button{flex:1 1 76px;min-width:0;min-height:44px;margin:0;padding:6px 4px;border:0;border-radius:8px;font-size:12px;line-height:1.4;white-space:normal;background:transparent;color:var(--card-action)}
+#dict .dict-actions .saveword{background:var(--accentSoft);font-weight:600}
+#dict button:focus-visible{outline:2px solid var(--card-action);outline-offset:-2px}
+#dict [hidden]{display:none!important}
+@media(max-width:760px){#dict.mobile-dict{left:8px!important;right:auto!important;bottom:max(8px,env(safe-area-inset-bottom))!important;top:auto!important}}

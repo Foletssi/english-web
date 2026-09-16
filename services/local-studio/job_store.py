@@ -54,6 +54,15 @@ class JobStore:
         job.update(changes)
         return self.write(job)
 
+    def queue_retry(self, job_id):
+        # Atomically reserve the retry; concurrent requests cannot submit twice.
+        with self._lock:
+            job = self.get(job_id)
+            if job['status'] != 'ERROR':
+                return None
+            job.update(status='QUEUED', message='已重新加入后台队列，将复用已完成结果', error=None)
+            return self.write(job)
+
     def list(self):
         rows = []
         for path in self.root.glob('*.json'):

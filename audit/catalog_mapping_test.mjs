@@ -19,6 +19,15 @@ vm.runInNewContext(fs.readFileSync('shared/content-taxonomy.js','utf8'),{window:
 vm.runInNewContext(fs.readFileSync('shared/catalog-selectors.js','utf8'),{window:catalogWindow});
 const catalog=catalogWindow.EastudyCatalog;
 const plain=value=>JSON.parse(JSON.stringify(value));
+const taxonomy=catalogWindow.EastudyTaxonomy;
+const tracks=['gaokao','zsb','cet4','cet6','tem4','tem8','ielts','toefl'];
+const graded=tracks.map(track=>({status:'PUBLISHED',difficulty:{schemaVersion:1,reviewStatus:'approved',primaryTrack:track,targetTracks:[track]}}));
+assert.deepEqual(plain(taxonomy.availableTracks(graded)).map(([key])=>key),tracks);
+assert.deepEqual(plain(taxonomy.availableTracks([
+ {...graded[0],status:'DRAFT'}, {...graded[1],deletedAt:'2026-09-16'},
+ {...graded[2],difficulty:{...graded[2].difficulty,reviewStatus:'review'}},
+ graded[3],graded[3]
+])),[['cet6','六级']],'only published, approved, undeleted difficulty appears, once');
 const tagVideo={tagIds:['food-culture','daily-life','daily-life','conversation','friendship'],tagAssignments:[
  {tagId:'food-culture',reviewStatus:'APPROVED'}, {tagId:'daily-life',reviewStatus:'APPROVED'},
  {tagId:'conversation',approved:true}, {tagId:'friendship',reviewStatus:'REVIEW',approved:true}

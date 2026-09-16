@@ -205,6 +205,28 @@ assert.ok(await page.locator('#transcript').evaluate(box => box.scrollTop>0), 'r
 const beforeWord = await page.locator('#video').evaluate(video => video.currentTime);
 await page.locator('#transcript [data-i="24"] .teaching-keyword').first().click();
 assert.equal(await page.locator('#video').evaluate(video => video.currentTime), beforeWord, 'word card must not seek the video');
+// Long content must scroll inside the card while actions remain reachable.
+await page.locator('#dictExplain').evaluate(el=>{el.parentElement.hidden=false;el.textContent='语境说明，检查长内容可滚动。'.repeat(100)});
+for(const theme of ['light','dark']){
+  await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);
+  for(const viewport of [{width:320,height:568},{width:390,height:844}]){
+    await page.setViewportSize(viewport);
+    await page.locator('#dict').evaluate(async el=>{await Promise.all(el.getAnimations({subtree:true}).map(animation=>animation.finished.catch(()=>{})))});
+    const card=await page.locator('#dict').evaluate(el=>{
+      const box=el.getBoundingClientRect(),body=el.querySelector('.dict-body'),actions=el.querySelector('.dict-actions').getBoundingClientRect(),close=el.querySelector('#dictClose').getBoundingClientRect();
+      body.scrollTop=body.scrollHeight;
+      return {left:box.left,right:box.right,top:box.top,bottom:box.bottom,actionsTop:actions.top,actionsBottom:actions.bottom,
+        bodyBottom:body.getBoundingClientRect().bottom,scrollable:body.scrollHeight>body.clientHeight,scrollTop:body.scrollTop,closeWidth:close.width,closeHeight:close.height};
+    });
+    assert.ok(card.left>=0&&card.right<=viewport.width&&card.top>=0&&card.bottom<=viewport.height,'word card fits '+JSON.stringify(card));
+    assert.ok(card.scrollable&&card.scrollTop>0,'long definitions scroll');
+    assert.ok(card.bodyBottom<=card.actionsTop+1&&card.actionsBottom<=card.bottom,'actions remain outside scroll body');
+    assert.equal(card.closeWidth,44);assert.equal(card.closeHeight,44);
+    await page.screenshot({path:`tmp/word-card-${theme}-${viewport.width}.png`});
+  }
+}
+await page.evaluate(()=>document.documentElement.dataset.theme='light');
+await page.setViewportSize({width:390,height:844});
 // Direct entry must not silently acquire unrelated videos.
 assert.equal(await page.locator('#nextVideo').isDisabled(), true);
 // Close the word card before exercising completion controls.

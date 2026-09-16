@@ -192,7 +192,8 @@ tags 为首页视频卡片提供一个主标签和两个副标签，返回3个�
 若原稿确实无法支持3项，只返回有证据的项，不捏造主题，不用默认标签填空。
 每个标签都必须有当前视频字幕证据并说明理由。目标只表示这条真实Vlog适合辅助哪类学习者，不代表完整考试课程；
 四级、六级、雅思、托福、专八不能由CEFR机械换算，也不得因为几个词就声称覆盖完整考试。
-另输出 difficulty 对象：{"primaryTrack":"cet4/cet6/ielts/toefl或null","targetTracks":[],
+难度候选：gaokao 高考、zsb 专升本、cet4 四级、cet6 六级、tem4 专四、tem8 专八、ielts 雅思、toefl 托福。根据真实内容适配，不能只为扩充筛选项而添加类别。
+另输出 difficulty 对象：{"primaryTrack":"gaokao/zsb/cet4/cet6/tem4/tem8/ielts/toefl或null","targetTracks":[],
 "evidence":[{"sentenceIds":["原稿ID"],"reasonZh":"依据词汇习语、句法、话题、语速说明适配理由"}]}。
 依据完整逐字稿为四级及以上成人评估适配方向；primaryTrack 必须包含在去重的 targetTracks 内。
 雅思与托福是适配方向而非线性等级。证据不足时 primaryTrack=null、targetTracks=[]。

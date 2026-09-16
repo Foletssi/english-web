@@ -117,14 +117,17 @@ class StudioHandler(BaseHTTPRequestHandler):
 
     def retry_job(self, job_id):
         try:
-            job = self.server.store.get(job_id)
+            job = self.server.store.queue_retry(job_id)
         except KeyError as error:
             raise StudioError('JOB_NOT_FOUND', '任务不存在。') from error
-        if job['status'] != 'ERROR':
+        if job is None:
             raise StudioError('JOB_NOT_RETRYABLE', '只有失败任务可以重试。')
-        self.server.store.update(job_id, status='QUEUED', currentStep='upload', progress=5,
-                                 message='已重新加入后台队列', error=None)
-        self.server.submitter(job_id)
+        try:
+            self.server.submitter(job_id)
+        except Exception as error:
+            self.server.store.update(job_id, status='ERROR',
+                                     error={'code': 'QUEUE_UNAVAILABLE', 'message': '处理队列暂时不可用，请稍后继续处理。'})
+            raise StudioError('QUEUE_UNAVAILABLE', '处理队列暂时不可用，请稍后继续处理。') from error
         self.json_response(202, public_job(self.server.store.get(job_id)))
 
     def serve_media(self, relative):

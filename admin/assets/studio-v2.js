@@ -2,7 +2,7 @@
 'use strict';
 const Client=global.EastudyStudioClient,Store=global.ZoContent;
 const cloud=()=>global.EastudyCloudContent,bridge=()=>global.EastudyAdminCloudBridge;
-const state={rows:[],polling:new Set(),serviceReady:false,cloudTimer:null,cloudBusy:false,cloudFailures:0,lastSyncAt:0};
+const state={rows:[],polling:new Set(),serviceReady:false,cloudTimer:null,cloudBusy:false,cloudFailures:0,lastSyncAt:0,retrying:new Set(),refreshing:false,recovery:new Map()};
 const $=selector=>document.querySelector(selector);
 const titleFrom=name=>String(name||'').replace(/\.[^.]+$/,'').replace(/[_-]+/g,' ').trim();
 const escapeHtml=value=>String(value||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -25,16 +25,16 @@ function updateRow(id,changes){const row=state.rows.find(item=>item.id===id);if(
 async function submitOne(row,creator){
   updateRow(row.id,{locked:true,status:Store.localOnly?'正在上传到本地服务':'正在上传原片到云端'});
   try{
-    const localVideoId=Date.now()+state.rows.indexOf(row);
+    const localVideoId=row.localVideoId||(row.localVideoId=Date.now()+state.rows.indexOf(row));
     if(!Store.localOnly){
       const Cloud=cloud(),Bridge=bridge();if(!Cloud||!Bridge)throw new Error('CLOUD_PROCESSING_CLIENT_NOT_READY');
-      const uploaded=await Cloud.uploadVideo(row.video,progress=>updateRow(row.id,{progress,status:progress<100?'正在上传原片':'正在创建云端任务'}));
-      const video=Store.saveVideo({id:localVideoId,title:row.title||titleFrom(row.video.name),titleZh:'待云端生成',creator:creator.name,creatorId:creator.id,
+      const uploaded=row.uploaded||(row.uploaded=await Cloud.uploadVideo(row.video,progress=>updateRow(row.id,{progress,status:progress<100?'正在上传原片':'正在创建云端任务'})));
+      const video=row.videoRecord||(row.videoRecord=Store.saveVideo({id:localVideoId,title:row.title||titleFrom(row.video.name),titleZh:'待云端生成',creator:creator.name,creatorId:creator.id,
         category:'AI 自动分类',level:'AI 分析中',description:'云端正在生成字幕与学习内容。',status:'DRAFT',pipelineStatus:'QUEUED',
-        cover:'assets/images/home_video_1.png',mediaUrl:uploaded.url,mediaKey:uploaded.key,mediaSize:uploaded.size,collectionIds:[],processingOptions:{transcript:true,translate:true,dictionary:true,learningAnalysis:true}});
+        cover:'assets/images/home_video_1.png',mediaUrl:uploaded.url,mediaKey:uploaded.key,mediaSize:uploaded.size,collectionIds:[],processingOptions:{transcript:true,translate:true,dictionary:true,learningAnalysis:true}}));
       await Bridge.flush();
       const created=await Cloud.createProcessingJob(video,uploaded.key,row.id,Bridge.revision());
-      if(created.error)throw created.error;Bridge.importMutation(created);updateRow(row.id,{progress:100,status:'已安全排队，等待处理节点领取'});
+      if(created.error)throw created.error;Bridge.importMutation(created);updateRow(row.id,{progress:100,submitted:true,status:'已安全排队，等待处理节点领取'});
       pollJob(created.data.job.id,localVideoId);return;
     }
     const job=await Client.createJob({video:row.video,cover:row.cover,aiConfig:aiConfig(),metadata:{
@@ -44,19 +44,42 @@ async function submitOne(row,creator){
       category:'AI 自动分类',level:'AI 分析中',description:'后台正在生成中文口语化简介。',status:'PROCESSING',pipelineStatus:'PROCESSING',
       cover:'assets/images/home_video_1.png',mediaUrl:'',collectionIds:[],localStudioJobId:job.id});
     Store.startPipeline(localVideoId,{id:job.id,currentStep:'upload',progress:5});
-    updateRow(row.id,{progress:100,status:'后台处理中'});pollJob(job.id,localVideoId);
+    updateRow(row.id,{progress:100,submitted:true,status:'后台处理中'});pollJob(job.id,localVideoId);
   }catch(error){updateRow(row.id,{locked:false,status:'失败：'+(error.message||'上传异常')});throw error}
 }
 
-async function submitQueue(event){event.preventDefault();if(!state.serviceReady){toast('视频处理服务尚未就绪，请先检查连接');return}const creatorName=$('#studioV2Creator').value.trim();if(!creatorName||/^(null|undefined)$/i.test(creatorName)){toast('请填写创作者');return}if(!state.rows.length){toast('请先选择视频');return}const button=$('#studioV2Submit');button.disabled=true;const creator=ensureCreator(creatorName);let next=0,failed=0;const run=async()=>{while(next<state.rows.length){const row=state.rows[next++];try{await submitOne(row,creator)}catch{failed++}}};await Promise.all(Array.from({length:Store.localOnly?Math.min(2,state.rows.length):1},run));button.disabled=false;button.textContent='开始批量处理';toast(failed?`${failed} 个上传失败，其余任务继续处理`:'上传完成；关闭网页后后台仍会继续处理');location.hash='#/pipeline'}
+async function submitQueue(event){event.preventDefault();if(!state.serviceReady){toast('视频处理服务尚未就绪，请先检查连接');return}const creatorName=$('#studioV2Creator').value.trim();if(!creatorName||/^(null|undefined)$/i.test(creatorName)){toast('请填写创作者');return}if(!state.rows.length){toast('请先选择视频');return}const button=$('#studioV2Submit');button.disabled=true;const creator=ensureCreator(creatorName);let next=0,failed=0;const run=async()=>{while(next<state.rows.length){const row=state.rows[next++];if(row.submitted)continue;try{await submitOne(row,creator)}catch{failed++}}};await Promise.all(Array.from({length:Store.localOnly?Math.min(2,state.rows.length):1},run));button.disabled=false;button.textContent='开始批量处理';toast(failed?`${failed} 个上传失败，其余任务继续处理`:'上传完成；关闭网页后后台仍会继续处理');if(!failed){$('#studioV2Modal').classList.remove('show');location.hash='#/pipeline'}else button.textContent='继续未完成的上传'}
 
 function ensureVideo(job,videoId){if(!Store.acceptsJob(videoId,job.id))return null;let video=Store.getVideo(videoId);if(video)return video;const meta=job.metadata||{},creator=ensureCreator(meta.creator||'待确认创作者');video=Store.saveVideo({id:Number(videoId),title:meta.title||titleFrom(job.sourceName),titleZh:'AI 正在生成',creator:creator.name,creatorId:creator.id,category:'AI 自动分类',level:'AI 分析中',description:'后台正在生成中文口语化简介。',status:'PROCESSING',pipelineStatus:'PROCESSING',cover:'assets/images/home_video_1.png',mediaUrl:'',collectionIds:[],localStudioJobId:job.id});Store.startPipeline(videoId,{id:job.id,currentStep:job.currentStep||'upload',progress:job.progress||5});return video}
 function mergeResult(job,videoId){const current=ensureVideo(job,videoId);if(!current||current.pipelineStatus==='READY')return;const result=job.result;if(!result?.sentences?.length||!result?.video?.mediaUrl){Store.failPipeline(videoId,{id:job.id,currentStep:job.currentStep,error:{code:'RESULT_EMPTY',message:'后台结果缺少字幕或媒体'}});return}const category=(result.video.topicIds||[]).map(id=>TOPIC_ZH[id]||id).join(' / ');Store.completePipeline(videoId,{id:job.id,sentences:result.sentences,video:{...result.video,category,creatorId:current.creatorId,creator:current.creator},evidence:result.evidence})}
 async function pollJob(jobId,videoId){if(!Store.localOnly){state.polling.add(jobId);wakeCloudPoll();return}if(state.polling.has(jobId))return;state.polling.add(jobId);try{while(true){const job=await Client.getJob(jobId);if(!Store.acceptsJob(videoId,jobId))break;if(job.status==='REVIEW'){mergeResult(job,videoId);break}if(job.status==='ERROR'){Store.failPipeline(videoId,{id:job.id,currentStep:job.currentStep,error:job.error});break}Store.updatePipeline(videoId,{id:job.id,status:'PROCESSING',currentStep:job.currentStep,progress:job.progress,error:null});global.dispatchEvent(new CustomEvent('eastudy:studio-job-updated'));await new Promise(resolve=>setTimeout(resolve,1800))}}catch(error){toast('读取后台任务失败：'+error.message)}finally{state.polling.delete(jobId);global.dispatchEvent(new CustomEvent('eastudy:studio-job-updated'))}}
-async function syncJobs(){if(!Store.localOnly){const result=await cloud()?.listProcessingJobs();if(result?.error)throw result.error;const rows=result?.rows||[];bridge()?.setJobs(rows);let reload=false;for(const job of rows){if(['REVIEW','ERROR','CANCELLED'].includes(job.status)){if(state.polling.delete(job.id))reload=true}else state.polling.add(job.id)}if(reload)await bridge()?.reload();return rows}const data=await Client.listJobs();for(const job of data.jobs||[]){const videoId=job.metadata?.localVideoId;if(!videoId)continue;const video=ensureVideo(job,videoId);if(!video)continue;if(job.status==='REVIEW')mergeResult(job,videoId);else if(job.status==='ERROR'){if(video.pipelineStatus!=='ERROR')Store.failPipeline(videoId,{id:job.id,currentStep:job.currentStep,error:job.error})}else pollJob(job.id,videoId)}return data.jobs||[]}
+async function syncJobs(){if(!Store.localOnly){const Bridge=bridge();let rows;if(Bridge?.refreshJobs)rows=await Bridge.refreshJobs();else{const result=await cloud()?.listProcessingJobs();if(result?.error)throw result.error;rows=result?.rows||[];Bridge?.setJobs(rows)}rows=rows||[];let reload=false;for(const job of rows){if(['REVIEW','ERROR','CANCELLED'].includes(job.status)){if(state.polling.delete(job.id))reload=true}else state.polling.add(job.id)}if(reload)await bridge()?.reload();return rows}const data=await Client.listJobs();for(const job of data.jobs||[]){const videoId=job.metadata?.localVideoId;if(!videoId)continue;const video=ensureVideo(job,videoId);if(!video)continue;if(job.status==='REVIEW')mergeResult(job,videoId);else if(job.status==='ERROR'){if(video.pipelineStatus!=='ERROR')Store.failPipeline(videoId,{id:job.id,currentStep:job.currentStep,error:job.error})}else pollJob(job.id,videoId)}return data.jobs||[]}
 function wakeCloudPoll(){if(Store.localOnly)return;clearTimeout(state.cloudTimer);state.cloudTimer=setTimeout(runCloudPoll,0)}
 async function runCloudPoll(){if(Store.localOnly||state.cloudBusy)return;state.cloudBusy=true;try{const [rows,healthResult]=await Promise.all([syncJobs(),cloud()?.processingHealth()]);state.lastSyncAt=Date.now();state.cloudFailures=0;global.dispatchEvent(new CustomEvent('eastudy:studio-sync',{detail:{ok:true,at:state.lastSyncAt,health:healthResult?.data||null,healthError:healthResult?.error||null}}));state.cloudTimer=setTimeout(runCloudPoll,rows.some(job=>['QUEUED','PROCESSING','RUNNING','WAITING'].includes(job.status))?5000:20000)}catch(error){state.cloudFailures++;global.dispatchEvent(new CustomEvent('eastudy:studio-sync',{detail:{ok:false,error}}));const delay=Math.min(30000,5000*2**Math.min(3,state.cloudFailures-1));state.cloudTimer=setTimeout(runCloudPoll,delay+Math.random()*500)}finally{state.cloudBusy=false}}
-async function retry(jobId,videoId){try{if(!Store.localOnly){const result=await cloud().retryProcessingJob(jobId);if(result.error)throw result.error;await syncJobs();pollJob(jobId,videoId);toast('失败阶段已重新加入云端队列');return}Store.allowJobRetry(videoId,jobId);Store.updatePipeline(videoId,{id:jobId,status:'PROCESSING',currentStep:'upload',progress:5});await Client.retryJob(jobId);pollJob(jobId,videoId);toast('失败任务已重新加入后台队列')}catch(error){if(Store.localOnly&&Store.getVideo(videoId))Store.failPipeline(videoId,{id:jobId,currentStep:'upload',error:{code:'RETRY_FAILED',message:error.message}});toast(error.message||'重试失败')}}
+function recoveryMessage(key){return state.recovery.get(String(key))||''}
+function reportRecovery(key,message){state.recovery.set(String(key),message);global.dispatchEvent(new CustomEvent('eastudy:studio-job-updated'))}
+async function refreshJobs(){
+ if(state.refreshing)return;state.refreshing=true;reportRecovery('refresh','正在刷新任务状态…');
+ try{if(!Store.localOnly&&bridge()?.refreshJobs)await bridge().refreshJobs();else await syncJobs();reportRecovery('refresh','状态已刷新；后台任务会继续处理，无需重复上传')}
+ catch{reportRecovery('refresh','暂时无法读取任务状态，请检查网络后再次刷新。已提交的后台任务不会因此取消。')}
+ finally{state.refreshing=false}
+}
+async function retry(jobId,videoId){
+ if(state.retrying.has(jobId))return;state.retrying.add(jobId);reportRecovery(jobId,'正在提交继续处理请求…');
+ try{
+  if(!Store.localOnly){
+   const result=await cloud().retryProcessingJob(jobId);if(result.error)throw result.error;
+   reportRecovery(jobId,'已加入处理队列，将复用已完成的结果');pollJob(jobId,videoId);
+   try{await syncJobs()}catch{reportRecovery(jobId,'继续处理请求已接受，但状态暂未同步，请刷新状态')}
+  }else{
+   const job=await Client.retryJob(jobId);
+   Store.allowJobRetry(videoId,jobId);
+   Store.updatePipeline(videoId,{id:jobId,status:'PROCESSING',currentStep:job.currentStep,progress:job.progress,error:null});
+   pollJob(jobId,videoId);reportRecovery(jobId,'已加入处理队列，将复用已完成的结果');
+  }
+ }catch{reportRecovery(jobId,'暂未确认继续处理成功。请先刷新状态；如果任务仍然失败，再点击继续处理。')}
+ finally{state.retrying.delete(jobId);global.dispatchEvent(new CustomEvent('eastudy:studio-job-updated'))}
+}
 async function checkService(){
   state.serviceReady=false;const health=$('#studioV2Health'),button=$('#studioV2Submit');
   button.disabled=true;button.textContent='检查服务中…';health.dataset.state='checking';
@@ -73,7 +96,7 @@ async function checkService(){
 }
 function open(){state.rows=[];renderRows();const creator=$('#studioV2Creator');if(/^(null|undefined)$/i.test(creator.value.trim()))creator.value='';$('#studioV2Videos').value='';$('#studioCreatorOptions').innerHTML=Store.listCreators().filter(row=>row.name&&!/^(null|undefined)$/i.test(String(row.name))).map(row=>`<option value="${escapeHtml(row.name)}"></option>`).join('');$('#studioV2Modal').classList.add('show');void checkService()}
 
-function bind(){const form=$('#studioV2Form');if(!form)return;form.addEventListener('submit',submitQueue);$('#studioV2Recheck').addEventListener('click',checkService);$('#studioV2Videos').addEventListener('change',event=>addFiles(event.target.files));$('#studioV2Rows').addEventListener('input',event=>{const row=state.rows.find(item=>item.id===event.target.dataset.rowTitle);if(row)row.title=event.target.value});$('#studioV2Rows').addEventListener('change',event=>{const row=state.rows.find(item=>item.id===event.target.dataset.rowCover);if(row){row.cover=event.target.files[0]||null;renderRows()}});$('#studioV2Rows').addEventListener('click',event=>{const button=event.target.closest('[data-remove-row]');if(button)state.rows=state.rows.filter(row=>row.id!==button.dataset.removeRow),renderRows()});document.addEventListener('click',event=>{const retryButton=event.target.closest('[data-retry-studio-job]');if(retryButton)retry(retryButton.dataset.retryStudioJob,retryButton.dataset.videoId)});global.addEventListener('online',wakeCloudPoll);document.addEventListener('visibilitychange',()=>{if(!document.hidden)wakeCloudPoll()});if(Store.localOnly)void syncJobs().catch(()=>{});else wakeCloudPoll()}
-global.EastudyStudioV2={open,retry,syncJobs,localOnly:Store.localOnly};
+function bind(){const form=$('#studioV2Form');if(!form)return;form.addEventListener('submit',submitQueue);$('#studioV2Recheck').addEventListener('click',checkService);$('#studioV2Videos').addEventListener('change',event=>addFiles(event.target.files));$('#studioV2Rows').addEventListener('input',event=>{const row=state.rows.find(item=>item.id===event.target.dataset.rowTitle);if(row)row.title=event.target.value});$('#studioV2Rows').addEventListener('change',event=>{const row=state.rows.find(item=>item.id===event.target.dataset.rowCover);if(row){row.cover=event.target.files[0]||null;renderRows()}});$('#studioV2Rows').addEventListener('click',event=>{const button=event.target.closest('[data-remove-row]');if(button)state.rows=state.rows.filter(row=>row.id!==button.dataset.removeRow),renderRows()});document.addEventListener('click',event=>{if(event.target.closest('[data-refresh-studio-jobs]'))void refreshJobs();const retryButton=event.target.closest('[data-retry-studio-job]');if(retryButton)retry(retryButton.dataset.retryStudioJob,retryButton.dataset.videoId)});global.addEventListener('online',wakeCloudPoll);document.addEventListener('visibilitychange',()=>{if(!document.hidden)wakeCloudPoll()});if(Store.localOnly)void syncJobs().catch(()=>{});else wakeCloudPoll()}
+global.EastudyStudioV2={open,retry,syncJobs,refreshJobs,recoveryMessage,isRetrying:jobId=>state.retrying.has(jobId),localOnly:Store.localOnly};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();
 })(window);

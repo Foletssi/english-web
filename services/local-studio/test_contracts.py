@@ -13,6 +13,15 @@ GOOD = {'teachingSchemaVersion': 3, 'sentences': [{'id': 'v:1', 'chinese': '我�
 
 
 class Contracts(unittest.TestCase):
+    def test_all_supported_difficulty_tracks_require_evidence(self):
+        for track in ('gaokao', 'zsb', 'cet4', 'cet6', 'tem4', 'tem8', 'ielts', 'toefl'):
+            value = {'primaryTrack': track, 'targetTracks': [track],
+                     'evidence': [{'sentenceIds': ['v:1'], 'reasonZh': '原句依据'}]}
+            with self.subTest(track=track):
+                self.assertEqual(validate_difficulty(value, {'v:1'})['primaryTrack'], track)
+        with self.assertRaises(StudioError):
+            validate_difficulty({**value, 'primaryTrack': 'invented', 'targetTracks': ['invented']}, {'v:1'})
+
     def test_difficulty_requires_explicit_result_and_real_evidence(self):
         valid = {'primaryTrack': 'cet6', 'targetTracks': ['cet6'],
                  'evidence': [{'sentenceIds': ['v:1'], 'reasonZh': '结合原句义项与结构审核。'}]}

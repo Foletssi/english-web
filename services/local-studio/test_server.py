@@ -40,6 +40,24 @@ class ServerTests(unittest.TestCase):
         self.assertNotIn('sourcePath', job)
         self.assertEqual(self.submitted, [job['id']])
 
+    def test_retry_submission_failure_can_be_retried_again(self):
+        job = self.server.store.create({}, 'source.mp4')
+        self.server.store.update(job['id'], status='ERROR', currentStep='enrich', progress=82)
+        def unavailable(_):
+            raise RuntimeError('executor unavailable')
+        self.server.submitter = unavailable
+        def request():
+            return urllib.request.urlopen(urllib.request.Request(
+                self.base + '/jobs/' + job['id'] + '/retry', data=b'{}', method='POST'))
+        with self.assertRaises(urllib.error.HTTPError):
+            request()
+        self.assertEqual(self.server.store.get(job['id'])['status'], 'ERROR')
+        self.server.submitter = self.submitted.append
+        with request() as response:
+            saved = json.load(response)
+        self.assertEqual(self.submitted, [job['id']])
+        self.assertEqual((saved['currentStep'], saved['progress']), ('enrich', 82))
+
 
 if __name__ == '__main__':
     unittest.main()
