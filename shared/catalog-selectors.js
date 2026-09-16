@@ -39,6 +39,7 @@
 
   function queryVideos(videos, filters = {}) {
     return publishedVideos(videos).filter(video =>
+      (!filters.track || global.EastudyTaxonomy?.approvedTracks(video).includes(String(filters.track))) &&
       (!filters.topicId || topicIds(video).includes(String(filters.topicId))) &&
       (!filters.tagId || tagIds(video).includes(String(filters.tagId))) &&
       (!filters.creatorId || String(video.creatorId || '') === String(filters.creatorId)) &&
@@ -74,6 +75,19 @@
     return queryVideos(videos, { collectionId });
   }
 
+  function collectionCover(collection, videos) {
+    const members=collectionMembers(videos,collection.id);
+    const source=collection.coverSource;
+    if(source?.type==='video')return members.find(video=>String(video.id)===String(source.videoId))?.cover||members[0]?.cover||'assets/images/video_cover_pending.svg';
+    if(source?.type==='asset')return collection.cover||'assets/images/video_cover_pending.svg';
+    // A legacy managed URL is only a display fallback, not evidence of ownership.
+    if(/\/api\/processing\/media\//.test(String(collection.cover||''))) {
+      const match=members.find(video=>video.cover===collection.cover);
+      return match?.cover||members[0]?.cover||'assets/images/video_cover_pending.svg';
+    }
+    return collection.cover||members[0]?.cover||'assets/images/video_cover_pending.svg';
+  }
+
   function decodeRouteId(value) {
     try { return decodeURIComponent(String(value || '')); } catch (_) { return null; }
   }
@@ -107,6 +121,6 @@
 
   global.EastudyCatalog = Object.freeze({
     TOPIC_CATEGORIES, uniqueStrings, publishedVideos, topicIds, categoryLabel, tagIds,
-    queryVideos, availableTags, uniqueTagPage, collectionMembers, collectionStats, decodeRouteId, creatorContent
+    queryVideos, availableTags, uniqueTagPage, collectionMembers, collectionStats, decodeRouteId, creatorContent, collectionCover
   });
 })(window);

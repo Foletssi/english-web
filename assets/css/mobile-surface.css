@@ -1,0 +1,74 @@
+/* Shared fog-blue surfaces. Player geometry and teaching colours are unchanged. */
+#settingsBackdrop,#lessonMore,#videoSwitchPanel{--panel:#fff;--text:#17263D;--muted:#536983;--line:#DCE5EF;--accent:#346DA5;--accentSoft:#E8F1FA;color:var(--text);background:var(--panel);font-family:inherit}
+html[data-theme="dark"] :is(#settingsBackdrop,#lessonMore,#videoSwitchPanel){--panel:#172536;--text:#E8EFF8;--muted:#A3B5CC;--line:#2D4057;--accent:#85B7E7;--accentSoft:#243D57}
+#settingsBackdrop{box-sizing:border-box;width:min(480px,calc(100vw - 16px));max-width:none;max-height:calc(100dvh - 32px);margin:auto;padding:0;border:1px solid var(--line);border-radius:20px;overflow:auto;overscroll-behavior:contain;box-shadow:0 16px 56px #10243b26}
+#settingsBackdrop::backdrop{background:#10243b66}
+#settingsBackdrop .settings{width:auto;max-width:none;max-height:none;margin:0;padding:0 16px 16px;overflow:visible;border:0;border-radius:0;background:transparent;box-shadow:none;color:var(--text)}
+#settingsBackdrop .set-head{position:sticky;top:0;z-index:1;display:flex;align-items:center;justify-content:space-between;min-height:52px;margin:0;background:var(--panel);border-bottom:1px solid var(--line)}
+#settingsBackdrop .set-head b{font-size:16px}
+#settingsBackdrop #closeSettings{width:44px;height:44px;min-width:44px;font-size:24px;border:0;background:transparent;color:var(--muted)}
+#settingsBackdrop .set-sec{padding:14px 0;margin:0;border-bottom:1px solid var(--line)}
+#settingsBackdrop .set-sec:last-child{border-bottom:0}
+#settingsBackdrop .advanced-preferences summary{min-height:48px;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;font-size:13px;color:var(--text)}
+#settingsBackdrop .advanced-preferences summary span{font-size:11px;color:var(--muted)}
+#settingsBackdrop .advanced-preferences summary::after{content:'+';font-size:18px;color:var(--accent)}
+#settingsBackdrop .advanced-preferences[open] summary::after{content:'−'}
+#settingsBackdrop .advanced-preferences summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#settingsBackdrop .set-title-row{margin:0 0 10px}
+#settingsBackdrop .set-title-row b{font-size:13px}
+#settingsBackdrop :is(.set-index,.set-title-row small,.setting-copy small,.outline-color-head small,.highlight-toggle small){display:none}
+#settingsBackdrop :is(.ui-option-grid,.choice-grid){display:grid;gap:6px;min-width:0}
+#settingsBackdrop :is(.ui-option-grid){grid-template-columns:repeat(2,minmax(0,1fr))}
+#settingsBackdrop .choice-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+#settingsBackdrop :is(.setting-card,.visual-choice,.level-toggle){box-sizing:border-box;min-width:0;min-height:44px;height:auto;padding:8px 6px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--muted);box-shadow:none}
+#settingsBackdrop .setting-card{display:flex;align-items:center;gap:8px}
+#settingsBackdrop .setting-icon{width:24px;height:24px;min-width:24px;font-size:18px;border-radius:8px;background:var(--accentSoft);color:var(--accent)}
+#settingsBackdrop .setting-copy{min-width:0;flex:1;text-align:left}
+#settingsBackdrop .setting-copy b{font-size:13px}
+#settingsBackdrop .setting-check{width:16px;height:16px;font-size:12px}
+#settingsBackdrop .visual-choice{display:flex;align-items:center;justify-content:center;gap:4px}
+#settingsBackdrop .visual-choice strong{font-size:14px!important;line-height:1}
+#settingsBackdrop .visual-choice span{font-size:11px}
+#settingsBackdrop :is(.active,.selected,[aria-pressed="true"]){border-color:var(--accent);background:var(--accentSoft);color:var(--accent)}
+#settingsBackdrop .level-row{display:flex;flex-wrap:wrap;gap:6px}
+#settingsBackdrop .level-toggle{flex:0 0 calc((100% - 18px)/4);font-size:12px}
+#settingsBackdrop .highlight-toggle{min-height:44px;background:var(--accentSoft);border:1px solid var(--line);color:var(--text)}
+#settingsBackdrop :is(button,input):focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#lessonMore>header,#videoSwitchPanel>header{display:flex;align-items:center;justify-content:space-between;min-height:44px;margin:0;border-bottom:1px solid var(--line)}
+#lessonMore>header b,#videoSwitchPanel>header b{font-size:15px}
+#lessonMore button,#videoSwitchPanel button{box-sizing:border-box;min-width:0;min-height:44px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--text);font-size:13px;box-shadow:none;cursor:pointer}
+#lessonMore>header button,#videoSwitchPanel>header button{border:0;color:var(--muted)}
+#lessonMore .lesson-more-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0}
+#lessonMore .lesson-more-grid button{display:flex;align-items:center;justify-content:center;gap:6px;white-space:normal;width:100%;height:auto}
+#lessonMore #videoQueueControls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));padding:0;gap:8px}
+#lessonMore #videoQueueControls label{grid-column:1/-1;min-height:44px}
+#lessonMore #openSettings{display:flex;font-size:13px}
+#lessonMore #studyLangBtn{display:flex;width:100%;height:auto;font-size:13px;white-space:nowrap}
+#settingsBackdrop .visual-choice span{white-space:nowrap}
+#lessonMore .study-chip{display:flex}
+#mobileVideoTrack{min-width:0;max-width:110px;min-height:36px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--text);font:inherit;font-size:12px}
+#lessonMore .sentence-menu{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0}
+#lessonMore .sentence-menu button{display:flex;align-items:center;justify-content:center;gap:6px;font-size:12px}
+#lessonMore .player-icon{width:18px;height:18px;flex:none}
+#lessonMore #mobileCaptionSetting{display:block;margin:12px 0 4px}
+#mobileCaptionSetting>b{display:block;font-size:12px;font-weight:500;color:var(--muted);margin:0 0 8px}
+#lessonMore .caption-segments{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;padding:3px;border:1px solid var(--line);border-radius:12px;background:var(--accentSoft)}
+#lessonMore .caption-segments button{border:0;background:transparent;padding:6px 2px;color:var(--muted);font-size:12px}
+#lessonMore .caption-segments button[aria-pressed="true"]{background:var(--panel);color:var(--accent);box-shadow:0 1px 4px #10243b15}
+#lessonMore button:disabled{opacity:.45;cursor:default}
+@media(max-width:850px){
+ #mobileHomeCatalog .mobile-categories{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding-bottom:4px}
+ #mobileHomeCatalog .home-video-body{padding:9px 8px 10px}
+ #mobileHomeCatalog .home-card-foot{gap:4px;font-size:11px;line-height:16px}
+ #mobileHomeCatalog .home-card-foot>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ #mobileHomeCatalog .home-card-foot>span:first-child{flex:1}
+ #mobileHomeCatalog .home-card-foot>span:last-child{flex:none}
+ #mobileHomeCatalog .duration{font-size:10px;padding:2px 4px;right:5px;bottom:5px}
+ #collectionsPage .browse-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 10px}
+ #collectionsPage .browse-card{min-width:0}
+ #collectionsPage .browse-card h3{font-size:14px;line-height:20px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+ #collectionsPage .browse-card img{aspect-ratio:16/9;width:100%;height:auto;object-fit:cover}
+ #videoPage .mobile-learning-tools button{display:flex;align-items:center;justify-content:center;gap:3px;height:36px;min-height:36px;border-radius:9px;font-size:11px}
+ #videoPage .mobile-learning-tools .player-icon{width:14px;height:14px;flex:none}
+ #videoPage .mobile-learning-tools button[aria-pressed="true"]{background:var(--accentSoft);color:var(--accent)}
+}

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { chromium } from 'playwright';
 
 const baseUrl = process.env.EASTUDY_LOCAL_URL || 'http://127.0.0.1:8080';
@@ -149,6 +150,24 @@ assert.equal(await phraseTokens.first().evaluate(el=>getComputedStyle(el).color)
 const tokenBoxes=await phraseTokens.evaluateAll(tokens=>tokens.map(el=>({top:el.getBoundingClientRect().top,height:el.getBoundingClientRect().height,after:getComputedStyle(el,'::after').content})));
 assert.ok(new Set(tokenBoxes.map(x=>x.top)).size>1,'long phrase actually wraps');
 assert.ok(tokenBoxes.every(x=>x.height<32 && ['none','normal'].includes(x.after)),'no multi-line phrase border');
+// Inspect rendered pixels at literal spaces, including wrapped phrases in both themes.
+for (const theme of ['light','dark']) {
+  await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+  await page.locator('#transcript [data-i="2"]').scrollIntoViewIfNeeded();
+  await page.waitForTimeout(150);
+  const gaps=await page.locator('#transcript [data-i="2"] .teaching-expression').evaluate(el=>{
+    const color=getComputedStyle(el).color.match(/\d+/g).slice(0,3).map(Number);
+    return [...el.childNodes].filter(n=>n.nodeType===3 && /^\s+$/.test(n.textContent)).flatMap(n=>{
+      const range=document.createRange();range.selectNodeContents(n);
+      return [...range.getClientRects()].filter(r=>r.width>1).map(r=>({x:r.x,y:r.y,width:r.width,height:r.height,color}));
+    });
+  });
+  assert.ok(gaps.length,'phrase has measurable spaces');
+  const screenshot=`tmp/phrase-underline-${theme}.png`;
+  await page.screenshot({path:screenshot});
+  execFileSync('py',['-3.12','audit/underline_pixels.py',screenshot,JSON.stringify(gaps)],{stdio:'pipe'});
+}
+await page.evaluate(()=>document.documentElement.dataset.theme='light');
 assert.equal(await page.locator('#transcript [data-i="0"] [data-word-start]').count(),0,'estimated timing is not treated as aligned speech');
 for (const viewport of [{width:320,height:568},{width:320,height:640},{width:360,height:800},{width:390,height:844},{width:430,height:932},{width:768,height:1024},{width:1024,height:768},{width:1280,height:800},{width:1440,height:900},{width:844,height:390}]) {
   await page.setViewportSize(viewport);
@@ -207,7 +226,6 @@ await page.locator('#video').evaluate(video => video.dispatchEvent(new Event('en
 await page.waitForURL('**/#/video/9002', { timeout: 8000 });
 assert.match(await page.locator('#videoPage .study-title').innerText(), /下一条视频测试/);
 await page.locator('#openLessonMore').click();
-await page.locator('#openVideoSwitch').click();
 await page.locator('#previousVideo').click();
 await page.waitForURL('**/#/video/9001');
 await page.waitForFunction(() => document.querySelector('#videoPage .study-title')?.textContent.includes('本地单句循环测试'));
@@ -224,9 +242,8 @@ assert.equal(await page.locator('#closeQueueDirectory').evaluate(el=>el===docume
 await page.keyboard.press('Escape');
 assert.equal(await page.locator('#queueDirectory').isVisible(),false);
 await page.locator('#openLessonMore').click();
-await page.locator('#openVideoSwitch').click();
 await page.locator('#autoplayNext').uncheck();
-await page.locator('#videoSwitchPanel [data-close]').click();
+await page.locator('#lessonMore [data-close]').click();
 await page.waitForFunction(()=>document.activeElement?.id==='openLessonMore');
 await page.locator('#video').evaluate(video=>video.dispatchEvent(new Event('ended')));
 await page.waitForTimeout(5200);
@@ -242,9 +259,8 @@ assert.equal(await cloze.inputValue(),'taking','same-sentence seek does not eras
 let warned=false;
 page.once('dialog',async dialog=>{warned=true;await dialog.dismiss()});
 await page.locator('#openLessonMore').click();
-await page.locator('#openVideoSwitch').click();
 await page.locator('#nextVideo').click();
-await page.locator('#videoSwitchPanel [data-close]').click();
+await page.locator('#lessonMore [data-close]').click();
 assert.equal(warned,true,'unfinished dictation warns before manual video navigation');
 assert.match(page.url(), /#\/video\/9001$/);
 assert.equal(await cloze.inputValue(),'taking','cancelled navigation preserves the answer');
@@ -260,7 +276,7 @@ assert.equal(await page.locator('#dockBlind').getAttribute('aria-pressed'),'true
 await page.locator('#transcript .line-en').first().click();
 assert.match(await page.locator('#transcript .line-en').first().innerText(),/Taking a short break/,'hidden captions can be revealed on mobile');
 await page.locator('#openLessonMore').click();
-await page.locator('#mobileCaptionMode').selectOption('chinese');
+await page.locator('[data-caption-value="chinese"]').click();
 await page.locator('#lessonMore [data-close]').click();
 assert.equal(await page.locator('#transcript .line-en').first().isVisible(),false,'Chinese mode hides English');
 assert.equal(await page.locator('#transcript .line-zh').first().isVisible(),true,'Chinese mode keeps translation');
@@ -268,7 +284,7 @@ await page.locator('#dockBlind').click();
 await page.locator('#dockBlind').click();
 assert.equal(await page.locator('#mobileCaptionMode').inputValue(),'chinese','blind toggle restores the last visible caption mode');
 await page.locator('#openLessonMore').click();
-await page.locator('#mobileCaptionMode').selectOption('bilingual');
+await page.locator('[data-caption-value="bilingual"]').click();
 await page.locator('#lessonMore [data-close]').click();
 for(const viewport of [{width:320,height:640},{width:390,height:844},{width:844,height:390}]){
  await page.setViewportSize(viewport);
@@ -289,7 +305,9 @@ assert.equal(await page.locator('#transcript .line-en').first().evaluate(el=>get
 await page.locator('.font-choice[data-font-value="16"]').click();
 assert.equal(await page.locator('#transcript .line-en').first().evaluate(el=>getComputedStyle(el).fontSize),'16px','mobile font can be reduced again');
 await page.locator('#closeSettings').click();
+await page.waitForFunction(()=>document.querySelector('#lessonMore').open);
 await page.keyboard.press('Escape');
+await page.waitForFunction(()=>!document.querySelector('#lessonMore').open);
 // Learning markers must acknowledge persistence and keep failures out of local state.
 assert.equal(await page.locator('#markLessonLearned').getAttribute('aria-pressed'),'false');
 await page.locator('#markLessonLearned').click();

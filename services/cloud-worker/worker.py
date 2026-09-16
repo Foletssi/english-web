@@ -22,6 +22,7 @@ from pipeline import process_job  # noqa: E402
 from ai_tools import prepare_asr_model, repair_learning  # noqa: E402
 from checkpoint import atomic_json  # noqa: E402
 from media_tools import ladder  # noqa: E402
+from teaching_prompts import TEACHING_PROMPT_VERSION  # noqa: E402
 
 
 VERSION = '2.3.2'
@@ -272,6 +273,7 @@ def capabilities():
             'whisper': whisper, 'asr': whisper_detail,
             'deepseek': bool(deepseek), 'learningRepairV4': True,
             'learningRepairV5': True, 'teachingSchemaVersion': 3,
+            'teachingPromptVersion': TEACHING_PROMPT_VERSION,
             'platform': platform.system().lower(), 'mediaProfile': ladder(1280, 720)[0]['profileVersion']}
 
 
@@ -370,6 +372,11 @@ def download(url, target, progress=None):
 def selected_assets(output, result):
     output = Path(output)
     paths = [output / 'master.m3u8', output / 'cover.webp']
+    for row in result.get('video', {}).get('coverImages', []):
+        relative = str(row.get('path') or '')
+        if not re.fullmatch(r'cover-(320|640|960)\.webp', relative):
+            raise ApiError('OUTPUT_COVER_PATH_INVALID')
+        paths.append(output / relative)
     variants = result.get('video', {}).get('playback', {}).get('variants', [])
     for row in variants:
         relative = str(row.get('path') or '')
@@ -388,6 +395,8 @@ def rewrite_result(result, job_id, source_key):
     base = f'/api/processing/media/{job_id}'
     video = result['video']
     video['cover'] = f'{base}/cover.webp'
+    video['coverImages'] = [{**row, 'url': f"{base}/{row['path']}"}
+                            for row in video.get('coverImages', [])]
     playback = video.get('playback', {})
     published_variants = [{**row, 'url': f"{base}/{row['path']}"}
                           for row in playback.get('variants', [])]

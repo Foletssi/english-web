@@ -3,7 +3,7 @@ from pathlib import Path
 from ai_tools import asr_profile, enrich, transcribe, semantic_segments
 from checkpoint import canonical_hash, file_sha256, read_valid_json, save_json_checkpoint
 from contracts import StudioError, validate_transcript
-from media_tools import extract_audio, make_cover, probe, transcode
+from media_tools import extract_audio, make_cover, make_cover_variants, probe, transcode
 
 
 def public_media(base_url, job_id, name):
@@ -44,6 +44,7 @@ def process_job(store, job_id, source_path, cover_path, ai_config, media_root,
         progress('transcode', 18, '正在生成单档均衡 540P 视频')
         variants = transcode(source_path, output, info, progress=transcode_progress)
         cover = make_cover(source_path, output / 'cover.webp', info['duration'], cover_path)
+        cover_images = make_cover_variants(cover, output)
         progress('asr', 48, '正在提取英语音轨')
         audio = extract_audio(source_path, output / 'audio.wav')
         profile = asr_profile()
@@ -72,11 +73,13 @@ def process_job(store, job_id, source_path, cover_path, ai_config, media_root,
             'title': title, 'titleZh': metadata['titleZh'],
             'description': metadata['descriptionZh'], 'creator': job['metadata'].get('creator', ''),
             'level': metadata['level'], 'levelReason': metadata['levelReason'],
+            'difficulty': metadata.get('difficulty'),
             'topicIds': metadata['topicIds'], 'tagIds': metadata['tagIds'],
             'tagAssignments': metadata['tagAssignments'],
             'goalIds': [],
             'goalMappings': metadata['goalMappings'], 'duration': info['duration'],
             'cover': public_media(base_url, job_id, 'cover.webp'),
+            'coverImages': [{**row, 'url': public_media(base_url, job_id, row['path'])} for row in cover_images],
             'mediaUrl': playback_url,
             'playback': {'policy': 'single-standard-v2',
                          'masterUrl': playback_url,

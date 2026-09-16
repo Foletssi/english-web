@@ -43,9 +43,16 @@ async function handle({ request, env, params, waitUntil }, headOnly) {
       return json({error:'PLAYBACK_AUTH_UNAVAILABLE'},503);
     }
   }else{
-    if(path!=='cover.webp')return json({error:'MEDIA_PATH_INVALID'},400);
+    if(!/^cover(?:-(?:320|640|960))?\.webp$/.test(path))return json({error:'MEDIA_PATH_INVALID'},400);
+    let ticket;
     try {
-      const ticket=await openPlaybackTicket(cookieValue(request,'eastudy_catalog'),env,'eastudy-catalog');
+      ticket=await openPlaybackTicket(cookieValue(request,'eastudy_catalog'),env,'eastudy-catalog');
+    } catch (error) {
+      if(error?.message==='PLAYBACK_TICKET_KEY_INVALID')return json({error:'PLAYBACK_AUTH_UNAVAILABLE'},503);
+      return json({error:'PLAYBACK_SESSION_REQUIRED'},401);
+    }
+    if(typeof ticket.sub!=='string'||!ticket.sub)return json({error:'PLAYBACK_FORBIDDEN'},403);
+    try {
       const access=await serviceRpc(env,'service_resolve_playback_access_v2',{p_user_id:ticket.sub,p_job_id:job,p_path:path});
       if(access?.canPlay!==true)return json({error:access?.reason||'PLAYBACK_FORBIDDEN'},403);
       key=String(access.objectKey||'');

@@ -260,5 +260,25 @@ try {
   assert.equal(await page.locator('#savedWordCount').innerText(),'0','second account never inherits first account words');
  });
  assert.deepEqual(errors,[],'no uncaught browser errors');
+ if(process.env.EASTUDY_VISUAL_DIR){
+  const fs=await import('node:fs/promises'),out=process.env.EASTUDY_VISUAL_DIR;
+  await fs.mkdir(out,{recursive:true});
+  const measurements=[];
+  for(const theme of ['light','dark']){
+   await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+   for(const [name,route] of [['home','/home'],['discovery','/collections'],['normal','/video/9001'],['blind','/video/9001'],['more','/video/9001'],['preferences','/video/9001']]){
+    await page.evaluate(()=>document.querySelectorAll('dialog[open]').forEach(d=>d.close()));
+    await go(route);await page.waitForTimeout(150);
+    if(name==='blind')await page.locator('#dockBlind').click();
+    if(name==='more'||name==='preferences')await page.locator('#openLessonMore').click();
+    if(name==='preferences')await page.locator('#lessonMore #openSettings').click();
+    await page.screenshot({path:out+'/'+theme+'-'+name+'.png'});
+    measurements.push({theme,name,...await page.evaluate(()=>({width:innerWidth,scrollWidth:document.documentElement.scrollWidth,dialogs:[...document.querySelectorAll('dialog[open]')].map(d=>({id:d.id,width:d.getBoundingClientRect().width,height:d.getBoundingClientRect().height}))}))});
+    assert.ok(measurements.at(-1).scrollWidth<=390,theme+' '+name+' must not overflow');
+    if(name==='blind')await page.locator('#dockBlind').click();
+   }
+  }
+  await fs.writeFile(out+'/measurements.json',JSON.stringify(measurements,null,2));
+ }
  assert.deepEqual(failures,[]);
 }finally{await browser.close()}

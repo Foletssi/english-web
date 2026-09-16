@@ -10,7 +10,7 @@
 <script>
 try{const raw=localStorage.getItem('zs:admin:theme');const t=raw?JSON.parse(raw):'dark';document.documentElement.dataset.theme=(t==='light'?'light':'dark');document.documentElement.dataset.adminAuth='signed-out'}catch(e){document.documentElement.dataset.adminAuth='signed-out'}
 </script>
-<link rel="stylesheet" href="assets/admin.css?v=beta6.42.0">
+<link rel="stylesheet" href="assets/admin.css?v=beta6.43.0">
 </head>
 <body>
 <div class="admin-shell">
@@ -30,7 +30,7 @@ try{const raw=localStorage.getItem('zs:admin:theme');const t=raw?JSON.parse(raw)
     </div>
   </aside>
 
-<script src="assets/teaching-editor.js?v=beta6.42.0"></script>
+<script src="assets/teaching-editor.js?v=beta6.43.0"></script>
   <main class="main">
     <header class="topbar">
       <button class="mobile-menu" id="mobileMenu"><i data-icon="menu"></i></button>
@@ -102,7 +102,9 @@ try{const raw=localStorage.getItem('zs:admin:theme');const t=raw?JSON.parse(raw)
       <label><span>英文标题 *</span><input name="title" required placeholder="例如：A Slow Morning Routine With Natural English"></label>
       <label><span>中文标题</span><input name="titleZh" placeholder="可手动填写；留空时由智能分析生成"></label>
       <label><span>创作者 *</span><select name="creatorId" id="creatorSelect" required></select></label>
-      <label><span>难度</span><select name="level"><option>A1</option><option>A2</option><option selected>A2–B1</option><option>B1</option><option>B1–B2</option><option>B2</option><option>C1</option></select></label>
+      <label><span>内部 CEFR 参考</span><select name="level"><option>A1</option><option>A2</option><option selected>A2–B1</option><option>B1</option><option>B1–B2</option><option>B2</option><option>C1</option></select></label>
+      <label><span>学员难度标签</span><select name="difficultyTrack"><option value="">不显示</option><option value="cet4">四级</option><option value="cet6">六级</option><option value="ielts">雅思</option><option value="toefl">托福</option></select></label>
+      <label><input type="checkbox" name="approveDifficulty">确认已核对难度，可展示给学员</label>
       <label><span>分类</span><select name="category"><option>日常生活</option><option>旅行</option><option>职场</option><option>教育</option><option>心理</option><option>美食</option><option>自然</option><option>科技</option></select></label>
       <label><span>内容状态</span><select name="status"><option>DRAFT</option><option>PROCESSING</option><option>REVIEW</option><option>PUBLISHED</option><option>ARCHIVED</option></select></label>
       <label class="span-2"><span>替换视频文件</span><input name="mediaFile" type="file" accept="video/mp4,video/quicktime,video/webm,video/x-m4v"><small>最大 2 GB。替换后自动生成均衡540P与学习内容，审核后再发布；不直接播放原片。</small></label>
@@ -158,18 +160,18 @@ try{const raw=localStorage.getItem('zs:admin:theme');const t=raw?JSON.parse(raw)
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script src="../assets/vendor/supabase-2.116.0.js"></script>
-<script src="../shared/supabase-config.js?v=beta6.42.0"></script>
-<script src="../shared/supabase-client.js?v=beta6.42.0"></script>
-<script src="../shared/learning-contract.js?v=beta6.42.0"></script>
-<script src="../shared/content-audit.js?v=beta6.42.0"></script>
-<script src="../shared/content-store.js?v=beta6.42.0"></script>
-<script src="../shared/content-taxonomy.js?v=beta6.42.0"></script>
-<script src="../shared/catalog-selectors.js?v=beta6.42.0"></script>
-<script src="../shared/cloud-content.js?v=beta6.42.0"></script>
-<script src="../shared/studio-client.js?v=beta6.42.0"></script>
-<script src="../shared/relative-time.js?v=beta6.42.0"></script>
-<script src="assets/studio-v2.js?v=beta6.42.0"></script>
-<script src="assets/content-check.js?v=beta6.42.0"></script>
-<script src="assets/admin.js?v=beta6.42.0"></script>
+<script src="../shared/supabase-config.js?v=beta6.43.0"></script>
+<script src="../shared/supabase-client.js?v=beta6.43.0"></script>
+<script src="../shared/learning-contract.js?v=beta6.43.0"></script>
+<script src="../shared/content-audit.js?v=beta6.43.0"></script>
+<script src="../shared/content-store.js?v=beta6.43.0"></script>
+<script src="../shared/content-taxonomy.js?v=beta6.43.0"></script>
+<script src="../shared/catalog-selectors.js?v=beta6.43.0"></script>
+<script src="../shared/cloud-content.js?v=beta6.43.0"></script>
+<script src="../shared/studio-client.js?v=beta6.43.0"></script>
+<script src="../shared/relative-time.js?v=beta6.43.0"></script>
+<script src="assets/studio-v2.js?v=beta6.43.0"></script>
+<script src="assets/content-check.js?v=beta6.43.0"></script>
+<script src="assets/admin.js?v=beta6.43.0"></script>
 </body>
 </html>

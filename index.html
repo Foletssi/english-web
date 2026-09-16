@@ -21,7 +21,8 @@
   }catch(e){document.documentElement.dataset.theme='dark'}
 })();
 </script>
-<link rel="stylesheet" href="assets/css/app.css?v=beta6.42.0">
+<link rel="stylesheet" href="assets/css/app.css?v=beta6.43.0">
+<link rel="stylesheet" href="assets/css/mobile-surface.css?v=beta6.43.0">
 </head>
 <body class="production-build">
 <div class="shell">
@@ -190,7 +191,6 @@
     <div class="vocab-review-head"><div><span>智能复习</span><b id="vocabReviewProgress">1 / 1</b></div><button id="vocabReviewClose" aria-label="关闭复习">×</button></div>
     <div class="vocab-review-track"><i id="vocabReviewBar"></i></div>
     <article class="vocab-review-card">
-      <button class="vocab-review-sound" id="vocabReviewSound" aria-label="播放发音"><i data-icon="play"></i></button>
       <small id="vocabReviewLabel">先回忆，再显示答案</small><h2 id="vocabReviewWord">word</h2><p id="vocabReviewPhon"></p>
       <blockquote id="vocabReviewContext"></blockquote>
       <button class="primary vocab-reveal" id="vocabReviewReveal">显示释义</button>
@@ -251,19 +251,19 @@
 <div class="search-backdrop" id="searchBackdrop"><section class="search-modal"><div class="search-modal-bar"><i data-icon="search"></i><input id="globalSearchInput" placeholder="搜索视频、合集、博主或学习主题…" autocomplete="off"><kbd>ESC</kbd></div><div class="search-suggestions" id="searchSuggestions"><div class="search-section-title">热门搜索</div><div class="search-chips"><button>日常生活</button><button>旅行英语</button><button>Jojo English</button><button>职场表达</button><button>心理学</button></div><div class="search-section-title">最近学习</div></div><div class="search-results" id="globalSearchResults"></div></section></div>
 <nav class="mobile-nav" id="mobileNav" aria-label="主导航"><button data-route="/home"><i data-icon="home"></i><span>视频</span></button><button data-route="/discover"><i data-icon="grid"></i><span>发现</span></button><button data-route="/vocabulary"><i data-icon="book"></i><span>生词</span></button><button data-route="/me"><i data-icon="user"></i><span>我的</span></button></nav>
 
-<div class="dict" id="dict"><div class="dict-top"><div class="dict-row"><div><div class="dict-word" id="dictWord"></div><div class="dict-phon" id="dictPhon"></div><div class="level-badges" id="dictBadges"></div></div><button class="speakbtn" id="speakWord" type="button" aria-label="播放单词发音" title="播放单词发音">🔊</button><button class="dict-close" id="dictClose" type="button" aria-label="关闭词典">×</button></div></div><div class="dict-body"><div class="pronunciation-status" id="pronunciationStatus" role="status">点击扬声器播放英音</div><div class="sense"><b>核心释义</b><p id="dictMeaning"></p></div><div class="sense"><b>语境理解</b><p id="dictExplain"></p></div><div class="context-box" id="dictContext"></div><div class="dict-actions"><button id="speakOriginal" type="button" hidden>播放原句</button><button id="copyWord">复制词语</button><button class="saveword" id="saveWord">＋ 加入生词本</button></div></div></div>
+<div class="dict" id="dict"><div class="dict-top"><div class="dict-row"><div><div class="dict-word" id="dictWord"></div><div class="dict-phon" id="dictPhon"></div><div class="level-badges" id="dictBadges"></div></div><button class="dict-close" id="dictClose" type="button" aria-label="关闭词典">×</button></div></div><div class="dict-body"><div class="sense"><b>核心释义</b><p id="dictMeaning"></p></div><div class="sense"><b>语境理解</b><p id="dictExplain"></p></div><div class="context-box" id="dictContext"></div><div class="dict-actions"><button id="speakOriginal" type="button" hidden>播放原句</button><button id="copyWord">复制词语</button><button class="saveword" id="saveWord">＋ 加入生词本</button></div></div></div>
 
-<div class="backdrop" id="settingsBackdrop"><div class="settings settings-v2">
-  <div class="set-head"><div><b>偏好设置</b><small>按你的阅读习惯定制学习界面</small></div><button id="closeSettings">×</button></div>
+<dialog id="settingsBackdrop" aria-label="学习偏好"><div class="settings settings-v2">
+  <div class="set-head"><div><b>学习偏好</b></div><button id="closeSettings">×</button></div>
   <div class="set-sec ui-set-section"><div class="set-title-row"><span class="set-index">1</span><div><b>外观主题</b><small>选择更舒适的界面明暗模式</small></div></div><div class="theme-grid ui-option-grid"><button class="option setting-card" data-theme-option="dark"><span class="setting-icon moon">◕</span><span class="setting-copy"><b>暗色模式</b><small>低光环境更舒适</small></span><span class="setting-check">✓</span></button><button class="option setting-card" data-theme-option="light"><span class="setting-icon sun">☼</span><span class="setting-copy"><b>浅色模式</b><small>清晰明亮的阅读体验</small></span><span class="setting-check">✓</span></button></div></div>
   <div class="set-sec ui-set-section"><div class="set-title-row"><span class="set-index">2</span><div><b>文字大小</b><small>调整英文与中文字幕字号</small></div></div><div class="choice-grid size-grid"><button class="visual-choice font-choice" data-font-value="16"><strong>A</strong><span>小</span></button><button class="visual-choice font-choice" data-font-value="20"><strong>A</strong><span>中</span></button><button class="visual-choice font-choice" data-font-value="24"><strong>A</strong><span>大</span></button><button class="visual-choice font-choice" data-font-value="28"><strong>A</strong><span>极大</span></button></div></div>
-  <div class="set-sec ui-set-section"><div class="set-title-row"><span class="set-index">3</span><div><b>单词间距</b><small>控制英文句子的阅读密度</small></div></div><div class="choice-grid gap-grid"><button class="visual-choice gap-choice" data-gap-value="0"><strong>A↔B</strong><span>紧凑</span></button><button class="visual-choice gap-choice" data-gap-value=".2"><strong>A↔B</strong><span>标准</span></button><button class="visual-choice gap-choice" data-gap-value=".4"><strong>A ↔ B</strong><span>宽松</span></button><button class="visual-choice gap-choice" data-gap-value=".6"><strong>A ← → B</strong><span>超宽</span></button></div></div>
+  <details class="advanced-preferences"><summary>更多偏好<span>词汇 · 跟读样式</span></summary>
+  <div class="set-sec ui-set-section"><div class="set-title-row"><div><b>单词间距</b></div></div><div class="choice-grid gap-grid"><button class="visual-choice gap-choice" data-gap-value="0"><strong>A↔B</strong><span>紧凑</span></button><button class="visual-choice gap-choice" data-gap-value=".2"><strong>A↔B</strong><span>标准</span></button><button class="visual-choice gap-choice" data-gap-value=".4"><strong>A ↔ B</strong><span>宽松</span></button><button class="visual-choice gap-choice" data-gap-value=".6"><strong>A ← → B</strong><span>超宽</span></button></div></div>
   <div class="set-sec ui-set-section"><div class="set-title-row"><span class="set-index">4</span><div><b>追踪样式</b><small>词汇等级在字幕中的显示方式</small></div></div><div class="track-grid ui-option-grid"><button class="option setting-card compact" data-track-option="highlight"><span class="setting-icon">▰</span><span class="setting-copy"><b>高亮</b><small>柔和色彩标记重点词</small></span><span class="setting-check">✓</span></button><button class="option setting-card compact" data-track-option="outline"><span class="setting-icon outline-a">A</span><span class="setting-copy"><b>描边</b><small>保留文字原色，仅做轮廓提示</small></span><span class="setting-check">✓</span></button></div><div class="outline-color-control" id="outlineColorControl"><div class="outline-color-head"><b>描边颜色</b><small>保留重点词原文字颜色，仅调整轮廓提示</small></div><div class="outline-color-tools"><input id="outlineColorInput" type="color" value="#AFC3D5" aria-label="选择描边颜色"><div class="outline-swatches"><button type="button" data-outline-color="#AFC3D5" style="--swatch:#AFC3D5" aria-label="冷灰蓝"></button><button type="button" data-outline-color="#5EEAD4" style="--swatch:#5EEAD4" aria-label="青绿色"></button><button type="button" data-outline-color="#D6A84C" style="--swatch:#D6A84C" aria-label="暖金色"></button><button type="button" data-outline-color="#A78BFA" style="--swatch:#A78BFA" aria-label="柔和紫"></button></div></div></div></div>
   <div class="set-sec ui-set-section"><div class="set-title-row"><span class="set-index">5</span><div><b>词汇高亮</b><small>在字幕正文中高亮特定等级词汇</small></div></div><button class="highlight-toggle" id="vocabHighlightToggle"><span><b>已开启</b><small>点击可关闭词汇等级标记</small></span><i></i></button></div>
-  <div class="set-sec ui-set-section"><div class="set-title-row"><span class="set-index">6</span><div><b>单词发音</b><small>选择词典、生词本与复习卡使用的英语口音</small></div></div><div class="pronunciation-choice" role="group" aria-label="单词发音口音"><button type="button" data-pronunciation-dialect="en-GB"><b>英音</b><small>English · UK</small><span>✓</span></button><button type="button" data-pronunciation-dialect="en-US"><b>美音</b><small>English · US</small><span>✓</span></button></div><p class="pronunciation-help">优先使用本设备对应口音；缺少时自动选择可用英语音色。</p></div>
   <div class="set-sec ui-set-section"><div class="set-title-row"><span class="set-index">6</span><div><b>词汇等级</b><small>只显示你关注的考试或词汇类型</small></div></div><div class="level-row v2" id="levelToggles"><button class="level-toggle" data-level="cet4">四级</button><button class="level-toggle" data-level="cet6">六级</button><button class="level-toggle" data-level="gaokao">高考</button><button class="level-toggle" data-level="ielts">雅思</button><button class="level-toggle" data-level="phrase">短语</button><button class="level-toggle" data-level="tem4">专四</button><button class="level-toggle" data-level="tem8">专八</button><button class="level-toggle" data-level="toefl">托福</button><button class="level-toggle" data-level="zsb">专升本</button></div></div>
-  <div class="set-sec ui-set-section sentence-preview"><div class="set-title-row"><span class="set-index">7</span><div><b>句子操作</b><small>学习页会使用这套统一操作按钮</small></div></div><div class="sentence-action-preview"><button><span>📋</span>复制句子</button><button><span>☆</span>收藏句子</button><button class="saved"><span>★</span>已收藏 <i>✓</i></button></div></div>
-</div></div>
+  </details>
+</div></dialog>
 
 <div class="account-backdrop" id="accountBackdrop">
   <section class="account-dialog" role="dialog" aria-modal="true" aria-labelledby="accountDialogTitle">
@@ -343,25 +343,25 @@
 
 <div class="toast" id="toast"></div>
 <script src="assets/vendor/supabase-2.116.0.js"></script>
-<script src="shared/supabase-config.js?v=beta6.42.0"></script>
-<script src="shared/supabase-client.js?v=beta6.42.0"></script>
-<script src="shared/access-guard.js?v=beta6.42.0"></script>
-<script src="shared/learning-contract.js?v=beta6.42.0"></script>
-<script src="shared/content-store.js?v=beta6.42.0"></script>
-<script src="shared/cloud-content.js?v=beta6.42.0"></script>
-<script src="shared/content-taxonomy.js?v=beta6.42.0"></script>
-<script src="shared/catalog-selectors.js?v=beta6.42.0"></script>
-<script src="shared/study-utils.js?v=beta6.42.0"></script>
-<script src="shared/personal-library.js?v=beta6.42.0"></script>
-<script src="shared/learning-queue.js?v=beta6.42.0"></script>
-<script src="shared/playback-controller.js?v=beta6.42.0"></script>
-<script src="shared/sentence-loop.js?v=beta6.42.0"></script>
+<script src="shared/supabase-config.js?v=beta6.43.0"></script>
+<script src="shared/supabase-client.js?v=beta6.43.0"></script>
+<script src="shared/access-guard.js?v=beta6.43.0"></script>
+<script src="shared/learning-contract.js?v=beta6.43.0"></script>
+<script src="shared/content-store.js?v=beta6.43.0"></script>
+<script src="shared/cloud-content.js?v=beta6.43.0"></script>
+<script src="shared/cover-images.js?v=beta6.43.0"></script>
+<script src="shared/content-taxonomy.js?v=beta6.43.0"></script>
+<script src="shared/catalog-selectors.js?v=beta6.43.0"></script>
+<script src="shared/study-utils.js?v=beta6.43.0"></script>
+<script src="shared/personal-library.js?v=beta6.43.0"></script>
+<script src="shared/learning-queue.js?v=beta6.43.0"></script>
+<script src="shared/playback-controller.js?v=beta6.43.0"></script>
+<script src="shared/sentence-loop.js?v=beta6.43.0"></script>
 <script src="assets/vendor/hls-1.6.13.min.js"></script>
-<script src="shared/player-state.js?v=beta6.42.0"></script>
-<script src="shared/media-player.js?v=beta6.42.0"></script>
-<script src="assets/js/creator-avatars.js?v=beta6.42.0"></script>
-<script src="shared/mobile-player.js?v=beta6.42.0"></script>
-<script src="shared/pronunciation.js?v=beta6.42.0"></script>
-<script src="assets/js/app.js?v=beta6.42.0"></script>
+<script src="shared/player-state.js?v=beta6.43.0"></script>
+<script src="shared/media-player.js?v=beta6.43.0"></script>
+<script src="assets/js/creator-avatars.js?v=beta6.43.0"></script>
+<script src="shared/mobile-player.js?v=beta6.43.0"></script>
+<script src="assets/js/app.js?v=beta6.43.0"></script>
 </body>
 </html>

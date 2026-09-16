@@ -6,9 +6,10 @@
   const PART_BYTES = 8 * 1024 * 1024;
   const mediaSessions = Object.create(null);
   const mediaSessionRequests = Object.create(null);
-  const mediaSessionTimers = { student: null, admin: null };
-  const activeMediaSessionKeys = { student: '', admin: '' };
-  const mediaSessionGeneration = { student: 0, admin: 0 };
+  const mediaSessionTimers = Object.create(null);
+  const activeMediaSessionKeys = Object.create(null);
+  const mediaSessionGeneration = Object.create(null);
+  let mediaSessionCleanup = Promise.resolve(), cleanupGeneration = 0;
   const usedMediaJobIds = new Set();
   const publishedRequests = new Map();
   const publishedCache = new Map();
@@ -254,31 +255,44 @@
   }
 
   async function syncMediaSession(scope, options = {}) {
+    await mediaSessionCleanup;
+    const startingGeneration=cleanupGeneration;
     const key=scope === 'admin' ? 'admin' : 'student';
     const api=auth(key);
     if(!api)throw new Error('SUPABASE_NOT_CONFIGURED');
     const {data,error}=await api.auth.getSession();
+    if(startingGeneration!==cleanupGeneration)throw new Error('ACCOUNT_CHANGED');
     const session=data?.session;
     if(error||!session?.access_token)throw error||new Error('AUTHENTICATION_REQUIRED');
     const match=String(options.mediaUrl||'').match(/\/api\/processing\/media\/([0-9a-f-]{36})\//i),jobId=match?.[1]||'';
-    const identity=String(session.user?.id||'session'),cacheKey=key+':'+identity+':'+jobId,now=Math.floor(Date.now()/1000),cached=mediaSessions[cacheKey];
-    if(activeMediaSessionKeys[key]!==cacheKey){activeMediaSessionKeys[key]=cacheKey;mediaSessionGeneration[key]+=1;clearTimeout(mediaSessionTimers[key]);mediaSessionTimers[key]=null}
-    const ownGeneration=mediaSessionGeneration[key];
+    const identity=String(session.user?.id||'session'),lane=key+':'+(jobId?'playback':'catalog'),cacheKey=key+':'+identity+':'+jobId,now=Math.floor(Date.now()/1000),cached=mediaSessions[cacheKey];
+    if(activeMediaSessionKeys[lane]!==cacheKey){activeMediaSessionKeys[lane]=cacheKey;mediaSessionGeneration[lane]=(mediaSessionGeneration[lane]||0)+1;clearTimeout(mediaSessionTimers[lane]);mediaSessionTimers[lane]=null}
+    const ownGeneration=mediaSessionGeneration[lane];
     if(!options.force&&cached?.token===session.access_token&&cached.expiresAt-now>60)return {expiresAt:cached.expiresAt,jobId};
     if(mediaSessionRequests[cacheKey])return mediaSessionRequests[cacheKey];
     const token=session.access_token;
     const request=(async()=>{
-      const response = await fetch('/api/session', { method: 'POST', headers: { Authorization: 'Bearer ' + token,'Content-Type':'application/json' },body:JSON.stringify({jobId:jobId||null}),signal:options.signal });
-      if(!response.ok){const payload=await response.json().catch(()=>({})),failure=new Error(payload.error||('MEDIA_SESSION_HTTP_'+response.status));failure.stage='session';failure.status=response.status;throw failure}
-      const payload=await response.json().catch(()=>({})),expiresAt=Number(payload.expiresAt)||Number(session.expires_at)||now+300;
+      const controller=typeof AbortController==='function'?new AbortController():null;
+      const abort=()=>controller?.abort();
+      if(options.signal?.aborted)abort();
+      options.signal?.addEventListener('abort',abort,{once:true});
+      const timeout=controller?setTimeout(abort,12000):null;
+      let response,payload;
+      try{
+        response=await fetch('/api/session', { method: 'POST', headers: { Authorization: 'Bearer ' + token,'Content-Type':'application/json' },body:JSON.stringify({jobId:jobId||null}),signal:controller?.signal||options.signal });
+        payload=await response.json();
+      }
+      finally{clearTimeout(timeout);options.signal?.removeEventListener('abort',abort)}
+      if(!response.ok){const failure=new Error(payload.error||('MEDIA_SESSION_HTTP_'+response.status));failure.stage='session';failure.status=response.status;throw failure}
+      const expiresAt=Number(payload.expiresAt)||Number(session.expires_at)||now+300;
       if(jobId)usedMediaJobIds.add(jobId);
-      if(ownGeneration!==mediaSessionGeneration[key]||activeMediaSessionKeys[key]!==cacheKey)return {expiresAt,jobId,stale:true};
+      if(ownGeneration!==mediaSessionGeneration[lane]||activeMediaSessionKeys[lane]!==cacheKey)return {expiresAt,jobId,stale:true};
       mediaSessions[cacheKey]={token,expiresAt};
-      if(jobId){
-        clearTimeout(mediaSessionTimers[key]);
+      {
+        clearTimeout(mediaSessionTimers[lane]);
         const remaining=expiresAt*1000-Date.now(),renew=remaining>60000;
         const delay=Math.max(1000,renew?remaining-60000:remaining+1000);
-        mediaSessionTimers[key]=setTimeout(()=>{mediaSessionTimers[key]=null;if(ownGeneration!==mediaSessionGeneration[key]||activeMediaSessionKeys[key]!==cacheKey)return;if(!renew){if(typeof global.dispatchEvent==='function'&&typeof global.CustomEvent==='function')global.dispatchEvent(new global.CustomEvent('eastudy:media-session-error',{detail:{scope:key,jobId,error:'VIP_EXPIRED'}}));return}syncMediaSession(key,{mediaUrl:options.mediaUrl,force:true,background:true}).catch(error=>{if(typeof global.dispatchEvent==='function'&&typeof global.CustomEvent==='function')global.dispatchEvent(new global.CustomEvent('eastudy:media-session-error',{detail:{scope:key,jobId,error:error?.message||'PLAYBACK_AUTH_UNAVAILABLE'}}))})},delay);
+        mediaSessionTimers[lane]=setTimeout(()=>{mediaSessionTimers[lane]=null;if(ownGeneration!==mediaSessionGeneration[lane]||activeMediaSessionKeys[lane]!==cacheKey)return;if(!renew){if(typeof global.dispatchEvent==='function'&&typeof global.CustomEvent==='function')global.dispatchEvent(new global.CustomEvent('eastudy:media-session-error',{detail:{scope:key,jobId,error:'VIP_EXPIRED'}}));return}syncMediaSession(key,{mediaUrl:options.mediaUrl,force:true,background:true}).catch(error=>{if(typeof global.dispatchEvent==='function'&&typeof global.CustomEvent==='function')global.dispatchEvent(new global.CustomEvent('eastudy:media-session-error',{detail:{scope:key,jobId,error:error?.message||'PLAYBACK_AUTH_UNAVAILABLE'}}))})},delay);
       }
       return {expiresAt,jobId};
     })();
@@ -287,18 +301,28 @@
   }
 
   async function clearMediaSession(waitMs = 1500) {
+    cleanupGeneration++;
     const pending=Object.values(mediaSessionRequests);
-    for(const key of ['student','admin']){mediaSessionGeneration[key]+=1;clearTimeout(mediaSessionTimers[key]);mediaSessionTimers[key]=null;activeMediaSessionKeys[key]=''}
-    const pendingSettled=Promise.allSettled(pending);
+    for(const key of Object.keys(activeMediaSessionKeys)){mediaSessionGeneration[key]=(mediaSessionGeneration[key]||0)+1;clearTimeout(mediaSessionTimers[key]);mediaSessionTimers[key]=null;activeMediaSessionKeys[key]=''}
+    const previousCleanup=mediaSessionCleanup;
+    let releaseCleanup;
+    mediaSessionCleanup=new Promise(resolve=>{releaseCleanup=resolve});
+    const pendingSettled=Promise.allSettled([previousCleanup,...pending]);
     let pendingFinished=true,timer=null;
-    if(pending.length)pendingFinished=await Promise.race([pendingSettled.then(()=>true),new Promise(resolve=>{timer=setTimeout(()=>resolve(false),Math.max(0,Number(waitMs)||0))})]);
+    pendingFinished=await Promise.race([pendingSettled.then(()=>true),new Promise(resolve=>{timer=setTimeout(()=>resolve(false),Math.max(0,Number(waitMs)||0))})]);
     clearTimeout(timer);
     Object.keys(mediaSessions).forEach(key=>{delete mediaSessions[key]});
     Object.keys(mediaSessionRequests).forEach(key=>{delete mediaSessionRequests[key]});
     const jobIds=[...usedMediaJobIds];usedMediaJobIds.clear();
-    const clearCookie=()=>fetch('/api/session', { method: 'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({jobIds}) }).catch(() => {});
+    const clearCookie=async()=>{
+      const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),8000);
+      try{await fetch('/api/session', { method: 'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({jobIds}),signal:controller.signal })}
+      catch{/* Local logout still completes offline; cookies are short-lived and server-authorized. */}
+      finally{clearTimeout(timeout)}
+    };
     await clearCookie();
-    if(!pendingFinished)void pendingSettled.then(clearCookie);
+    if(!pendingFinished)void pendingSettled.then(clearCookie).finally(releaseCleanup);
+    else releaseCleanup();
   }
 
   async function apiRequest(path, init) {

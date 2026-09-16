@@ -18,13 +18,15 @@ class PipelineTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
+    @patch('pipeline.make_cover_variants')
     @patch('pipeline.make_cover')
     @patch('pipeline.enrich')
     @patch('pipeline.transcribe')
     @patch('pipeline.extract_audio')
     @patch('pipeline.transcode')
     @patch('pipeline.probe')
-    def test_real_outputs_required_before_review(self, probe, transcode, audio, asr, enrich, cover):
+    def test_real_outputs_required_before_review(self, probe, transcode, audio, asr, enrich, cover, variants):
+        variants.return_value = [{'path': 'cover-320.webp', 'width': 320, 'height': 180, 'bytes': 1000}]
         probe.return_value = {'duration': 10, 'width': 1920, 'height': 1080}
         transcode.return_value = [{'label': '720p', 'path': '720p/index.m3u8'}]
         audio.return_value = self.root / 'audio.wav'
@@ -45,6 +47,7 @@ class PipelineTests(unittest.TestCase):
         self.assertNotIn('original', result['result']['video']['playback'])
         self.assertTrue(result['result']['video']['mediaUrl'].endswith('/720p/index.m3u8'))
         self.assertEqual(result['result']['evidence']['subtitleCount'], 1)
+        self.assertEqual(result['result']['video']['coverImages'][0]['width'], 320)
         self.assertEqual(result['result']['evidence']['aiRequestCount'], 1)
         self.assertTrue(result['result']['evidence']['humanReviewRequired'])
         repeated = process_job(self.store, self.job['id'], self.root / 'source.mp4', None,

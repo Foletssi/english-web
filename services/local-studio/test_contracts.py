@@ -1,5 +1,5 @@
 import unittest
-from contracts import StudioError, strict_json, validate_learning, validate_metadata, validate_transcript
+from contracts import StudioError, strict_json, validate_learning, validate_metadata, validate_transcript, validate_difficulty
 
 
 SOURCE = [{'id': 'v:1', 'english': 'I am going to the market.', 'startTime': 0, 'endTime': 3}]
@@ -13,6 +13,19 @@ GOOD = {'teachingSchemaVersion': 3, 'sentences': [{'id': 'v:1', 'chinese': '我�
 
 
 class Contracts(unittest.TestCase):
+    def test_difficulty_requires_explicit_result_and_real_evidence(self):
+        valid = {'primaryTrack': 'cet6', 'targetTracks': ['cet6'],
+                 'evidence': [{'sentenceIds': ['v:1'], 'reasonZh': '结合原句义项与结构审核。'}]}
+        self.assertEqual(validate_difficulty(valid, {'v:1'})['reviewStatus'], 'review')
+        for invalid in ({}, {'difficulty': valid}, {**valid, 'targetTracks': ['cet4']},
+                        {**valid, 'evidence': []},
+                        {**valid, 'evidence': [{'sentenceIds': ['unknown'], 'reasonZh': '依据'}]},
+                        {**valid, 'evidence': [{'sentenceIds': ['v:1'], 'reasonZh': None}]}):
+            with self.subTest(invalid=invalid), self.assertRaises(StudioError):
+                validate_difficulty(invalid, {'v:1'})
+        self.assertIsNone(validate_difficulty(None, {'v:1'}))
+        self.assertIsNone(validate_difficulty({'primaryTrack': None, 'targetTracks': [], 'evidence': []}, {'v:1'})['primaryTrack'])
+
     def test_empty_transcript_is_error(self):
         with self.assertRaisesRegex(StudioError, 'ASR_EMPTY'):
             validate_transcript([], 5)

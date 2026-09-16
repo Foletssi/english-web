@@ -16,6 +16,13 @@ const TAG_LABELS=Object.freeze(Object.fromEntries(TAGS.map(row=>[row.id,row.labe
 const LEVEL_LABELS=Object.freeze({
   A1:'英语入门',A2:'基础交流',B1:'日常进阶',B2:'中高阶理解',C1:'高阶表达',C2:'高阶精读'
 });
+const TRACK_LABELS=Object.freeze({cet4:'四级',cet6:'六级',ielts:'雅思',toefl:'托福'});
+function approvedTracks(video){
+  const d=video?.difficulty;
+  if(d?.schemaVersion!==1||d.reviewStatus!=='approved'||!Object.hasOwn(TRACK_LABELS,d.primaryTrack)||!Array.isArray(d.targetTracks)||!d.targetTracks.includes(d.primaryTrack))return [];
+  return [...new Set(d.targetTracks.filter(track=>Object.hasOwn(TRACK_LABELS,track)))];
+}
+function learnerDifficultyLabel(video){return approvedTracks(video).length?TRACK_LABELS[video.difficulty.primaryTrack]:''}
 
 function difficultyLabel(level){
   const parts=String(level||'').split(/[\-–—]/).map(x=>x.trim()).filter(Boolean);
@@ -23,5 +30,5 @@ function difficultyLabel(level){
   return [...new Set(parts.map(part=>LEVEL_LABELS[part]))].join('—');
 }
 
-global.EastudyTaxonomy=Object.freeze({TAGS,TAG_LABELS,LEVEL_LABELS,difficultyLabel});
+global.EastudyTaxonomy=Object.freeze({TAGS,TAG_LABELS,LEVEL_LABELS,TRACK_LABELS,difficultyLabel,approvedTracks,learnerDifficultyLabel});
 })(window);

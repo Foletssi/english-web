@@ -286,3 +286,27 @@ def make_cover(source, target, duration, uploaded=None):
     if not Path(target).is_file() or Path(target).stat().st_size == 0:
         raise StudioError('COVER_INVALID', '封面图片无法读取。')
     return Path(target)
+
+
+def make_cover_variants(source, output):
+    """Bounded WebP derivatives; never enlarge the input or change video output."""
+    Path(output).mkdir(parents=True, exist_ok=True)
+    rows = []
+    for width, budget in ((320, 20 * 1024), (640, 45 * 1024), (960, 80 * 1024)):
+        target = Path(output) / f'cover-{width}.webp'
+        for quality in (75, 65, 55):
+            run(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-nostdin', '-y',
+                 '-i', str(source), '-frames:v', '1', '-vf',
+                 f"scale=w='min({width},iw)':h='min({width * 9 // 16},ih)':force_original_aspect_ratio=decrease",
+                 '-c:v', 'libwebp', '-quality', str(quality), str(target)], 120)
+            if target.is_file() and 0 < target.stat().st_size <= budget:
+                break
+        if not target.is_file() or not 0 < target.stat().st_size <= budget:
+            raise StudioError('COVER_INVALID', '缩略图生成失败。')
+        # Width descriptors must match the encoded pixels, including small sources.
+        measured = json.loads(subprocess.check_output(['ffprobe', '-v', 'error',
+            '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'json', str(target)], timeout=30,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)))['streams'][0]
+        rows.append({'path': target.name, 'width': measured['width'], 'height': measured['height'],
+                     'bytes': target.stat().st_size})
+    return rows

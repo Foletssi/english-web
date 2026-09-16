@@ -127,6 +127,29 @@ def validate_learning(source, payload, minimum_schema_version=3):
     return merged
 
 
+def validate_difficulty(value, sentence_ids):
+    if value is None:
+        return None  # Older cached content remains reviewable without inventing a label.
+    tracks = {'cet4', 'cet6', 'ielts', 'toefl'}
+    if not isinstance(value, dict) or not {'primaryTrack', 'targetTracks', 'evidence'} <= value.keys():
+        raise StudioError('AI_DIFFICULTY_INVALID', '学习难度格式错误。', True)
+    primary, targets, evidence = value.get('primaryTrack'), value.get('targetTracks', []), value.get('evidence', [])
+    if ((primary is not None and (not isinstance(primary, str) or primary not in tracks)) or not isinstance(targets, list)
+            or any(not isinstance(x, str) or x not in tracks for x in targets)
+            or (primary is not None and primary not in targets)
+            or (primary is None and targets)):
+        raise StudioError('AI_DIFFICULTY_INVALID', '学习难度方向不合法。', True)
+    if not isinstance(evidence, list) or (primary and not evidence):
+        raise StudioError('AI_DIFFICULTY_EVIDENCE', '学习难度缺少原稿证据。', True)
+    for row in evidence:
+        if (not isinstance(row, dict) or not isinstance(row.get('sentenceIds'), list)
+                or not row['sentenceIds'] or any(not isinstance(x, str) or x not in sentence_ids for x in row['sentenceIds'])
+                or not isinstance(row.get('reasonZh'), str) or not row['reasonZh'].strip()):
+            raise StudioError('AI_DIFFICULTY_EVIDENCE', '学习难度证据与字幕不对应。', True)
+    return {'schemaVersion': 1, 'primaryTrack': primary, 'targetTracks': list(dict.fromkeys(targets)),
+            'evidence': evidence, 'reviewStatus': 'review', 'source': 'ai'}
+
+
 def validate_metadata(payload, topic_ids, goal_ids, sentence_ids, tag_ids=None):
     if not isinstance(payload, dict):
         raise StudioError('AI_METADATA_SCHEMA', 'AI 元数据不是 JSON 对象。', True)
@@ -166,6 +189,7 @@ def validate_metadata(payload, topic_ids, goal_ids, sentence_ids, tag_ids=None):
         goal['approved'] = False
         goal['status'] = 'REVIEW'
     return {'titleZh': title, 'descriptionZh': description, 'level': level,
+            'difficulty': validate_difficulty(payload.get('difficulty'), sentence_ids),
             'levelReason': str(payload.get('levelReason', '')).strip(),
             'topicIds': topics, 'tagIds': [x['tagId'] for x in tags],
             'tagAssignments': tags, 'goalMappings': goals}

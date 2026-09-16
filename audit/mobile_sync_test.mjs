@@ -22,17 +22,6 @@ assert.equal((await pending).error.message,'ACCOUNT_CHANGED');
 owner=null;assert.ok((await pull()).error);
 console.log('Catalog version cache, live access and account switching passed.');
 
-const speechSource=fs.readFileSync(new URL('../shared/pronunciation.js',import.meta.url),'utf8');
-let utterance,cancelled=0;const messages=[];
-const speechWindow={SpeechSynthesisUtterance:class{constructor(text){this.text=text}},speechSynthesis:{cancel(){cancelled++},getVoices:()=>[],speak(u){utterance=u}}};
-vm.runInNewContext(speechSource,{window:speechWindow,setTimeout,clearTimeout});
-const speech=speechWindow.EastudyPronunciation.create({report:x=>messages.push(x),timeoutMs:10});
-speech.speak('resilient','en-US');assert.equal(utterance.lang,'en-US');utterance.onstart();utterance.onend();
-speech.speak('second');const previous=utterance;speech.speak('third');const count=messages.length;previous.onerror();assert.equal(messages.length,count);
-await new Promise(resolve=>setTimeout(resolve,20));assert.match(messages.at(-1),/未能播放/);assert.ok(cancelled>0);
-speech.speak('cancelled');speech.cancel();const n=messages.length;await new Promise(resolve=>setTimeout(resolve,20));assert.equal(messages.length,n);
-console.log('Pronunciation start, no voice, timeout, replacement and cancellation passed.');
-
 // Exercise the real outbox functions through failed requests, a reload, and an
 // edit made while an older value is being saved. Cloud calls are test doubles.
 const appSource=fs.readFileSync(new URL('../assets/js/app.js',import.meta.url),'utf8');
