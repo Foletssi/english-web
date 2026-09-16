@@ -56,4 +56,3 @@ begin
 end $test$;
 select 'eight difficulty tracks and rejection checks passed' as result;
 rollback;
-

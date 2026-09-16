@@ -32,3 +32,43 @@ assert.match(studio.recoveryMessage('refresh'),/暂时无法读取/);
 const third=studio.retry('job-2',2);resolveRetry({});await third;
 assert.match(studio.recoveryMessage('job-2'),/请求已接受/,'sync failure cannot pretend retry was rejected');
 console.log('Studio recovery: duplicate clicks, refresh, failure and accepted retry reconciliation passed.');
+
+// Model a successful server commit whose response was lost, then resume the same upload.
+const elements=new Map();
+const element=selector=>{if(!elements.has(selector))elements.set(selector,{value:'Creator',dataset:{},classList:{add(){},remove(){}},textContent:'',disabled:false});return elements.get(selector)};
+let uploads=0,creates=0,serverRevision=1,clientRevision=1,resolveUpload,existingJob=null;
+const uploadWindow={
+ ZoContent:{localOnly:false,listCreators:()=>[{id:'creator',name:'Creator'}],saveVideo:value=>value},
+ EastudyCloudContent:{
+  uploadVideo:()=>{uploads++;return new Promise(resolve=>{resolveUpload=resolve})},
+  createProcessingJob:async(video,key,idempotency,revision)=>{
+   creates++;if(revision!==serverRevision)return {error:new Error('CONTENT_REVISION_CONFLICT')};
+   if(!existingJob){existingJob={id:'job-created',idempotency};serverRevision++;throw new Error('response lost')}
+   assert.equal(existingJob.idempotency,idempotency);return {data:{job:existingJob,revision:serverRevision,snapshot:{}}};
+  },
+  pullAdmin:async()=>({revision:serverRevision}),
+ },
+ EastudyAdminCloudBridge:{flush:async()=>{},revision:()=>clientRevision,importMutation:r=>{clientRevision=r.data.revision}},
+ dispatchEvent(){},
+};
+vm.runInNewContext(code.replace('global.EastudyStudioV2={','global.__uploadTest={state,submitQueue,checkService};global.EastudyStudioV2={'),{
+ window:uploadWindow,document:{readyState:'loading',addEventListener(){},querySelector:element},location:{},
+ CustomEvent:class{},setTimeout:()=>0,clearTimeout,
+});
+const upload=uploadWindow.__uploadTest;
+upload.state.serviceReady=true;
+upload.state.rows=[{id:'same-key',video:{name:'new.mp4',size:10},title:'New'}];
+const event={preventDefault(){}};
+const pending=upload.submitQueue(event);
+await upload.checkService();await upload.submitQueue(event);
+assert.equal(uploads,1,'checking connection cannot allow a concurrent upload');
+assert.equal(element('#studioV2Submit').disabled,true);
+resolveUpload({key:'source',url:'source.mp4',size:10});await pending;
+assert.equal(upload.state.rows[0].submitted,undefined);
+assert.equal(upload.state.submitting,false);
+await upload.submitQueue(event);
+assert.equal(uploads,1,'resume reuses uploaded source');
+assert.equal(creates,3,'stale revision reconciles once using the same idempotency key');
+assert.equal(upload.state.rows[0].submitted,true);
+assert.equal(clientRevision,serverRevision);
+console.log('Upload recovery: concurrent submit guarded; lost response reconciled without re-upload.');
