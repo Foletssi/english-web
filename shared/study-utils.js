@@ -32,5 +32,22 @@
     return output;
   }
 
-  global.EastudyStudyUtils = Object.freeze({ allocateSeconds, mergeWatchRanges });
+  function normalizeAnswer(value) {
+    return String(value || '').normalize('NFKC').toLocaleLowerCase('en').replace(/[’‘]/g,"'")
+      .match(/[a-z0-9]+(?:'[a-z0-9]+)*/g)?.join(' ') || '';
+  }
+
+  function expressionRange(text, surface) {
+    const source = String(text || '');
+    // These replacements preserve character offsets into the original caption.
+    const comparable = value => String(value || '').replace(/[’‘]/g,"'").replace(/[–—]/g,'-');
+    const parts = comparable(surface).trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return null;
+    const pattern = parts.map(part => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+');
+    const match = new RegExp('(?<![A-Za-z0-9])' + pattern + '(?![A-Za-z0-9])', 'i').exec(comparable(source));
+    if (!match) return null;
+    return { start: match.index, end: match.index + match[0].length, text: source.slice(match.index, match.index + match[0].length) };
+  }
+
+  global.EastudyStudyUtils = Object.freeze({ allocateSeconds, mergeWatchRanges, normalizeAnswer, expressionRange });
 })(window);

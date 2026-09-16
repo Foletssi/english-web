@@ -23,6 +23,8 @@ from ai_tools import prepare_asr_model, repair_learning  # noqa: E402
 from checkpoint import atomic_json  # noqa: E402
 from media_tools import ladder  # noqa: E402
 from teaching_prompts import TEACHING_PROMPT_VERSION  # noqa: E402
+from teaching_completion import complete_teaching  # noqa: E402
+from voice_runtime import generate_worker_voice, voice_assets, voice_capability  # noqa: E402
 
 
 VERSION = '2.3.2'
@@ -210,6 +212,8 @@ def content_type(path):
         return 'video/mp2t'
     if path.endswith('.webp'):
         return 'image/webp'
+    if path.endswith('.mp3'):
+        return 'audio/mpeg'
     return 'application/octet-stream'
 
 
@@ -224,6 +228,8 @@ def upload_concurrency():
 def upload_assets(client, lease, output, assets, cancelled=None):
     job_id = lease['job']['id']
     ordered = sorted(assets)
+    if not ordered:
+        raise ApiError('OUTPUT_ASSETS_EMPTY')
     manifest = {}
     last_progress = None
 
@@ -269,10 +275,12 @@ def capabilities():
         whisper_detail = {'inferenceReady': False, 'error': str(error)[:240]}
     deepseek = all(os.getenv(name, '').strip() for name in
                    ('ZOSPEAK_AI_API_KEY', 'ZOSPEAK_AI_BASE_URL', 'ZOSPEAK_AI_MODEL'))
+    voice = voice_capability(worker_root() / 'voice-health')
     return {'ffmpeg': bool(shutil.which('ffmpeg') and shutil.which('ffprobe')),
             'whisper': whisper, 'asr': whisper_detail,
             'deepseek': bool(deepseek), 'learningRepairV4': True,
             'learningRepairV5': True, 'teachingSchemaVersion': 3,
+            'teachingVoiceV1': voice['inferenceReady'], 'voice': voice,
             'teachingPromptVersion': TEACHING_PROMPT_VERSION,
             'platform': platform.system().lower(), 'mediaProfile': ladder(1280, 720)[0]['profileVersion']}
 
@@ -385,10 +393,31 @@ def selected_assets(output, result):
         folder = (output / relative).parent
         paths.extend(path for path in folder.iterdir()
                      if path.is_file() and path.suffix.lower() in {'.m3u8', '.ts'})
+    voice = result.get('video', {}).get('voiceManifest')
+    if voice is not None:
+        paths.extend(voice_assets(output, voice))
     assets = sorted(set(paths))
     if any(not path.is_file() or path.stat().st_size <= 0 for path in assets):
         raise ApiError('OUTPUT_ASSETS_EMPTY')
     return assets
+
+
+def prepare_voice(client, lease, rows, output, cancelled):
+    video_id = str(lease['job'].get('video_id') or '')
+    if not video_id or not run_id(lease):
+        raise ApiError('VOICE_JOB_IDENTITY_REQUIRED')
+    last_reported = [0.0]
+    report_progress(client, lease, 'ENRICH', 95, '正在生成单词与短语发音',
+                    {'substage': 'teaching-voice', 'current': 0, 'unit': 'items'})
+    def progress(event):
+        now = time.monotonic()
+        current, total = int(event['current']), int(event['total'])
+        if current < total and now - last_reported[0] < 5:
+            return
+        last_reported[0] = now
+        report_progress(client, lease, 'ENRICH', 95, f'正在生成发音 {current}/{total}',
+                        {'substage': 'teaching-voice', 'current': current, 'total': total, 'unit': 'items'})
+    return generate_worker_voice(video_id, run_id(lease), rows, output, cancelled, progress)
 
 
 def rewrite_result(result, job_id, source_key):
@@ -456,10 +485,19 @@ def process_lease(client, lease):
             repair_mode = str(job_input.get('mode') or 'fill_missing')
             repaired, provenance = repair_learning(rows, {}, repair_progress,
                                                    work / 'learning-repair-cache', repair_mode)
+            repaired, completion_provenance = complete_teaching(
+                repaired, {}, repair_progress, work / 'teaching-completion-cache')
+            provenance.extend(completion_provenance)
+            if cancelled.is_set():
+                raise ApiError('JOB_LEASE_LOST_OR_CANCELLED')
+            output = work / 'output' / job_id
+            voice = prepare_voice(client, lease, repaired, output, cancelled)
+            upload_assets(client, lease, output, voice_assets(output, voice), cancelled)
             if cancelled.is_set():
                 raise ApiError('JOB_LEASE_LOST_OR_CANCELLED')
             client.call('worker-complete-learning-v5', jobId=job_id, token=lease['token'],
                         runId=run_id(lease), result={'teachingSchemaVersion': 3, 'sentences': repaired,
+                        'voiceManifest': voice,
                         'evidence': {'kind': 'learning-repair-v5', 'teachingSchemaVersion': 3, 'provenance': provenance}})
             print(f'[complete-learning-repair] {job_id}', flush=True)
             return
@@ -488,8 +526,10 @@ def process_lease(client, lease):
             error = result_job.get('error') or {'code': 'PIPELINE_FAILED', 'message': result_job.get('message', '处理失败')}
             report_failure(client, lease, error, bool(error.get('retryable', True)))
             return
-        report_progress(client, lease, 'LOCAL_UPLOAD', 96, '正在把 HLS 与封面上传回 R2')
         output = work / 'output' / job_id
+        result_job['result']['video']['voiceManifest'] = prepare_voice(
+            client, lease, result_job['result']['sentences'], output, cancelled)
+        report_progress(client, lease, 'LOCAL_UPLOAD', 96, '正在上传视频、封面与发音')
         assets = selected_assets(output, result_job['result'])
         manifest = upload_assets(client, lease, output, assets, cancelled)
         if cancelled.is_set():
@@ -508,7 +548,8 @@ def process_lease(client, lease):
             return
         try:
             report_failure(client, lease,
-                           {'code': type(error).__name__[:80], 'message': str(error)[:500]}, True)
+                           {'code': str(getattr(error, 'code', type(error).__name__))[:80],
+                            'message': str(error)[:500]}, bool(getattr(error, 'retryable', True)))
         except Exception as report_error:
             print(f'[error-report] {report_error}', flush=True)
     finally:
@@ -524,8 +565,8 @@ def main():
     configure_ai_environment()
     caps = capabilities()
     if args.check:
-        print(json.dumps({'ready': all(caps.get(x) for x in ('ffmpeg', 'whisper', 'deepseek')), 'capabilities': caps}, ensure_ascii=False))
-        return 0 if all(caps.get(x) for x in ('ffmpeg', 'whisper', 'deepseek')) else 2
+        print(json.dumps({'ready': all(caps.get(x) for x in ('ffmpeg', 'whisper', 'deepseek', 'teachingVoiceV1')), 'capabilities': caps}, ensure_ascii=False))
+        return 0 if all(caps.get(x) for x in ('ffmpeg', 'whisper', 'deepseek', 'teachingVoiceV1')) else 2
     secret = os.getenv('EASTUDY_WORKER_SECRET', '').strip()
     if not secret:
         print('缺少 EASTUDY_WORKER_SECRET；请运行安装脚本或设置用户环境变量。', file=sys.stderr)
@@ -539,6 +580,14 @@ def main():
         print(f'[startup-heartbeat] {error}', flush=True)
     while True:
         try:
+            if not caps.get('teachingVoiceV1'):
+                client.call('worker-heartbeat')
+                if args.once:
+                    return 2
+                time.sleep(60)
+                caps = capabilities()
+                client.capabilities = caps
+                continue
             lease = client.call('worker-claim')
             if lease.get('job'):
                 process_lease(client, lease)

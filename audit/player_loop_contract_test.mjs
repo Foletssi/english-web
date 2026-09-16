@@ -27,6 +27,7 @@ class VideoFixture extends EventFixture {
     this.seeking = false;
     this.ended = false;
     this.playCount = 0;
+    this.readyState = 4;
   }
   play() {
     this.playCount += 1;
@@ -46,13 +47,20 @@ function loadLoop(video) {
   const document = new EventFixture();
   document.hidden = false;
   let frameId = 0;
+  let now = 0, timerId = 0;
+  const timers = new Map();
   const window = {
     document,
+    setTimeout: (fn, delay) => { const id = ++timerId; timers.set(id, { fn, due: now + delay }); return id; },
+    clearTimeout: id => timers.delete(id),
     requestAnimationFrame: () => ++frameId,
     cancelAnimationFrame: () => {}
   };
   vm.runInNewContext(fs.readFileSync('shared/sentence-loop.js', 'utf8'), { window });
-  return { api: window.EastudySentenceLoop, document };
+  return { api: window.EastudySentenceLoop, document, advance: ms => {
+    now += ms;
+    for (const [id, timer] of [...timers]) if (timer.due <= now && timers.has(id)) { timers.delete(id); timer.fn(); }
+  }, timerCount: () => timers.size };
 }
 
 const state = loadPlayerState();
@@ -148,6 +156,70 @@ loop.dispose();
 assert.equal(video.listenerCount(), 0);
 assert.equal(document.listenerCount(), 0);
 assert.ok(selected.includes(0) && selected.includes(1));
+
+const restoredVideo = new VideoFixture();
+const restoredLoop = loadLoop(restoredVideo).api.create(restoredVideo, {getCues: () => timeline});
+assert.equal(restoredLoop.enable(1, {autoplay: false}), true);
+assert.equal(restoredLoop.isEnabled(), true);
+assert.equal(restoredLoop.getIndex(), 1);
+assert.equal(restoredVideo.playCount, 0, 'restoring a ready loop must never request playback');
+restoredVideo.currentTime = 4;
+restoredLoop.play();
+assert.equal(restoredVideo.playCount, 1);
+restoredVideo.currentTime = 5.1;
+restoredVideo.emit('timeupdate');
+assert.equal(restoredVideo.currentTime, 3, 'restored loop still repeats its selected sentence');
+restoredLoop.dispose();
+
+const slowVideo = new VideoFixture();
+slowVideo.readyState = 1;
+const clock = loadLoop(slowVideo), feedback = [], errors = [];
+const slowLoop = clock.api.create(slowVideo, {getCues: () => timeline, onBuffering: x => feedback.push(x), onError: x => errors.push(x.message)});
+slowLoop.enable(0);
+assert.equal(slowVideo.playCount, 0, 'wait for decoded media before resuming');
+clock.advance(299);
+assert.deepEqual(feedback, [], 'fast seek does not flash buffering');
+clock.advance(1);
+assert.deepEqual(feedback, [true]);
+slowLoop.pause();
+slowVideo.readyState = 4;
+slowVideo.emit('canplay');
+assert.equal(slowVideo.playCount, 0, 'cancelled buffering cannot restart playback');
+assert.equal(clock.timerCount(), 0);
+slowLoop.play();
+slowVideo.emit('pause');
+assert.equal(slowLoop.isPlayRequested(), true, 'queued internal pause cannot cancel resumed playback');
+for (let i = 0; i < 20; i++) {
+  slowVideo.currentTime = 2.01;
+  slowVideo.emit('timeupdate');
+  slowVideo.emit('seeked');
+  assert.equal(slowVideo.currentTime, 1);
+  assert.equal(slowVideo.paused, false);
+}
+slowVideo.readyState = 1;
+slowLoop.select(1);
+slowLoop.select(0);
+slowVideo.readyState = 4;
+slowVideo.emit('seeked');
+assert.equal(slowVideo.currentTime, 1, 'latest selected cue owns the pending seek');
+assert.equal(clock.timerCount(), 0);
+slowVideo.readyState = 1;
+slowLoop.select(1);
+clock.advance(8000);
+assert.deepEqual(errors, ['SENTENCE_BUFFER_TIMEOUT']);
+assert.equal(slowLoop.isPlayRequested(), false);
+slowVideo.readyState = 4;
+const plays = slowVideo.playCount;
+slowVideo.emit('canplay');
+assert.equal(slowVideo.playCount, plays, 'late readiness after timeout must not auto-resume');
+slowLoop.play();
+assert.equal(slowVideo.paused, false, 'explicit retry resumes the selected cue');
+slowVideo.readyState = 1;
+slowLoop.select(0);
+slowLoop.dispose();
+clock.advance(10000);
+assert.equal(clock.timerCount(), 0);
+assert.equal(slowVideo.listenerCount(), 0);
 
 const html = fs.readFileSync('index.html', 'utf8');
 const app = fs.readFileSync('assets/js/app.js', 'utf8');

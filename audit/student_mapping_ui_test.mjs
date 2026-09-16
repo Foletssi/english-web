@@ -16,6 +16,9 @@ try {
   localStorage.setItem('zs:platform:content:local:v1',JSON.stringify(snapshot));
   for(const [key,value] of Object.entries({learningPlan:{track:'general',dailyMinutes:20,onboardingVersion:1},'collectionSaved:7001':true,'favSentences:9001':[0]}))localStorage.setItem('zs:user:student-fixture:'+key,JSON.stringify(value));
   snapshot.creators[0].bio='真实博主简介';
+  snapshot.videos[0].difficulty={schemaVersion:1,reviewStatus:'approved',primaryTrack:'cet6',targetTracks:['cet6']};
+  snapshot.videos[0].tagIds=['food-culture','daily-life','conversation'];
+  snapshot.videos[0].tagAssignments=snapshot.videos[0].tagIds.map(tagId=>({tagId,reviewStatus:'APPROVED'}));
   snapshot.sentences[9001].push({id:'s2',startTime:10,endTime:12,english:'Good morning.',chinese:'早上好。',reviewStatus:'APPROVED'});
   localStorage.setItem('zs:platform:content:local:v1',JSON.stringify(snapshot));
   window.mappingFixture={fail:false,calls:0,hold:false,learningCalls:[]};
@@ -41,6 +44,33 @@ try {
  await page.goto(base+'/#/favorites');
  await page.waitForFunction(()=>document.documentElement.dataset.authState==='authenticated');
  const go=async route=>{await page.evaluate(route=>{location.hash='#'+route},route);await page.waitForFunction(route=>location.hash==='#'+route&&document.querySelector('.page.active'),route);};
+ await check('home cards show difficulty, one primary and two secondary tags across themes and widths',async()=>{
+  await go('/home');await page.locator('#homePage.active').waitFor();
+  for(const theme of ['light','dark'])for(const width of [320,360,390,430,1280]){
+   await page.setViewportSize({width,height:844});
+   await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+   const selector=(width<=850?'#mobileHomeCatalog':'#videoCards')+' .home-video-card';
+   const card=page.locator(selector).first();
+   await card.waitFor({state:'visible'});
+   assert.equal(await card.locator('.video-difficulty').innerText(),'六级');
+   assert.deepEqual(await card.locator('.video-tag').allTextContents(),['美食','日常生活','真实对话']);
+   assert.equal(await card.locator('[data-tag-role=primary]').count(),1);
+   assert.equal(await card.locator('[data-tag-role=secondary]').count(),2);
+   const measurements=await page.evaluate(selector=>{
+    const node=document.querySelector(selector);
+    const box=node.getBoundingClientRect();
+    const luminance=color=>{const channels=color.match(/[\d.]+/g);if(!channels)throw new Error('Unresolved computed color: '+JSON.stringify(color)+' connected='+node.isConnected);const rgb=channels.slice(0,3).map(Number).map(x=>{x/=255;return x<=.04045?x/12.92:((x+.055)/1.055)**2.4});return rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722};
+    return [...node.querySelectorAll('.video-tag')].map(tag=>{const r=tag.getBoundingClientRect(),css=getComputedStyle(tag),a=luminance(css.color),b=luminance(css.backgroundColor);return {inside:box.width>0&&box.height>0&&r.width>0&&r.height>0&&r.left>=box.left&&r.right<=box.right+1,contrast:(Math.max(a,b)+.05)/(Math.min(a,b)+.05)}});
+   },selector);
+   assert.ok(measurements.every(row=>row.inside&&row.contrast>=4.5),JSON.stringify({theme,width,measurements}));
+  }
+  await page.setViewportSize({width:390,height:844});
+  await page.evaluate(()=>document.documentElement.dataset.theme='light');
+  await page.evaluate(()=>{const snapshot=window.ZoContent.snapshot();delete snapshot.videos[0].tagAssignments;window.ZoContent.importSnapshot(snapshot,{type:'fixture.import'})});
+  assert.deepEqual(await page.locator('#mobileHomeCatalog .home-video-card').first().locator('.video-tag').allTextContents(),['美食','日常生活','真实对话'],'legacy tag IDs survive the complete student projection');
+  await page.locator('#mobileHomeCatalog .home-video-card .video-tag').first().click();
+  await page.waitForFunction(()=>location.hash.startsWith('#/video/9001'));
+ });
  await check('favorite counts and saved collection route',async()=>{
   await go('/favorites');await page.locator('#favoritesPage.active').waitFor();
   assert.equal(await page.locator('[data-fav-tab=videos] b').innerText(),'1');

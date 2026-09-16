@@ -5,7 +5,7 @@ const source=fs.readFileSync(new URL('../shared/cloud-content.js',import.meta.ur
 let owner='a',revision=1,calls=0,fail=false,release;
 const cache=new Map(),snapshot={videos:[{id:'v1'}]};
 const api={auth:{getSession:async()=>({data:{session:owner?{user:{id:owner}}:null}})},rpc:async(name,args)=>{
- assert.equal(name,'get_published_content_if_changed_v1');calls++;
+ assert.equal(name,'get_published_catalog_if_changed_v2');calls++;
  if(release)await new Promise(resolve=>release=resolve);
  return fail?{error:Error('VIP_EXPIRED')}:{data:[{snapshot:args.p_known_revision===revision?null:snapshot,revision,published_at:'now'}]};
 }};
@@ -24,8 +24,7 @@ console.log('Catalog version cache, live access and account switching passed.');
 
 // Exercise the real outbox functions through failed requests, a reload, and an
 // edit made while an older value is being saved. Cloud calls are test doubles.
-const appSource=fs.readFileSync(new URL('../assets/js/app.js',import.meta.url),'utf8');
-const queueSource=appSource.slice(appSource.indexOf('const preferencePending='),appSource.indexOf('function applySettings()'));
+const queueSource=fs.readFileSync(new URL('../shared/preference-sync.js',import.meta.url),'utf8');
 const durable=new Map();let account='a',saveFailure=true,finishSave,saveCalls=[];
 function queueContext(){
  const context={Map,Set,JSON,Object,localStorage:{getItem:k=>durable.get(k),setItem:(k,v)=>durable.set(k,v)},
@@ -33,7 +32,8 @@ function queueContext(){
    saveCalls.push({patch,expected});if(finishSave)await new Promise(resolve=>finishSave=resolve);
    return saveFailure?{error:Error('offline')}:{data:{}};
   }}}};
- vm.createContext(context);vm.runInContext(queueSource,context);return context;
+ vm.createContext(context);vm.runInContext(queueSource,context);
+ vm.runInContext('const queue=window.EastudyPreferenceSync.create({storage:localStorage,getOwner:currentStudentStorageId,save:(patch,owner)=>window.EastudyData.saveLearningPreferences(patch,owner)});const persistPreferences=queue.enqueue,pendingPreferences=queue.read,flushPreferences=queue.flush;',context);return context;
 }
 let queue=queueContext();
 vm.runInContext("persistPreferences('a',{font:24})",queue);

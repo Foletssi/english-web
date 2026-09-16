@@ -54,12 +54,12 @@ def ai_concurrency():
     return min(4, max(1, value))
 
 
-def retry_ai(operation):
+def retry_ai(operation, max_attempts=5):
     try:
         attempts = int(os.getenv('EASTUDY_AI_ATTEMPTS', '3'))
     except ValueError:
         attempts = 3
-    attempts = min(5, max(1, attempts))
+    attempts = min(max_attempts, max(1, attempts))
     for attempt in range(attempts):
         try:
             return operation()
@@ -154,6 +154,8 @@ def call_json(config, system_prompt, payload, timeout=120, opener=None):
     base = str(config.get('baseUrl') or os.getenv('ZOSPEAK_AI_BASE_URL', '')).strip()
     if not api_key or not model or not base:
         raise StudioError('AI_NOT_CONFIGURED', '请在管理端系统设置中填写 AI 地址、模型和 API Key。')
+    if 'json' not in system_prompt.lower():
+        system_prompt += '\n只输出一个合法的 JSON 对象。'
     body = json.dumps({'model': model, 'messages': [
         {'role': 'system', 'content': system_prompt},
         {'role': 'user', 'content': json.dumps(payload, ensure_ascii=False)}],
@@ -183,7 +185,11 @@ METADATA_PROMPT = '''你是中文英语学习内容编辑。只输出JSON：
 "levelReason":"结合语速词汇句法的理由","topicIds":["允许的主题ID"],
 "tags":[{"tagId":"允许的标签ID","sentenceIds":["证据字幕ID"],"reasonZh":"与字幕对应的理由"}],
 "goalMappings":[{"goalId":"允许的目标ID","sentenceIds":["证据字幕ID"],"reason":"适用理由"}]}。
-tags通常返回3到5个不同的宽泛学习场景标签；证据不足时允许只返回1到2个，不要为了凑数添加标签。
+tags 为首页视频卡片提供一个主标签和两个副标签，返回3个不同的宽泛学习场景标签。
+数组第1项必须是最能概括整条视频的主标签，第2、3项是有实质字幕依据的副标签；发布和展示保留这个顺序。
+主标签优先具体且宽泛的内容场景，例如美食、日常生活、旅行；副标签补充真实场景或交流方式。
+不要把四级、六级、雅思、托福当作标签，难度由 difficulty 独立提供；不要重复、输出细碎动作或编造证据。
+若原稿确实无法支持3项，只返回有证据的项，不捏造主题，不用默认标签填空。
 每个标签都必须有当前视频字幕证据并说明理由。目标只表示这条真实Vlog适合辅助哪类学习者，不代表完整考试课程；
 四级、六级、雅思、托福、专八不能由CEFR机械换算，也不得因为几个词就声称覆盖完整考试。
 另输出 difficulty 对象：{"primaryTrack":"cet4/cet6/ielts/toefl或null","targetTracks":[],
@@ -359,7 +365,8 @@ def repair_learning(rows, config=None, progress=None, cache_dir=None, mode='fill
         repaired.extend(learned)
         provenance.append({**meta, 'cacheReused': reused})
         completed = index + 1
-        progress('enrich', 72 + int(23 * completed / len(batches)),
+        # Leave 86–93 for independent selection, coverage and context review.
+        progress('enrich', 72 + int(13 * completed / len(batches)),
                  f'已补齐学习内容 {completed}/{len(batches)} 批', substage='learning-repair',
                  current=completed, total=len(batches), unit='batches')
     return repaired, provenance

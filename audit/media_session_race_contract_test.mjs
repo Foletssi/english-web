@@ -3,10 +3,10 @@ import vm from 'node:vm';
 import assert from 'node:assert/strict';
 
 const jobId='00000000-0000-4000-8000-000000000001';
-let finishPost,deleteCount=0,clearFinished=false;
+let finishPost,deleteCount=0,clearFinished=false;const deletedBodies=[];
 const fetch=async(path,init={})=>{
   if(init.method==='POST')return new Promise(resolve=>{finishPost=()=>resolve(new Response(JSON.stringify({expiresAt:Math.floor(Date.now()/1000)+300}),{status:200,headers:{'Content-Type':'application/json','Set-Cookie':'eastudy_playback=late'}}))});
-  if(init.method==='DELETE'){deleteCount+=1;return new Response('{}',{status:200})}
+  if(init.method==='DELETE'){deleteCount+=1;deletedBodies.push(JSON.parse(init.body));return new Response('{}',{status:200})}
   throw new Error('unexpected request '+path);
 };
 const api={auth:{getSession:async()=>({data:{session:{access_token:'token',expires_at:Math.floor(Date.now()/1000)+300,user:{id:'user-1'}}},error:null})}};
@@ -38,6 +38,7 @@ finishPost();
 await stuckSync;
 await new Promise(resolve=>setTimeout(resolve,0));
 assert.ok(deleteCount>deletesAfterTimeout,'a response arriving after the timeout must trigger compensating cleanup');
+assert.deepEqual(deletedBodies[deletesAfterTimeout].jobIds,[jobId],'compensating DELETE must expire the late job-specific cookie, not only the catalog cookie');
 assert.notEqual(finishPost,lateOldPost,'new session may start after final cleanup');
 finishPost();
 await newSync;

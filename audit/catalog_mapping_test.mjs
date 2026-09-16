@@ -15,7 +15,35 @@ assert.equal(calls.length,1,'local mode must not write cloud data');
 
 const app=fs.readFileSync('assets/js/app.js','utf8');
 const catalogWindow={};
+vm.runInNewContext(fs.readFileSync('shared/content-taxonomy.js','utf8'),{window:catalogWindow});
 vm.runInNewContext(fs.readFileSync('shared/catalog-selectors.js','utf8'),{window:catalogWindow});
+const catalog=catalogWindow.EastudyCatalog;
+const plain=value=>JSON.parse(JSON.stringify(value));
+const tagVideo={tagIds:['food-culture','daily-life','daily-life','conversation','friendship'],tagAssignments:[
+ {tagId:'food-culture',reviewStatus:'APPROVED'}, {tagId:'daily-life',reviewStatus:'APPROVED'},
+ {tagId:'conversation',approved:true}, {tagId:'friendship',reviewStatus:'REVIEW',approved:true}
+]};
+assert.deepEqual(plain(catalog.cardTags(tagVideo)),[
+ {id:'food-culture',label:'美食',tone:'amber',role:'primary'},
+ {id:'daily-life',label:'日常生活',tone:'blue',role:'secondary'},
+ {id:'conversation',label:'真实对话',tone:'teal',role:'secondary'}
+]);
+assert.deepEqual(plain(catalog.tagIds({...tagVideo,tagAssignments:[]})),[],'explicit empty review cannot expose stale tag IDs');
+assert.equal(catalog.tagIds(tagVideo).includes('friendship'),false,'explicit pending status overrides old approved boolean in every catalog consumer');
+assert.deepEqual(plain(catalog.cardTags({tagIds:['unknown','daily-life']})).map(tag=>tag.id),['daily-life'],'legacy metadata stays truthful without fake filler');
+assert.deepEqual(plain(catalog.cardTags({tagAssignments:[{tagId:'daily-life',reviewStatus:'REVIEW'}]})),[]);
+assert.equal(catalog.cardTags({tagIds:['daily-life','food-culture','conversation','friendship']}).length,3);
+const stored=new Map();
+const contentStorage={getItem:key=>stored.get(key)??null,setItem:(key,value)=>stored.set(key,String(value))};
+Object.assign(catalogWindow,{location:{hostname:'english-web-lce.pages.dev',pathname:'/'},localStorage:contentStorage,dispatchEvent(){}});
+vm.runInNewContext(fs.readFileSync('shared/content-store.js','utf8'),{window:catalogWindow,localStorage:contentStorage,CustomEvent:class {}});
+catalogWindow.ZoContent.importSnapshot({videos:[
+ {id:11,tagIds:['daily-life']},
+ {id:12,tagIds:['daily-life'],tagAssignments:[]},
+ {id:13,tagIds:['daily-life'],tagAssignments:null}
+],sentences:{},creators:[],collections:[],jobs:[]});
+assert.deepEqual(plain(catalog.tagIds(catalogWindow.ZoContent.getVideo(11))),['daily-life'],'legacy tags survive real cloud import and hydration');
+for(const id of [12,13])assert.deepEqual(plain(catalog.tagIds(catalogWindow.ZoContent.getVideo(id))),[],'explicit empty or invalid review does not expose stale tags');
 assert.equal(catalogWindow.EastudyCatalog.decodeRouteId('%E0%A4%A'),null,'malformed routes must not throw');
 assert.equal(catalogWindow.EastudyCatalog.decodeRouteId('hello%20world'),'hello world');
 const creatorContent=catalogWindow.EastudyCatalog.creatorContent([{id:1,creatorId:'a',status:'PUBLISHED',mediaUrl:'x',collectionIds:['7']},{id:2,creatorId:'a',status:'DRAFT',mediaUrl:'x',collectionIds:['8']}],[{id:7},{id:8}],'a');

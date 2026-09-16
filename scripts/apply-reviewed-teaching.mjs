@@ -4,6 +4,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import {execFileSync} from 'node:child_process';
 import assert from 'node:assert/strict';
+import {validateReviewedPatches} from '../shared/reviewed-teaching-contract.mjs';
 const args=process.argv.slice(2), option=name=>args[args.indexOf(name)+1];
 if(!args.includes('--cli')||!args.includes('--input'))throw Error('Required: --cli PATH --input DIRECTORY [--apply]');
 const cli=option('--cli'),dir=path.resolve(option('--input'));
@@ -11,13 +12,11 @@ const read=name=>JSON.parse(fs.readFileSync(path.join(dir,name),'utf8'));
 const save=(name,data)=>fs.writeFileSync(path.join(dir,name),JSON.stringify(data,null,2));
 const source=read('source.json'),patches=read('approved-patches.json'),videoId=String(source.video.id);
 const context={window:{}};vm.runInNewContext(fs.readFileSync('shared/learning-contract.js','utf8'),context);
-assert.equal(patches.length,source.sentences.length);
-const merged=source.sentences.map((row,i)=>{
- const patch=patches[i];assert.equal(patch.id,row.id);
- assert.deepEqual(Object.keys(patch).sort(),['expressions','id','keyWords','teachingAnalysis']);
- const next={...row,...patch},issues=context.window.EastudyLearningContract.sentenceIssues(next,{forPublish:true});
- if(issues.length)throw Error(JSON.stringify(issues));return next;
-});
+const merged=validateReviewedPatches(source.sentences,source.draftSentences,patches);
+for(const next of merged){
+ const issues=context.window.EastudyLearningContract.sentenceIssues(next,{forPublish:true});
+ if(issues.length)throw Error(JSON.stringify(issues));
+}
 const literal=value=>"'"+String(value).replaceAll("'","''")+"'";
 function query(sql,name){
  const file=path.join(dir,name+'.sql');fs.writeFileSync(file,sql);

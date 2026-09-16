@@ -9,21 +9,24 @@
  function updatePlayback(playing){if(!initialized)return;$('playBtn').innerHTML='<span class="play-disc">'+icon(playing?'pause':'play')+'</span>';$('playBtn').setAttribute('aria-label',playing?'暂停':'播放')}
  function updateLearned(){if(!initialized)return;const marked=config.isLearned();$('markLessonLearned').setAttribute('aria-pressed',String(marked));$('markLessonLearned').querySelector('span').textContent=marked?'已标记':'标记已学'}
  function element(tag,id,html,parent){const node=document.createElement(tag);node.id=id;node.innerHTML=html;parent.append(node);return node}
- function closeAll(){for(const id of ['lessonMore','playerWordPanel'])if($(id)?.open)$(id).close()}
+ function closeAll(){for(const id of ['lessonMore','playerWordPanel','queueDirectory'])if($(id)?.open)$(id).close()}
  function dialog(id,label,body,page){
   const node=element('dialog',id,'<header><b>'+label+'</b><button type="button" data-close>关闭</button></header>'+body,page);
   node.setAttribute('aria-label',label);
+  node.classList.add('learning-sheet');
+  node.querySelector('[data-close]').innerHTML='<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>';
+  node.querySelector('[data-close]').setAttribute('aria-label','关闭'+label);
   node.querySelector('[data-close]').onclick=()=>node.close();
   node.addEventListener('click',event=>{if(event.target!==node)return;const r=node.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)node.close()});
   return node;
  }
- function open(node,trigger){closeAll();node._trigger=trigger;node.showModal();node.onclose=()=>{if(document.querySelector('dialog[open]'))return;const target=trigger?.isConnected&&trigger.getClientRects().length?trigger:$('openLessonMore');target?.focus()}}
+ function open(node,trigger){closeAll();node._trigger=trigger;node.showModal();node.onclose=()=>{if(document.querySelector('dialog[open]')||!config.page.classList.contains('active'))return;const target=trigger?.isConnected&&trigger.getClientRects().length?trigger:$('openLessonMore');if(target?.getClientRects().length)target.focus();config.restoreTranscriptFollow?.()}}
  function geometry(){config.updateMobilePlayerGeometry();const height=config.page.querySelector('.mobile-learning-dock').getBoundingClientRect().height;config.page.style.setProperty('--lesson-dock-height',height+'px')}
  function initialize(){
   const page=config.page;
   element('div','videoQueueControls','<button type="button" id="previousVideo">上一条视频</button><button type="button" id="openQueueDirectory">视频目录</button><button type="button" id="nextVideo">下一条视频</button><label><input type="checkbox" id="autoplayNext" checked>自动连播</label>',page).className='video-queue-controls';
   const more=dialog('lessonMore','更多','<div class="playback-options-body"></div><div class="sentence-menu"><button type="button" id="copyPinnedSentence">复制此句</button><button type="button" id="savePinnedSentence">收藏此句</button></div><div id="moreVideoNavigation"></div><div class="lesson-more-grid"></div>',page);
-  more.className='lesson-more';
+  more.classList.add('lesson-more');
   const dock=element('div','mobileLearningDock','<div class="learning-dock-links"><button type="button" id="openTeachingWords">'+icon('words')+'<span>重点词</span><b id="teachingCount">—</b></button><button type="button" id="openSavedWords">'+icon('book')+'<span>生词本</span><b id="savedWordCount">—</b></button><button type="button" id="markLessonLearned">'+icon('check')+'<span>标记已学</span></button></div>',page);dock.className='mobile-learning-dock';
   const modes=element('div','mobileLearningTools',[['watch','连续播放','play'],['intensive','逐句暂停','pause'],['loop','单句循环','listen'],['cloze','听写填空','words']].map(([mode,label,name])=>'<button type="button" data-mobile-practice="'+mode+'" aria-pressed="false">'+icon(name)+'<span>'+label+'</span></button>').join(''),page);modes.className='mobile-learning-tools';modes.setAttribute('aria-label','练习模式');
   modes.querySelectorAll('button').forEach(button=>button.onclick=()=>config.setPracticeMode(button.dataset.mobilePractice));
@@ -39,10 +42,8 @@
   $('openLessonMore').onclick=()=>{pinned=config.captureSentence();for(const id of ['copyPinnedSentence','savePinnedSentence'])$(id).disabled=!pinned.id;$('savePinnedSentence').innerHTML=icon('book')+'<span>'+(config.isSentenceSaved(pinned)?'取消收藏此句':'收藏此句')+'</span>';geometry();open(more,$('openLessonMore'))};
   for(const [id,action] of [['copyPinnedSentence','copy'],['savePinnedSentence','save']])$(id).onclick=async()=>{await config.sentenceAction(pinned,action,$(id));if(action==='save')$(id).innerHTML=icon('book')+'<span>'+(config.isSentenceSaved(pinned)?'取消收藏此句':'收藏此句')+'</span>'};
 
-  const directory=element('section','queueDirectory','<header><b>视频目录 <span id="queueDirectoryPosition"></span><button type="button" id="closeQueueDirectory">关闭目录</button></header><div id="queueDirectoryNavigation"></div><div id="queueDirectoryList"></div>',page);directory.className='queue-directory';directory.hidden=true;directory.setAttribute('role','dialog');directory.setAttribute('aria-label','视频目录');directory.setAttribute('aria-modal','true');
-  $('closeQueueDirectory').onclick=()=>{directory.hidden=true;$('openQueueDirectory').focus()};
-  directory.onkeydown=event=>{if(event.key==='Escape'){event.stopPropagation();$('closeQueueDirectory').click()}if(event.key==='Tab'){const buttons=[...directory.querySelectorAll('button:not(:disabled),input')].filter(x=>x.getClientRects().length),first=buttons[0],last=buttons.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last?.focus()}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus()}}};
-  const panel=dialog('playerWordPanel','词汇','<b id="playerWordTitle"></b><label><input type="checkbox" id="playerWordVideoOnly">只看本视频</label><div id="playerWordList"></div>',page);panel.setAttribute('aria-labelledby','playerWordTitle');panel.querySelector('[data-close]').id='closePlayerWords';
+  const directory=dialog('queueDirectory','视频目录','<div id="queueDirectoryNavigation"></div><div id="queueDirectoryList" class="sheet-body"></div>',page);directory.classList.add('queue-directory');directory.querySelector('[data-close]').id='closeQueueDirectory';
+  const panel=dialog('playerWordPanel','词汇','<label class="sheet-filter"><input type="checkbox" id="playerWordVideoOnly">只看本视频</label><div id="playerWordList" class="sheet-body"></div>',page);panel.querySelector('header b').id='playerWordTitle';panel.setAttribute('aria-labelledby','playerWordTitle');panel.querySelector('[data-close]').id='closePlayerWords';
   $('playerWordVideoOnly').onchange=config.renderPlayerWordList;
   for(const [id,kind,title] of [['openTeachingWords','teaching','重点词'],['openSavedWords','saved','生词本']])$(id).onclick=()=>{panel.dataset.kind=kind;$('playerWordTitle').textContent=title;config.renderPlayerWordList();open(panel,$(id))};
   const nodes=[page.querySelector('.ctl-left'),page.querySelector('.speed-control'),$('sentenceInsight'),$('studyLangBtn'),$('studyThemeBtn'),$('openSettings'),page.querySelector('.timeline'),page.querySelector('.center-ctl'),$('openQueueDirectory'),$('openLessonMore')];
@@ -61,5 +62,5 @@
   else{closeAll();page.append($('videoQueueControls'));page.querySelector('.study-top').append($('openLessonMore'));dock.append($('dockBlind'))}
   dock.hidden=!mobile;$('mobileLearningTools').hidden=!mobile;config.renderQueueControls();config.refreshPlayerCounts();updateModes(config.state);updatePlayback(config.state.playing);updateLearned();geometry();
  }
- global.EastudyMobilePlayer=Object.freeze({sync,updateModes,updatePlayback,updateLearned,closeAll});
+ global.EastudyMobilePlayer=Object.freeze({sync,updateModes,updatePlayback,updateLearned,closeAll,openDirectory:()=>open($('queueDirectory'),$('openQueueDirectory'))});
 })(window);

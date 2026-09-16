@@ -43,7 +43,7 @@ async function handle({ request, env, params, waitUntil }, headOnly) {
       return json({error:'PLAYBACK_AUTH_UNAVAILABLE'},503);
     }
   }else{
-    if(!/^cover(?:-(?:320|640|960))?\.webp$/.test(path))return json({error:'MEDIA_PATH_INVALID'},400);
+    if(!/^cover(?:-(?:320|640|960))?\.webp$/.test(path)&&!/^voice\/[a-f0-9]{64}\.mp3$/.test(path))return json({error:'MEDIA_PATH_INVALID'},400);
     let ticket;
     try {
       ticket=await openPlaybackTicket(cookieValue(request,'eastudy_catalog'),env,'eastudy-catalog');
@@ -57,7 +57,7 @@ async function handle({ request, env, params, waitUntil }, headOnly) {
       if(access?.canPlay!==true)return json({error:access?.reason||'PLAYBACK_FORBIDDEN'},403);
       key=String(access.objectKey||'');
     } catch (error) {
-      console.error('cover authorization unavailable',error?.message||error);
+      console.error('catalog media authorization unavailable',error?.message||error);
       return json({error:'PLAYBACK_AUTH_UNAVAILABLE'},503);
     }
   }

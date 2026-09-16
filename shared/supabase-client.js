@@ -320,6 +320,8 @@
       next_review_at: input.nextReviewAt || null,
       source_video_id: input.sourceVideoId ? Number(input.sourceVideoId) : null,
       source_sentence_id: input.sourceSentenceId ? String(input.sourceSentenceId) : null,
+      source_token_id: input.sourceTokenId ? String(input.sourceTokenId) : null,
+      source_text_revision: input.sourceTextRevision ?? null,
       content_version: String(input.contentVersion || 'published-v1')
     }, { onConflict: 'user_id,word_key' });
   }
@@ -466,9 +468,11 @@
           nextReviewAt: row.next_review_at ? Date.parse(row.next_review_at) : null,
           correctStreak: row.correct_streak || 0,
           sourceVideoId: row.source_video_id || null,
-          sourceSentenceId: row.source_sentence_id || null
+          sourceSentenceId: row.source_sentence_id || null,
+          sourceTokenId: row.source_token_id || null,
+          sourceTextRevision: row.source_text_revision ?? null
         };
-        details[row.word_key] = { phon: row.phonetic || '', meaning: row.meaning || '', context: row.context || '', contentVersion: row.content_version, sourceVideoId: row.source_video_id || null, sourceSentenceId: row.source_sentence_id || null };
+        details[row.word_key] = { phon: row.phonetic || '', meaning: row.meaning || '', context: row.context || '', contentVersion: row.content_version, sourceVideoId: row.source_video_id || null, sourceSentenceId: row.source_sentence_id || null, sourceTokenId: row.source_token_id || null, sourceTextRevision: row.source_text_revision ?? null };
       });
       setLocal(context.user.id, 'vocabMeta', meta);
       setLocal(context.user.id, 'vocabDetails', details);

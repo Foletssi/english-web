@@ -4,6 +4,7 @@ from ai_tools import asr_profile, enrich, transcribe, semantic_segments
 from checkpoint import canonical_hash, file_sha256, read_valid_json, save_json_checkpoint
 from contracts import StudioError, validate_transcript
 from media_tools import extract_audio, make_cover, make_cover_variants, probe, transcode
+from teaching_completion import complete_teaching
 
 
 def public_media(base_url, job_id, name):
@@ -65,6 +66,9 @@ def process_job(store, job_id, source_path, cover_path, ai_config, media_root,
             'duration': info['duration'],
             'wordsPerMinute': round(word_count * 60 / info['duration']),
         }, ai_config, progress, cache_dir=checkpoints / 'ai')
+        learning, completion_provenance = complete_teaching(
+            learning, ai_config, progress, checkpoints / 'teaching-completion')
+        provenance.extend(completion_provenance)
         playback_variants = [{**item, 'url': public_media(base_url, job_id, item['path'])}
                              for item in variants]
         playback_url = playback_variants[0]['url']

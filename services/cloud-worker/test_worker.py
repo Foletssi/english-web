@@ -210,6 +210,7 @@ class WorkerTests(unittest.TestCase):
     def test_content_types(self):
         self.assertEqual(worker.content_type('720p/index.m3u8'), 'application/vnd.apple.mpegurl')
         self.assertEqual(worker.content_type('720p/segment_00001.ts'), 'video/mp2t')
+        self.assertEqual(worker.content_type('voice/' + 'a' * 64 + '.mp3'), 'audio/mpeg')
 
     def test_result_urls_point_to_cloud_route(self):
         result = {'video': {'playback': {'variants': [{'path': '720p/index.m3u8'}]}}, 'evidence': {}}
@@ -251,13 +252,14 @@ class WorkerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder, patch.dict('os.environ', {'EASTUDY_WORK_ROOT': folder}):
             self.assertEqual(worker.worker_root(), Path(folder).resolve())
 
-    def test_learning_repair_skips_all_media_io(self):
+    def test_learning_repair_uploads_voice_before_commit_without_retranscoding(self):
         calls = []
         class Client:
             def call(self, action, **values):
                 calls.append((action, values))
                 return {'ok': True}
         lease = {'job': {'id': '00000000-0000-0000-0000-000000000001',
+                         'video_id': 'video-one',
                          'run_id': '00000000-0000-0000-0000-000000000002',
                          'input': {'kind': 'LEARNING_REPAIR', 'sentences': [
                              {'id': '1-1', 'english': 'Good morning', 'chinese': '', 'keyWords': ['Good morning']}
@@ -267,16 +269,47 @@ class WorkerTests(unittest.TestCase):
                      'coreMeaningZh': '早上好', 'contextMeaningZh': '日常问候'}]}]
         with tempfile.TemporaryDirectory() as folder, \
              patch.dict('os.environ', {'EASTUDY_WORK_ROOT': folder}), \
-             patch.object(worker, 'repair_learning', return_value=(repaired, {'model': 'test'})), \
+             patch.object(worker, 'repair_learning', return_value=(repaired, [{'model': 'test'}])), \
+             patch.object(worker, 'complete_teaching', side_effect=lambda rows, *args: (rows, [])), \
              patch.object(worker, 'download') as download_mock, \
              patch.object(worker, 'process_job') as process_mock, \
-             patch.object(worker, 'upload_assets') as upload_mock:
+             patch.object(worker, 'prepare_voice', return_value={'status': 'complete'}) as voice_mock, \
+             patch.object(worker, 'voice_assets', return_value=['voice.mp3']), \
+             patch.object(worker, 'upload_assets', side_effect=lambda *args: calls.append(('upload-voice', {}))) as upload_mock:
             worker.process_lease(Client(), lease)
         download_mock.assert_not_called()
         process_mock.assert_not_called()
-        upload_mock.assert_not_called()
+        upload_mock.assert_called_once()
+        voice_mock.assert_called_once()
         self.assertEqual(calls[-1][0], 'worker-complete-learning-v5')
+        self.assertEqual(calls[-2][0], 'upload-voice')
         self.assertEqual(calls[-1][1]['result']['sentences'], repaired)
+        self.assertEqual(calls[-1][1]['result']['voiceManifest'], {'status': 'complete'})
+
+    def test_incomplete_voice_cannot_upload_or_complete_repair(self):
+        lease = {'job': {'id': '00000000-0000-0000-0000-000000000001', 'video_id': 'v',
+            'run_id': 'r', 'input': {'kind': 'LEARNING_REPAIR', 'sentences': [{'id': 's'}]}}, 'token': 'secret'}
+        client = MagicMock()
+        with tempfile.TemporaryDirectory() as folder, patch.object(worker, 'worker_root', return_value=Path(folder)), \
+             patch.object(worker, 'heartbeat_loop'), patch.object(worker, 'repair_learning', return_value=([{}], [])), \
+             patch.object(worker, 'complete_teaching', return_value=([{}], [])), \
+             patch.object(worker, 'prepare_voice', side_effect=worker.ApiError('VOICE_GENERATION_INCOMPLETE')), \
+             patch.object(worker, 'upload_assets') as upload:
+            worker.process_lease(client, lease)
+        upload.assert_not_called()
+        self.assertFalse(any('complete' in call.args[0] for call in client.call.call_args_list))
+        self.assertEqual(client.call.call_args_list[-1].kwargs['error']['code'], 'VOICE_GENERATION_INCOMPLETE')
+
+    def test_unready_voice_worker_heartbeats_without_claiming(self):
+        client = MagicMock()
+        with patch('sys.argv', ['worker.py', '--once']), \
+             patch.dict('os.environ', {'EASTUDY_WORKER_SECRET': 'test-secret'}), \
+             patch.object(worker, 'configure_ai_environment'), \
+             patch.object(worker, 'capabilities', return_value={'teachingVoiceV1': False}), \
+             patch.object(worker, 'EdgeClient', return_value=client):
+            self.assertEqual(worker.main(), 2)
+        self.assertTrue(client.call.called)
+        self.assertTrue(all(call.args[0] == 'worker-heartbeat' for call in client.call.call_args_list))
 
 
 if __name__ == '__main__':

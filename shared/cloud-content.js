@@ -13,6 +13,8 @@
   const usedMediaJobIds = new Set();
   const publishedRequests = new Map();
   const publishedCache = new Map();
+  const teachingRequests = new Map();
+  const teachingCache = new Map();
 
   function auth(scope) {
     return global.EastudyAuth?.client(scope);
@@ -39,11 +41,11 @@
     if (session.error || !owner) return { snapshot: null, error: session.error || new Error('AUTH_REQUIRED') };
     if (publishedRequests.has(owner)) return publishedRequests.get(owner);
     const request = (async () => {
-      const key = 'eastudy:published:v1:' + owner;
+      const key = 'eastudy:published:catalog:v2:' + owner;
       let cached = publishedCache.get(owner);
       try { cached ||= JSON.parse(global.localStorage?.getItem(key) || 'null'); } catch (_) {}
       if (!cached?.snapshot || !Number.isSafeInteger(cached.revision)) cached = null;
-      const query = api.rpc('get_published_content_if_changed_v1', { p_known_revision: cached?.revision ?? null });
+      const query = api.rpc('get_published_catalog_if_changed_v2', { p_known_revision: cached?.revision ?? null });
       const controller = typeof AbortController === 'function' ? new AbortController() : null;
       const timeout = controller ? setTimeout(() => controller.abort(), 15000) : null;
       let result;
@@ -56,6 +58,7 @@
       const row = firstRow(data), snapshot = row?.snapshot || (cached && Number(row?.revision) === cached.revision ? cached.snapshot : null);
       if (!snapshot) return { snapshot: null, error: new Error('CONTENT_SNAPSHOT_MISSING') };
       const value = { snapshot, revision: Number(row.revision), publishedAt: row.published_at || null };
+      if (publishedCache.get(owner)?.revision !== value.revision) teachingCache.clear();
       publishedCache.set(owner, value);
       if (row.snapshot) try { global.localStorage?.setItem(key, JSON.stringify(value)); } catch (_) {}
       return { ...value, error: null };
@@ -107,6 +110,46 @@
       p_creator_id:String(creatorId),p_status:String(status),p_replacement_id:replacementId?String(replacementId):null,p_expected_revision:Number(expectedRevision)
     });
     return {data:firstRow(data),error:error||null};
+  }
+
+  async function pullVideoTeaching(videoId) {
+    const id = String(videoId || '');
+    if (global.ZoContent?.localOnly) return { videoId: id, video: global.ZoContent.getVideo(id),
+      sentences: global.ZoContent.listSentences(id), revision: null, error: null };
+    const api = auth('student');
+    if (!api) return { error: new Error('SUPABASE_NOT_CONFIGURED') };
+    const session = await api.auth.getSession(), owner = session.data?.session?.user?.id;
+    if (session.error || !owner) return { error: session.error || new Error('AUTH_REQUIRED') };
+    const revision = publishedCache.get(owner)?.revision;
+    const key = owner + ':' + id + ':' + revision;
+    if (teachingRequests.has(key)) return teachingRequests.get(key);
+    const request = (async () => {
+      const cached = teachingCache.get(key);
+      // Even a cache hit rechecks membership and publication on the server.
+      const query = api.rpc('get_published_video_teaching_v1', {
+        p_video_id: id, p_known_revision: cached?.revision ?? null });
+      const controller = typeof AbortController === 'function' ? new AbortController() : null;
+      const timeout = controller ? setTimeout(() => controller.abort(), 15000) : null;
+      let result;
+      try { result = await (controller && typeof query.abortSignal === 'function' ? query.abortSignal(controller.signal) : query); }
+      finally { clearTimeout(timeout); }
+      const current = await api.auth.getSession();
+      if (current.data?.session?.user?.id !== owner) return { error: new Error('ACCOUNT_CHANGED') };
+      if (result.error) { teachingCache.delete(key); return { error: result.error }; }
+      const row = firstRow(result.data);
+      const value = row?.video ? { videoId: id, video: row.video, sentences: row.sentences,
+        revision: Number(row.revision), error: null } : cached?.revision === Number(row?.revision) ? cached : null;
+      if (!value || String(value.video?.id) !== id || !Array.isArray(value.sentences))
+        return { error: new Error('VIDEO_TEACHING_MISSING') };
+      const catalogRevision = publishedCache.get(owner)?.revision;
+      if (Number.isSafeInteger(catalogRevision) && value.revision !== catalogRevision)
+        return { error: new Error('CONTENT_REVISION_CONFLICT') };
+      teachingCache.set(key, value);
+      while (teachingCache.size > 3) teachingCache.delete(teachingCache.keys().next().value);
+      return value;
+    })().catch(error => ({ error }));
+    teachingRequests.set(key, request);
+    try { return await request; } finally { if (teachingRequests.get(key) === request) teachingRequests.delete(key); }
   }
 
   async function setVideoPublication(videoId, status, expectedRevision) {
@@ -279,13 +322,14 @@
       const timeout=controller?setTimeout(abort,12000):null;
       let response,payload;
       try{
+        // Track before dispatch: even an aborted/late response may set a job cookie.
+        if(jobId)usedMediaJobIds.add(jobId);
         response=await fetch('/api/session', { method: 'POST', headers: { Authorization: 'Bearer ' + token,'Content-Type':'application/json' },body:JSON.stringify({jobId:jobId||null}),signal:controller?.signal||options.signal });
         payload=await response.json();
       }
       finally{clearTimeout(timeout);options.signal?.removeEventListener('abort',abort)}
       if(!response.ok){const failure=new Error(payload.error||('MEDIA_SESSION_HTTP_'+response.status));failure.stage='session';failure.status=response.status;throw failure}
       const expiresAt=Number(payload.expiresAt)||Number(session.expires_at)||now+300;
-      if(jobId)usedMediaJobIds.add(jobId);
       if(ownGeneration!==mediaSessionGeneration[lane]||activeMediaSessionKeys[lane]!==cacheKey)return {expiresAt,jobId,stale:true};
       mediaSessions[cacheKey]={token,expiresAt};
       {
@@ -302,6 +346,8 @@
 
   async function clearMediaSession(waitMs = 1500) {
     cleanupGeneration++;
+    teachingCache.clear();
+    global.ZoContent?.clearVideoTeaching?.();
     const pending=Object.values(mediaSessionRequests);
     for(const key of Object.keys(activeMediaSessionKeys)){mediaSessionGeneration[key]=(mediaSessionGeneration[key]||0)+1;clearTimeout(mediaSessionTimers[key]);mediaSessionTimers[key]=null;activeMediaSessionKeys[key]=''}
     const previousCleanup=mediaSessionCleanup;
@@ -379,7 +425,7 @@
     return { key: payload.key, url: payload.url, size: Number(payload.size) || file.size, type: 'image/webp' };
   }
 
-  global.EastudyCloudContent = Object.freeze({ pullPublished, pullAdmin, saveDraft, publish, publishEntity, setCreatorStatus, setVideoPublication, createLearningRepair, listTrash, trashVideos, restoreVideo,planPermanentVideoDeletion,confirmPermanentVideoDeletion,getVideoDeletion,
+  global.EastudyCloudContent = Object.freeze({ pullPublished, pullVideoTeaching, pullAdmin, saveDraft, publish, publishEntity, setCreatorStatus, setVideoPublication, createLearningRepair, listTrash, trashVideos, restoreVideo,planPermanentVideoDeletion,confirmPermanentVideoDeletion,getVideoDeletion,
     processingHealth, createProcessingJob, listProcessingJobs, listProcessingHistory, getProcessingJob, retryProcessingJob,
     syncMediaSession, clearMediaSession, uploadVideo, uploadCreatorAvatar });
 })(window);

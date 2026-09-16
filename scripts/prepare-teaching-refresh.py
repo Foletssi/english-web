@@ -13,6 +13,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'services/local-studio'))
 from ai_tools import repair_learning
+from teaching_completion import complete_teaching
 from teaching_prompts import TEACHING_PROMPT_VERSION
 
 spec = importlib.util.spec_from_file_location('catalog_refresh', ROOT / 'scripts/refresh-catalog-assets.py')
@@ -36,6 +37,12 @@ def main(args):
             if edited.get('english') != sentence.get('english'):
                 raise RuntimeError('Locked draft sentence differs from published source; review manually')
             current.update({k: edited[k] for k in ('selectionLocked', 'keyWords', 'expressions') if k in edited})
+        if edited and edited.get('translationLocked'):
+            if edited.get('english') != sentence.get('english'):
+                raise RuntimeError('Locked translation source differs from published source')
+            if sentence.get('translationLocked') and edited.get('chinese') != sentence.get('chinese'):
+                raise RuntimeError('Published and draft locked translations diverge')
+            current.update(translationLocked=True, chinese=edited.get('chinese', ''))
         inputs.append(current)
     saved = {'revision': source['revision'], 'video': video, 'sentences': published, 'draftSentences': draft,
              'promptVersion': TEACHING_PROMPT_VERSION}
@@ -51,6 +58,9 @@ def main(args):
                           'total': kwargs.get('total')}, ensure_ascii=False), flush=True)
     candidates, provenance = repair_learning(inputs, config=config, progress=progress,
                                              cache_dir=args.output / 'cache', mode='reextract')
+    candidates, completion_provenance = complete_teaching(candidates, config, progress,
+                                                        args.output / 'completion-cache')
+    provenance.extend(completion_provenance)
     catalog.save(args.output / 'candidates.json', {'sentences': candidates, 'provenance': provenance})
     print(json.dumps({'videoId': video_id, 'sentences': len(candidates),
                       'expressions': sum(len(s['expressions']) for s in candidates), 'status': 'review'}), flush=True)

@@ -39,6 +39,7 @@
       ids,
       cursor: preferredIndex >= 0 ? preferredIndex : (ids.length ? 0 : -1),
       cycle: 0,
+      history: [],
       loop: input?.loop === true
     };
   }
@@ -53,11 +54,11 @@
     const index = locate(queue, videoId);
     const current = index < 0 ? Number(queue?.cursor) || 0 : index;
     if (current + 1 < ids.length) {
-      const updated = { ...queue, cursor: current + 1 };
+      const updated = { ...queue, cursor: current + 1, historyBackTo: null };
       return { id: ids[current + 1], finished: false, wrapped: false, queue: updated };
     }
     if (queue?.loop) {
-      const updated = { ...queue, cursor: 0, cycle: (Number(queue.cycle) || 0) + 1 };
+      const updated = { ...queue, cursor: 0, cycle: (Number(queue.cycle) || 0) + 1, historyBackTo: null };
       return { id: ids[0], finished: false, wrapped: true, queue: updated };
     }
     return { id: null, finished: true, wrapped: false, queue: { ...queue, cursor: current } };
@@ -66,6 +67,13 @@
   function previous(queue, videoId) {
     const ids = Array.isArray(queue?.ids) ? queue.ids : [];
     if (!ids.length) return { id: null, boundary: true, queue };
+    const history = validHistory(queue);
+    const currentId = String(videoId);
+    const end = history[history.length - 1] === currentId ? history.length - 1 : history.length;
+    if (end > 0) {
+      const id = history[end - 1];
+      return { id, boundary: false, queue: { ...queue, cursor: ids.indexOf(id), historyBackTo: end - 1 } };
+    }
     const index = locate(queue, videoId);
     const current = index < 0 ? Number(queue?.cursor) || 0 : index;
     if (current > 0) {
@@ -75,5 +83,21 @@
     return { id: null, boundary: true, queue: { ...queue, cursor: 0 } };
   }
 
-  global.EastudyLearningQueue = Object.freeze({ mappedGoalIds, eligibleVideos, create, locate, next, previous });
+  function validHistory(queue) {
+    const ids = new Set((queue?.ids || []).map(String));
+    return (Array.isArray(queue?.history) ? queue.history : []).map(String).filter(id => ids.has(id)).filter((id, index, rows) => index === 0 || id !== rows[index - 1]).slice(-100);
+  }
+
+  // Called only after authorized media has produced playable data. Preview and
+  // failed navigation must never add a visit to the history.
+  function commit(queue, videoId) {
+    const id = String(videoId), cursor = locate(queue, id);
+    if (cursor < 0) return queue;
+    let history = validHistory(queue);
+    if (Number.isInteger(queue.historyBackTo) && history[queue.historyBackTo] === id) history = history.slice(0, queue.historyBackTo + 1);
+    if (history[history.length - 1] !== id) history.push(id);
+    return { ...queue, cursor, history: history.slice(-100), historyBackTo: null };
+  }
+
+  global.EastudyLearningQueue = Object.freeze({ mappedGoalIds, eligibleVideos, create, locate, next, previous, commit });
 })(window);

@@ -12,6 +12,13 @@ function equal(actual, expected, message) {
 
 const catalog = load(new URL('../shared/catalog-selectors.js', import.meta.url)).EastudyCatalog;
 const utils = load(new URL('../shared/study-utils.js', import.meta.url)).EastudyStudyUtils;
+equal(utils.normalizeAnswer('  FIGURE   out! '), 'figure out', 'cloze ignores case, outer punctuation and repeated whitespace');
+equal(utils.normalizeAnswer('Don’t'), "don't", 'curly apostrophes keep contractions');
+equal(utils.normalizeAnswer('figureout') === utils.normalizeAnswer('figure out'), false, 'cloze preserves word boundaries');
+equal(utils.normalizeAnswer('...'), '', 'punctuation alone is not an answer');
+equal(utils.expressionRange('I couldn’t care less.', "couldn't care less"), {start:2,end:20,text:'couldn’t care less'}, 'curly punctuation matches while preserving original answer');
+equal(utils.expressionRange('Keep your HEAD ABOVE WATER.', 'head above water').text, 'HEAD ABOVE WATER', 'answer retains source capitalization');
+equal(utils.expressionRange('Taking stock.', 'king'), null, 'expression cannot start inside a word');
 const learningContract = load(new URL('../shared/learning-contract.js', import.meta.url)).EastudyLearningContract;
 const videos = [
   { id: 1, status: 'PUBLISHED', mediaUrl: '/1.m3u8', topicIds: ['daily', 'food'], tagIds: ['coffee', 'morning', 'friendship'], creatorId: 'c1', collectionIds: [7], duration: 60 },

@@ -7,6 +7,10 @@
   const KEY=localOnly?'zs:platform:content:local:v1':`zs:platform:content:${scope}:v3`;
   const contentStorage=scope==='admin'&&global.sessionStorage?global.sessionStorage:(global.localStorage||localStorage);
   const SCHEMA_VERSION=3;
+  const teachingOverlays=new Map();
+  let catalogRevision=null;
+  function clearVideoTeaching(){teachingOverlays.clear()}
+  global.addEventListener?.('storage',event=>{if(event.key===KEY||event.key===null){clearVideoTeaching();catalogRevision=null}});
   const deep=x=>JSON.parse(JSON.stringify(x));
   const now=()=>new Date().toISOString();
   const learningContract=global.EastudyLearningContract;
@@ -78,7 +82,8 @@
     const seedVideos=new Map(seed.videos.map(v=>[String(v.id),v]));
     parsed.videos=(parsed.videos||[]).map(v=>{
       const base=seedVideos.get(String(v.id))||{};
-      return {...v,titleZh:v.titleZh||v.aiAnalysis?.titleZh||base.titleZh||'',topicIds:Array.isArray(v.topicIds)?v.topicIds:[],tagIds:Array.isArray(v.tagIds)?v.tagIds:[],tagAssignments:Array.isArray(v.tagAssignments)?v.tagAssignments:[],goalIds:Array.isArray(v.goalIds)?v.goalIds:(base.goalIds||[]),goalMappings:Array.isArray(v.goalMappings)?v.goalMappings:[]};
+      const reviewTags=Object.hasOwn(v,'tagAssignments')?{tagAssignments:Array.isArray(v.tagAssignments)?v.tagAssignments:[]}:{};
+      return {...v,titleZh:v.titleZh||v.aiAnalysis?.titleZh||base.titleZh||'',topicIds:Array.isArray(v.topicIds)?v.topicIds:[],tagIds:Array.isArray(v.tagIds)?v.tagIds:[],...reviewTags,goalIds:Array.isArray(v.goalIds)?v.goalIds:(base.goalIds||[]),goalMappings:Array.isArray(v.goalMappings)?v.goalMappings:[]};
     });
     parsed.sentences=parsed.sentences||{};
     for(const [videoId,rows] of Object.entries(parsed.sentences)){
@@ -118,6 +123,7 @@
     return migrated;
   }
   function save(state,event){
+    clearVideoTeaching();
     state.schemaVersion=SCHEMA_VERSION;
     if(event){state.auditLog=state.auditLog||[];state.auditLog.unshift({id:'audit-'+Date.now(),at:now(),...event});state.auditLog=state.auditLog.slice(0,200)}
     contentStorage.setItem(KEY,JSON.stringify(state));
@@ -129,11 +135,26 @@
     if(localOnly&&event?.type==='cloud.import')throw new Error('LOCAL_CONTENT_CLOUD_IMPORT_DISABLED');
     if(!input||typeof input!=='object'||!Array.isArray(input.videos))throw new Error('INVALID_CONTENT_SNAPSHOT');
     const migrated=migrate(deep(input));
+    catalogRevision=Number.isSafeInteger(event?.revision)?event.revision:null;
     return save(migrated,event);
   }
+  function teachingSource(row){return JSON.stringify([String(row.id),Number(row.textRevision)||1,String(row.english||''),String(row.chinese||''),Number(row.startTime),Number(row.endTime),row.wordTimings,row.expressions])}
+  function hydrateVideoTeaching(detail){
+    if(localOnly)return false;
+    if(scope!=='student'||detail?.error||!detail?.video||!Array.isArray(detail.sentences))throw new Error('VIDEO_TEACHING_MISSING');
+    const id=String(detail.videoId),s=load(),video=s.videos.find(item=>String(item.id)===id);
+    if(!video||video.status!=='PUBLISHED'||String(detail.video.id)!==id||detail.video.status!=='PUBLISHED')throw new Error('VIDEO_NOT_FOUND');
+    if(!Number.isSafeInteger(catalogRevision)||detail.revision!==catalogRevision)throw new Error('CONTENT_REVISION_CONFLICT');
+    const rows=detail.sentences.map((row,index)=>normalizeSentence(row,id,index)),current=s.sentences[id]||[];
+    if(rows.length!==current.length||rows.some((row,index)=>teachingSource(row)!==teachingSource(current[index])))throw new Error('TEACHING_SOURCE_STALE');
+    teachingOverlays.set(id,{owner:String(global.__eastudyStudentId||''),video:deep(detail.video),sentences:rows});
+    while(teachingOverlays.size>3)teachingOverlays.delete(teachingOverlays.keys().next().value);
+    return true;
+  }
+  function videoTeaching(id){const value=teachingOverlays.get(String(id));if(value&&value.owner!==String(global.__eastudyStudentId||'')){clearVideoTeaching();return null}return value}
   function withCreatorName(video,snapshot){if(!video)return null;const creator=(snapshot.creators||[]).find(row=>row.status!=='DELETED'&&String(row.id)===String(video.creatorId));return {...video,creator:creator?.name||video.creator||''}}
   function listVideos(opts={}){const s=load();let rows=s.videos||[];if(opts.publishedOnly)rows=rows.filter(v=>v.status==='PUBLISHED');return deep(rows.map(video=>withCreatorName(video,s)))}
-  function getVideo(id){const s=load();return deep(withCreatorName((s.videos||[]).find(v=>String(v.id)===String(id)),s))}
+  function getVideo(id){const s=load(),base=(s.videos||[]).find(v=>String(v.id)===String(id));return deep(withCreatorName(base?videoTeaching(id)?.video||base:null,s))}
   function saveVideo(input){const s=load();if(s.tombstones?.[String(input.id)]?.deleted)throw new Error('VIDEO_IN_TRASH');const id=input.id??Date.now();const idx=s.videos.findIndex(v=>String(v.id)===String(id));const prev=idx>=0?s.videos[idx]:{},normalized=deep(input);if(typeof normalized.tagIds==='string')normalized.tagIds=[...new Set(normalized.tagIds.split(',').map(x=>x.trim()).filter(Boolean))];const next={...prev,...normalized,id,updatedAt:now()};if(idx>=0)s.videos[idx]=next;else s.videos.unshift(next);save(s,{type:idx>=0?'video.update':'video.create',entityId:id,title:next.title});return deep(next)}
   function setVideoStatus(id,status){const s=load();const v=s.videos.find(x=>String(x.id)===String(id));if(!v)throw new Error('VIDEO_NOT_FOUND');if(status==='PUBLISHED'){if(localOnly&&isPlaceholder(v))throw new Error('PLACEHOLDER_MEDIA_REMOVED');const rows=(s.sentences[String(id)]||[]).map((row,index)=>normalizeSentence(row,id,index));const issues=learningContract?.videoPublishIssues(v,rows)||[];if(issues.length){const error=new Error(issues[0].code);error.issues=issues;throw error}}v.status=status;v.publishedAt=status==='PUBLISHED'?(v.publishedAt||now()):v.publishedAt;v.updatedAt=now();save(s,{type:'video.status',entityId:id,status});return deep(v)}
   function isPlaceholder(video){
@@ -169,7 +190,7 @@
   }
   function acceptsJob(videoId,jobId){const s=load(),t=s.tombstones?.[String(videoId)],v=s.videos.find(v=>String(v.id)===String(videoId));return !t?.deleted&&!(t?.ignoredJobIds||[]).includes(jobId)&&(!v||v.localStudioJobId===jobId)}
   function allowJobRetry(videoId,jobId){const s=load(),v=s.videos.find(v=>String(v.id)===String(videoId));if(!v||s.tombstones?.[String(videoId)]?.deleted)throw new Error('VIDEO_NOT_FOUND');if(v.localStudioJobId!==jobId)throw new Error('JOB_ID_CONFLICT');const marker=s.tombstones?.[String(videoId)];if(marker){marker.ignoredJobIds=marker.ignoredJobIds.filter(id=>id!==jobId);save(s,{type:'pipeline.retry-authorized',videoId})}}
-  function listSentences(videoId){return deep(((load().sentences||{})[String(videoId)]||[]).map((x,i)=>normalizeSentence(x,videoId,i)))}
+  function listSentences(videoId){return deep((videoTeaching(videoId)?.sentences||(load().sentences||{})[String(videoId)]||[]).map((x,i)=>normalizeSentence(x,videoId,i)))}
   function saveSentence(videoId,input){const s=load();if(!s.videos.some(v=>String(v.id)===String(videoId)))throw new Error('VIDEO_NOT_FOUND');const key=String(videoId);s.sentences[key]=s.sentences[key]||[];const id=input.id||`${key}-${Date.now()}`;const idx=s.sentences[key].findIndex(x=>x.id===id);const prev=idx>=0?s.sentences[key][idx]:{};const next=normalizeSentence({...prev,...deep(input),id},videoId,idx>=0?prev.order:s.sentences[key].length);if(idx>=0)s.sentences[key][idx]=next;else s.sentences[key].push(next);s.sentences[key].sort((a,b)=>a.order-b.order||a.startTime-b.startTime);save(s,{type:'sentence.save',entityId:id,videoId:Number(videoId)});return deep(next)}
   function replaceSentences(videoId,rows){const s=load();if(!s.videos.some(v=>String(v.id)===String(videoId)))throw new Error('VIDEO_NOT_FOUND');s.sentences[String(videoId)]=deep(rows).map((x,i)=>normalizeSentence({...x,id:x.id||`${videoId}-${i+1}`},videoId,i));save(s,{type:'sentences.replace',videoId:Number(videoId),count:rows.length});}
   function validCreatorName(value){const name=String(value??'').trim();if(!name||/^(null|undefined)$/i.test(name)||name.length>80)throw new Error('CREATOR_NAME_INVALID');return name}
@@ -209,5 +230,5 @@
     return {ok:issues.every(x=>x.severity!=='ERROR'),schemaVersion:s.schemaVersion,videoCount:s.videos.length,publishedCount:published.length,creatorCount:s.creators.length,collectionCount:s.collections.length,jobCount:s.jobs.length,issues};
   }
   function reset(){if(localOnly){deleteVideos(listVideos().map(v=>v.id));return snapshot()}return save(deep(seed),{type:'content.reset'})}
-  global.ZoContent={KEY,SCOPE:scope,SCHEMA_VERSION,localOnly,allowJobRetry,isPlaceholder,deleteVideos,listTrash,restoreVideo,acceptsJob,snapshot,importSnapshot,listVideos,getVideo,saveVideo,setVideoStatus,deleteVideo,listSentences,saveSentence,replaceSentences,listCreators,prepareCreator,saveCreator,deleteCreator,restoreCreator,listCollections,prepareCollection,saveCollection,listJobs,startPipeline,updatePipeline,completePipeline,failPipeline,advancePipeline,audit,reset};
+  global.ZoContent={KEY,SCOPE:scope,SCHEMA_VERSION,localOnly,clearVideoTeaching,hydrateVideoTeaching,allowJobRetry,isPlaceholder,deleteVideos,listTrash,restoreVideo,acceptsJob,snapshot,importSnapshot,listVideos,getVideo,saveVideo,setVideoStatus,deleteVideo,listSentences,saveSentence,replaceSentences,listCreators,prepareCreator,saveCreator,deleteCreator,restoreCreator,listCollections,prepareCollection,saveCollection,listJobs,startPipeline,updatePipeline,completePipeline,failPipeline,advancePipeline,audit,reset};
 })(window);

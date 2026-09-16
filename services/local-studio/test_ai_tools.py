@@ -96,6 +96,19 @@ class AiTools(unittest.TestCase):
         with self.assertRaisesRegex(StudioError, 'AI_NOT_CONFIGURED'):
             call_json({}, 'x', {})
 
+    def test_chinese_prompt_includes_json_mode_instruction(self):
+        def open_fake(request, **_):
+            body = json.loads(request.data)
+            self.assertEqual(body['response_format'], {'type': 'json_object'})
+            self.assertIn('json', body['messages'][0]['content'].lower())
+            self.assertTrue(body['messages'][0]['content'].startswith('请提供自然的中文释义。'))
+            self.assertEqual(json.loads(body['messages'][1]['content']), {'word': 'resilient'})
+            return FakeResponse({'choices': [{'finish_reason': 'stop',
+                'message': {'content': '{"ok":true}'}}]})
+        result, _ = call_json({'baseUrl': 'https://api.example.com', 'model': 'fixture', 'apiKey': 'fixture'},
+                              '请提供自然的中文释义。', {'word': 'resilient'}, opener=open_fake)
+        self.assertTrue(result['ok'])
+
     def test_ai_concurrency_is_bounded(self):
         with patch.dict('os.environ', {'EASTUDY_AI_CONCURRENCY': '99'}):
             self.assertEqual(ai_concurrency(), 4)

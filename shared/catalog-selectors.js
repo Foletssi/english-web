@@ -31,10 +31,12 @@
   }
 
   function tagIds(video) {
-    const direct=Array.isArray(video?.tagIds)?video.tagIds.filter(Boolean):[];
-    return uniqueStrings(direct.length?direct:(video?.tagAssignments || [])
-      .filter(row => row && (row.reviewStatus === 'APPROVED' || row.approved === true))
-      .map(row => row.tagId ?? row.id));
+    const direct=uniqueStrings(video?.tagIds);
+    if(!Array.isArray(video?.tagAssignments))return direct;
+    const approved=uniqueStrings(video.tagAssignments
+      .filter(row=>row&&(row.reviewStatus==='APPROVED'||(!row.reviewStatus&&row.approved===true)))
+      .map(row=>row.tagId??row.id).filter(Boolean));
+    return direct.length?direct.filter(id=>approved.includes(id)):approved;
   }
 
   function queryVideos(videos, filters = {}) {
@@ -73,6 +75,14 @@
 
   function collectionMembers(videos, collectionId) {
     return queryVideos(videos, { collectionId });
+  }
+
+  function cardTags(video) {
+    const presentation=global.EastudyTaxonomy?.CARD_TAGS||{};
+    // Publication preserves assignment order: main first, then two supporting tags.
+    // Legacy rows with fewer approved tags stay truthful until metadata is refreshed.
+    return tagIds(video).filter(id=>Object.hasOwn(presentation,id))
+      .slice(0,3).map((id,index)=>({id,...presentation[id],role:index===0?'primary':'secondary'}));
   }
 
   function collectionCover(collection, videos) {
@@ -120,7 +130,7 @@
   }
 
   global.EastudyCatalog = Object.freeze({
-    TOPIC_CATEGORIES, uniqueStrings, publishedVideos, topicIds, categoryLabel, tagIds,
+    TOPIC_CATEGORIES, uniqueStrings, publishedVideos, topicIds, categoryLabel, tagIds, cardTags,
     queryVideos, availableTags, uniqueTagPage, collectionMembers, collectionStats, decodeRouteId, creatorContent, collectionCover
   });
 })(window);

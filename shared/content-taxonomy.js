@@ -13,6 +13,18 @@ const TAGS=Object.freeze([
   {id:'conversation',labelZh:'真实对话'}
 ]);
 const TAG_LABELS=Object.freeze(Object.fromEntries(TAGS.map(row=>[row.id,row.labelZh])));
+// Stable topic colours belong to video cards, never to teaching highlights.
+const CARD_TAGS=Object.freeze({
+  'daily-life':Object.freeze({label:'日常生活',tone:'blue'}),
+  'spoken-english':Object.freeze({label:'日常口语',tone:'mint'}),
+  friendship:Object.freeze({label:'朋友交流',tone:'rose'}),
+  workplace:Object.freeze({label:'职场沟通',tone:'purple'}),
+  'travel-scene':Object.freeze({label:'旅行出行',tone:'green'}),
+  'food-culture':Object.freeze({label:'美食',tone:'amber'}),
+  'study-skills':Object.freeze({label:'学习成长',tone:'ochre'}),
+  culture:Object.freeze({label:'文化交流',tone:'slate'}),
+  conversation:Object.freeze({label:'真实对话',tone:'teal'})
+});
 const LEVEL_LABELS=Object.freeze({
   A1:'英语入门',A2:'基础交流',B1:'日常进阶',B2:'中高阶理解',C1:'高阶表达',C2:'高阶精读'
 });
@@ -30,5 +42,5 @@ function difficultyLabel(level){
   return [...new Set(parts.map(part=>LEVEL_LABELS[part]))].join('—');
 }
 
-global.EastudyTaxonomy=Object.freeze({TAGS,TAG_LABELS,LEVEL_LABELS,TRACK_LABELS,difficultyLabel,approvedTracks,learnerDifficultyLabel});
+global.EastudyTaxonomy=Object.freeze({TAGS,TAG_LABELS,CARD_TAGS,LEVEL_LABELS,TRACK_LABELS,difficultyLabel,approvedTracks,learnerDifficultyLabel});
 })(window);

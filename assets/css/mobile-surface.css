@@ -1,6 +1,46 @@
+/* Card topics: ordered main + two supporting tags. Passive labels share the card link. */
+.home-card-labels{display:grid;gap:4px;margin-top:8px;min-width:0}
+.home-card-primary,.home-card-secondary{display:flex;flex-wrap:wrap;align-items:center;gap:4px;min-width:0}
+.home-card-labels :is(.video-tag,.video-difficulty){box-sizing:border-box;display:inline-flex;align-items:center;max-width:100%;min-height:22px;padding:2px 6px;border-radius:6px;font-size:11px;line-height:18px;white-space:normal;overflow-wrap:anywhere}
+.home-card-labels .video-difficulty{color:var(--muted);background:var(--panel2);font-weight:500}
+.home-card-labels .video-tag{color:var(--tag-ink);background:var(--tag-fill);font-weight:500}
+.home-card-labels [data-tag-role="primary"]{font-weight:650}
+.video-tag[data-tone="blue"]{--tag-fill:#E8F1FA;--tag-ink:#245985}
+.video-tag[data-tone="mint"]{--tag-fill:#E5F4ED;--tag-ink:#23644C}
+.video-tag[data-tone="rose"]{--tag-fill:#FAE9EE;--tag-ink:#8B3F59}
+.video-tag[data-tone="purple"]{--tag-fill:#EEEAF9;--tag-ink:#60438B}
+.video-tag[data-tone="green"]{--tag-fill:#EDF3E3;--tag-ink:#4D6533}
+.video-tag[data-tone="amber"]{--tag-fill:#FFF0DF;--tag-ink:#81420D}
+.video-tag[data-tone="ochre"]{--tag-fill:#F5F0DD;--tag-ink:#70601D}
+.video-tag[data-tone="slate"]{--tag-fill:#EDEFF7;--tag-ink:#4E5981}
+.video-tag[data-tone="teal"]{--tag-fill:#E2F2F3;--tag-ink:#28616A}
+html[data-theme="dark"] .video-tag[data-tone="blue"]{--tag-fill:#203A52;--tag-ink:#ABD3F4}
+html[data-theme="dark"] .video-tag[data-tone="mint"]{--tag-fill:#203E34;--tag-ink:#A6DFC5}
+html[data-theme="dark"] .video-tag[data-tone="rose"]{--tag-fill:#472B36;--tag-ink:#F0BDCD}
+html[data-theme="dark"] .video-tag[data-tone="purple"]{--tag-fill:#372C4C;--tag-ink:#D5C2F0}
+html[data-theme="dark"] .video-tag[data-tone="green"]{--tag-fill:#303D25;--tag-ink:#CBDEAC}
+html[data-theme="dark"] .video-tag[data-tone="amber"]{--tag-fill:#49321F;--tag-ink:#FFD2A0}
+html[data-theme="dark"] .video-tag[data-tone="ochre"]{--tag-fill:#423C22;--tag-ink:#E6D594}
+html[data-theme="dark"] .video-tag[data-tone="slate"]{--tag-fill:#303649;--tag-ink:#C7CFEF}
+html[data-theme="dark"] .video-tag[data-tone="teal"]{--tag-fill:#223D42;--tag-ink:#AFE0E6}
+
 /* Shared fog-blue surfaces. Player geometry and teaching colours are unchanged. */
-#settingsBackdrop,#lessonMore,#videoSwitchPanel{--panel:#fff;--text:#17263D;--muted:#536983;--line:#DCE5EF;--accent:#346DA5;--accentSoft:#E8F1FA;color:var(--text);background:var(--panel);font-family:inherit}
-html[data-theme="dark"] :is(#settingsBackdrop,#lessonMore,#videoSwitchPanel){--panel:#172536;--text:#E8EFF8;--muted:#A3B5CC;--line:#2D4057;--accent:#85B7E7;--accentSoft:#243D57}
+#settingsBackdrop,#lessonMore,#videoSwitchPanel,.learning-sheet{--panel:#fff;--text:#17263D;--muted:#536983;--line:#DCE5EF;--accent:#346DA5;--accentSoft:#E8F1FA;color:var(--text);background:var(--panel);font-family:inherit}
+html[data-theme="dark"] :is(#settingsBackdrop,#lessonMore,#videoSwitchPanel,.learning-sheet){--panel:#172536;--text:#E8EFF8;--muted:#A3B5CC;--line:#2D4057;--accent:#85B7E7;--accentSoft:#243D57}
+/* Top-layer sheets own their scroll area, so no fixed player ancestor clips them. */
+#videoPage dialog.learning-sheet{position:fixed;inset:auto 0 max(8px,env(safe-area-inset-bottom));transform:none;box-sizing:border-box;width:min(480px,calc(100vw - 16px));max-width:none;max-height:calc(100dvh - 24px);margin:0 auto;padding:0 14px 14px;border:1px solid var(--line);border-radius:18px;overflow:auto;overscroll-behavior:contain;box-shadow:0 16px 56px #10243b26}
+#videoPage dialog.learning-sheet:not([open]){display:none}
+#videoPage .learning-sheet::backdrop{background:#10243b66}
+#videoPage .learning-sheet>header{position:sticky;top:0;z-index:1;display:flex;align-items:center;justify-content:space-between;min-height:52px;margin:0;border-bottom:1px solid var(--line);background:var(--panel)}
+#videoPage .learning-sheet>header b{font-size:15px}
+#videoPage .learning-sheet>header button{display:grid;place-items:center;width:44px;height:44px;flex:none;padding:0;border:0;background:transparent;color:var(--muted)}
+#videoPage .learning-sheet .sheet-body{display:grid;gap:8px;margin:12px 0 0}
+#videoPage .learning-sheet .sheet-body button{min-width:0;min-height:48px;text-align:left;white-space:normal;overflow-wrap:anywhere;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--text);font:inherit;font-size:13px;line-height:1.5;cursor:pointer}
+#videoPage .learning-sheet .sheet-body button[aria-current="true"]{background:var(--accentSoft);border-color:var(--accent);color:var(--accent)}
+#videoPage .learning-sheet .sheet-filter{display:flex;align-items:center;gap:8px;min-height:44px;margin-top:8px;font-size:12px;color:var(--muted)}
+#videoPage .learning-sheet :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media(max-width:850px){#videoPage #lessonMore.learning-sheet{bottom:calc(var(--lesson-dock-height,112px) + 8px);max-height:calc(var(--player-viewport,100dvh) - var(--lesson-dock-height,112px) - 24px)}}
+@media(min-width:851px){#videoPage dialog.learning-sheet{inset:0;margin:auto;max-height:calc(100dvh - 48px)}}
 #settingsBackdrop{box-sizing:border-box;width:min(480px,calc(100vw - 16px));max-width:none;max-height:calc(100dvh - 32px);margin:auto;padding:0;border:1px solid var(--line);border-radius:20px;overflow:auto;overscroll-behavior:contain;box-shadow:0 16px 56px #10243b26}
 #settingsBackdrop::backdrop{background:#10243b66}
 #settingsBackdrop .settings{width:auto;max-width:none;max-height:none;margin:0;padding:0 16px 16px;overflow:visible;border:0;border-radius:0;background:transparent;box-shadow:none;color:var(--text)}
@@ -47,6 +87,12 @@ html[data-theme="dark"] :is(#settingsBackdrop,#lessonMore,#videoSwitchPanel){--p
 #settingsBackdrop .visual-choice span{white-space:nowrap}
 #lessonMore .study-chip{display:flex}
 #mobileVideoTrack{min-width:0;max-width:110px;min-height:36px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--text);font:inherit;font-size:12px}
+#catalogCategoryDialog{box-sizing:border-box;width:min(480px,calc(100vw - 24px));max-height:calc(100dvh - 32px);padding:16px;border:1px solid var(--line);border-radius:18px;background:var(--panel);color:var(--text);overflow:auto;overscroll-behavior:contain}
+#catalogCategoryDialog::backdrop{background:#10243b66}
+#catalogCategoryDialog header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+#catalogCategoryDialog button{min-height:44px;padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--text);font:inherit;font-size:13px;cursor:pointer}
+#catalogCategoryDialog .category-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+#catalogCategoryDialog [aria-pressed="true"]{background:var(--accentSoft);border-color:var(--accent);color:var(--accent)}
 #lessonMore .sentence-menu{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0}
 #lessonMore .sentence-menu button{display:flex;align-items:center;justify-content:center;gap:6px;font-size:12px}
 #lessonMore .player-icon{width:18px;height:18px;flex:none}
@@ -72,3 +118,11 @@ html[data-theme="dark"] :is(#settingsBackdrop,#lessonMore,#videoSwitchPanel){--p
  #videoPage .mobile-learning-tools .player-icon{width:14px;height:14px;flex:none}
  #videoPage .mobile-learning-tools button[aria-pressed="true"]{background:var(--accentSoft);color:var(--accent)}
 }
+/* The pronunciation control stays in the word header, never in the player bar. */
+.dict-row > div:first-child{min-width:0;flex:1}
+.dict-voice{flex:0 0 44px;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:50%;background:var(--panel);color:var(--accent);padding:0}
+.dict-voice[hidden]{display:none}
+.dict-voice svg{width:18px;height:18px;flex:none}
+.dict-voice[data-state="playing"]{background:var(--accentSoft)}
+.dict-voice-status{font-size:12px;color:var(--muted)}
+.dict-voice-status:empty{display:none}

@@ -25,7 +25,8 @@ class PipelineTests(unittest.TestCase):
     @patch('pipeline.extract_audio')
     @patch('pipeline.transcode')
     @patch('pipeline.probe')
-    def test_real_outputs_required_before_review(self, probe, transcode, audio, asr, enrich, cover, variants):
+    @patch('pipeline.complete_teaching', side_effect=lambda rows, *args: (rows, [{'stage': 'independent-review'}]))
+    def test_real_outputs_required_before_review(self, completion, probe, transcode, audio, asr, enrich, cover, variants):
         variants.return_value = [{'path': 'cover-320.webp', 'width': 320, 'height': 180, 'bytes': 1000}]
         probe.return_value = {'duration': 10, 'width': 1920, 'height': 1080}
         transcode.return_value = [{'label': '720p', 'path': '720p/index.m3u8'}]
@@ -48,7 +49,8 @@ class PipelineTests(unittest.TestCase):
         self.assertTrue(result['result']['video']['mediaUrl'].endswith('/720p/index.m3u8'))
         self.assertEqual(result['result']['evidence']['subtitleCount'], 1)
         self.assertEqual(result['result']['video']['coverImages'][0]['width'], 320)
-        self.assertEqual(result['result']['evidence']['aiRequestCount'], 1)
+        self.assertEqual(result['result']['evidence']['aiRequestCount'], 2)
+        self.assertEqual(completion.call_count, 1)
         self.assertTrue(result['result']['evidence']['humanReviewRequired'])
         repeated = process_job(self.store, self.job['id'], self.root / 'source.mp4', None,
                                {}, self.root / 'media')

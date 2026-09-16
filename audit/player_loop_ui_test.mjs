@@ -47,7 +47,7 @@ for (const rows of Object.values(snapshot.sentences)) for (const row of rows) {
 const browser = await chromium.launch({ headless: true, executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
 const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
 await context.route('**/assets/vendor/*.js', route => {
-  const body = route.request().url().includes('/hls-') ? 'window.Hls=undefined;' : 'window.supabase={createClient(){return {}}};';
+  const body = route.request().url().includes('/hls-') ? 'window.Hls=undefined;' : 'window.supabase={createClient(){return {auth:{getSession:async()=>({data:{session:null},error:null})}}}};';
   return route.fulfill({ status: 200, contentType: 'application/javascript', body });
 });
 await context.addInitScript(snapshotValue => {
@@ -337,6 +337,11 @@ await page.keyboard.press('Escape');
 await page.locator('#videoPage').evaluate(el=>el.style.removeProperty('--player-safe-bottom'));
 await page.locator('#speedSelect').selectOption('1.25');
 assert.equal(await page.locator('#video').evaluate(video=>video.playbackRate),1.25,'dock speed control changes media rate');
+await page.locator('#speedSelect').selectOption('0.5');
+assert.deepEqual(await page.locator('#video').evaluate(video=>[video.playbackRate,video.defaultPlaybackRate]),[.5,.5]);
+await page.waitForFunction(()=>window.__savedPreferences.playbackRate===.5);
+await page.locator('#video').evaluate(video=>{video.playbackRate=1;video.dispatchEvent(new Event('loadedmetadata'))});
+assert.equal(await page.locator('#video').evaluate(video=>video.playbackRate),.5,'source metadata restores chosen rate');
 await page.locator('#speedSelect').selectOption('1');
 await page.locator('#video').evaluate(video=>{video.currentTime=6.5;video.dispatchEvent(new Event('timeupdate'))});
 if(await page.locator('#returnCurrentSentence').isVisible())await page.locator('#returnCurrentSentence').click();
@@ -369,7 +374,11 @@ assert.equal(await page.locator('#mobileVideoList [data-video]').count(),1);
 await page.locator('#mobileVideoList [data-video="9002"]').focus();
 await page.keyboard.press('Enter');
 await page.waitForURL('**/#/video/9002');
-await page.waitForFunction(()=>document.querySelector('#queueDirectoryPosition')?.textContent==='1 / 1');
+await page.locator('#openQueueDirectory').click();
+await page.locator('#queueDirectory[open]').waitFor();
+assert.equal(await page.locator('#queueDirectoryList button').count(),1,'filtered directory has only the matching video');
+assert.equal(await page.locator('#queueDirectoryList button').getAttribute('aria-current'),'true');
+await page.keyboard.press('Escape');
 assert.equal(await page.locator('#nextVideo').isDisabled(),true,'filtered queue excludes unmatching videos');
 await page.locator('#videoPage .study-back').click();
 await page.waitForURL('**/#/home');
@@ -378,6 +387,50 @@ assert.equal(await page.locator('#mobileVideoSearch').inputValue(),'下一条','
 await page.locator('#mobileNav [data-route="/discover"]').click();
 await page.locator('#discoveryCreators').waitFor();
 assert.ok(await page.locator('#discoveryCreators [data-route]').count()>0);
+
+// Hidden-tab recovery uses the live position, not the original sentence link.
+await page.evaluate(()=>{location.hash='#/video/9001?sentence=0'});
+await page.waitForFunction(()=>State.route==='/video/9001'&&State.mediaPlayer);
+await page.evaluate(()=>{
+ const video=document.querySelector('#video');let paused=true,time=0;
+ window.__resumePlayCount=0;
+ Object.defineProperties(video,{readyState:{configurable:true,get:()=>4},duration:{configurable:true,get:()=>100},paused:{configurable:true,get:()=>paused},currentTime:{configurable:true,get:()=>time,set:value=>{time=value}}});
+ video.play=()=>{window.__resumePlayCount++;paused=false;video.dispatchEvent(new Event('play'));return Promise.resolve()};
+ video.pause=()=>{paused=true;video.dispatchEvent(new Event('pause'))};
+ Object.defineProperty(document,'hidden',{configurable:true,get:()=>!!window.__fixtureHidden});
+ video.dispatchEvent(new Event('loadedmetadata'));
+ setPracticeMode('loop');SentenceLoop.select(1);video.currentTime=3.5;
+ window.__resumePlayCount=0;window.__fixtureHidden=true;document.dispatchEvent(new Event('visibilitychange'));
+ window.dispatchEvent(new Event('pagehide'));
+ window.__fixtureHidden=false;document.dispatchEvent(new Event('visibilitychange'));
+});
+await page.waitForFunction(()=>!!State.mediaPlayer);
+await page.locator('#video').evaluate(video=>video.dispatchEvent(new Event('loadedmetadata')));
+assert.deepEqual(await page.evaluate(()=>({time:document.querySelector('#video').currentTime,mode:State.practiceMode,index:State.practiceSelectedIndex,loop:SentenceLoop.isEnabled(),plays:window.__resumePlayCount,paused:document.querySelector('#video').paused})),{time:3.5,mode:'loop',index:1,loop:true,plays:0,paused:true});
+await page.evaluate(()=>{SentenceLoop.play();const video=document.querySelector('#video');video.currentTime=4.6;video.dispatchEvent(new Event('timeupdate'))});
+assert.equal(await page.locator('#video').evaluate(video=>video.currentTime),3,'loop remains functional after visibility recovery');
+await page.evaluate(()=>{
+ setPracticeMode('intensive');State.practiceSelectedIndex=1;State.practiceBoundaryReached=true;
+ document.querySelector('#video').currentTime=4.46;window.__resumePlayCount=0;
+ window.__fixtureHidden=true;document.dispatchEvent(new Event('visibilitychange'));
+ window.__fixtureHidden=false;document.dispatchEvent(new Event('visibilitychange'));
+});
+await page.waitForFunction(()=>!!State.mediaPlayer);
+await page.locator('#video').evaluate(video=>video.dispatchEvent(new Event('loadedmetadata')));
+assert.deepEqual(await page.evaluate(()=>({time:document.querySelector('#video').currentTime,mode:State.practiceMode,index:State.practiceSelectedIndex,boundary:State.practiceBoundaryReached,plays:window.__resumePlayCount})),{time:4.46,mode:'intensive',index:1,boundary:true,plays:0});
+// Navigating while suspended discards the old video's restoration state.
+await page.evaluate(()=>{window.__fixtureHidden=true;document.dispatchEvent(new Event('visibilitychange'));location.hash='#/video/9002'});
+await page.waitForFunction(()=>State.route==='/video/9002'&&State.mediaPlayer);
+await page.evaluate(()=>{window.__fixtureHidden=false;document.dispatchEvent(new Event('visibilitychange'));document.querySelector('#video').dispatchEvent(new Event('loadedmetadata'))});
+assert.equal(await page.evaluate(()=>State.currentVideo.id),9002);
+assert.equal(await page.evaluate(()=>suspendedPlayback),null,'navigation invalidates suspended recovery');
+await page.evaluate(()=>{
+ window.__fixtureHidden=true;document.dispatchEvent(new Event('visibilitychange'));
+ window.__eastudyStudentId='different-student';
+ window.__fixtureHidden=false;document.dispatchEvent(new Event('visibilitychange'));
+});
+assert.equal(await page.evaluate(()=>suspendedPlayback),null,'account changes discard the old owner recovery');
+assert.equal(await page.evaluate(()=>State.mediaPlayer),null,'account changes cannot recreate the previous owner media session');
 assert.deepEqual(pageErrors, []);
 
 await browser.close();

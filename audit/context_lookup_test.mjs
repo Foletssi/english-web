@@ -1,0 +1,22 @@
+import fs from 'node:fs';
+import vm from 'node:vm';
+import assert from 'node:assert/strict';
+const sandbox = {window:{}};
+vm.runInNewContext(fs.readFileSync('shared/context-lookup.js','utf8'), sandbox);
+const api = sandbox.window.EastudyContextLookup;
+const english = '🙂 I read it; now I read my well-known friend’s note.';
+const tokens = JSON.parse(JSON.stringify(api.tokens(english)));
+assert.equal(tokens[0].start, 3);
+assert.equal(tokens.at(-3).surface, 'well-known');
+assert.equal(tokens.at(-2).surface, 'friend’s');
+const row = {english, textRevision:2, wordLookup:{schemaVersion:1, sourceEnglish:english,
+  sourceTextRevision:2, tokens:tokens.map(t=>({...t,coreMeaningZh:`本句位置${t.tokenId}`}))}};
+assert.notEqual(api.lookup(row,'t1').meaning,api.lookup(row,'t5').meaning);
+assert.equal(api.lookup(row,null,tokens[5].start).tokenId,'t5');
+assert.equal(api.lookup(row,null,tokens[5].start+1),null);
+assert.equal(api.lookup({...row,textRevision:3},'t1'),null);
+assert.equal(api.lookup({...row,english:english+' again'},'t1'),null);
+const invalid = structuredClone(row); invalid.wordLookup.tokens[1].start++;
+assert.equal(api.lookup(invalid,'t1'),null);
+assert.equal(api.lookup({english,dictionary:{read:{meaning:'串义'}}},'t1'),null);
+console.log('Context lookup: occurrence, UTF-16, revision and stale-source isolation passed.');

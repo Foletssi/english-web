@@ -8,6 +8,7 @@ function contentType(path) {
   if (path.endsWith('.m3u8')) return 'application/vnd.apple.mpegurl; charset=utf-8';
   if (path.endsWith('.ts')) return 'video/mp2t';
   if (path.endsWith('.webp')) return 'image/webp';
+  if (path.endsWith('.mp3')) return 'audio/mpeg';
   return 'application/octet-stream';
 }
 

@@ -44,7 +44,13 @@
 
   async function saveVocabulary({ word, key, active, patch = {}, details = {}, getUserId, data, cache }) {
     const oldDetails = cache.get('vocabDetails', {})[key] || {};
-    const savedDetails = { ...details, ...oldDetails };
+    // A new lookup replaces the source and its meaning together. Review-only
+    // saves retain the original source instead of mixing two contexts.
+    const hasCurrentContext = typeof details.meaning === 'string' && details.meaning.trim()
+      && details.sourceVideoId != null && details.sourceSentenceId != null;
+    const savedDetails = hasCurrentContext
+      ? { ...details, sourceTokenId: details.sourceTokenId || null, sourceTextRevision: details.sourceTextRevision ?? null }
+      : { ...details, ...oldDetails };
     const oldMeta = cache.get('vocabMeta', {})[key] || { state: 'new', addedAt: Date.now(), correctStreak: 0 };
     const meta = { ...oldMeta, ...patch };
     const iso = value => { const time = value ? new Date(value).getTime() : NaN; return Number.isFinite(time) ? new Date(time).toISOString() : null; };
@@ -52,7 +58,10 @@
       context: savedDetails.context || '', state: meta.state, correctStreak: meta.correctStreak,
       addedAt: iso(meta.addedAt), lastReviewedAt: iso(meta.lastReviewedAt), nextReviewAt: iso(meta.nextReviewAt),
       sourceVideoId: savedDetails.sourceVideoId || oldMeta.sourceVideoId || null,
-      sourceSentenceId: savedDetails.sourceSentenceId || null, contentVersion: savedDetails.contentVersion };
+      sourceSentenceId: savedDetails.sourceSentenceId || null,
+      sourceTokenId: savedDetails.sourceTokenId || null,
+      sourceTextRevision: savedDetails.sourceTextRevision ?? null,
+      contentVersion: savedDetails.contentVersion };
     const result = await saveMutation({ key: 'vocab:' + key, getUserId,
       save: expectedUserId => data?.setVocabulary?.({ ...input, expectedUserId }),
       commit: () => {

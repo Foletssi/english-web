@@ -1,7 +1,7 @@
 {
   "name": "zospeak-composite-v1-beta6",
   "private": true,
-  "version": "1.0.0-beta.6.43.0",
+  "version": "1.0.0-beta.6.44.0",
   "scripts": {
     "serve": "python -m http.server 8080",
     "audit": "python audit/static_audit.py",
@@ -12,7 +12,7 @@
     "admin-intake-ui-test": "node audit/admin_intake_ui_test.cjs",
     "auth-test": "node audit/auth_contract_test.mjs && node audit/unified_auth_access_test.mjs && node audit/access_guard_contract_test.mjs && node audit/single_720_invite_contract_test.mjs && node audit/invite_admin_contract_test.mjs && node audit/playback_ticket_test.mjs && node audit/playback_route_contract_test.mjs && node audit/media_session_race_contract_test.mjs",
     "cloud-test": "node audit/cloud_content_contract_test.mjs && node audit/cloud_video_processing_test.mjs && py -3.12 -m unittest discover -s services/cloud-worker -p \"test_*.py\" -v",
-    "learning-test": "node audit/learning_content_contract_test.mjs && node audit/learning_queue_contract_test.mjs && node audit/study_outbox_contract_test.mjs && node audit/mobile_sync_test.mjs",
+    "learning-test": "node audit/learning_content_contract_test.mjs && node audit/learning_queue_contract_test.mjs && node audit/study_outbox_contract_test.mjs && node audit/mobile_sync_test.mjs && node audit/context_lookup_test.mjs && node audit/teaching_voice_client_test.mjs && node audit/reviewed_teaching_details_test.mjs && node audit/refresh_teaching_voice_test.mjs && node audit/lazy_teaching_test.mjs",
     "learner-admin-test": "node audit/player_loop_contract_test.mjs && node audit/creator_avatar_test.mjs && node audit/player_loop_ui_test.mjs && node audit/invite_admin_ui_test.mjs && node audit/teaching_editor_ui_test.mjs",
     "studio-test": "node audit/studio_client_contract_test.mjs && node audit/studio_v2_contract_test.mjs && node audit/media_player_contract_test.mjs && py -3.12 -m unittest discover -s services/local-studio -p \"test_*.py\" -v",
     "test:module-boundaries": "node audit/functional_module_boundaries_test.mjs",

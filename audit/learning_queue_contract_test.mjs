@@ -46,6 +46,19 @@ equal(queue.create({ videos, goalId: 'daily', collectionId: 20, preferredVideoId
 equal(queue.create({ videos, goalId: 'cet4', source: 'direct', preferredVideoId: 2 }).cursor, 1, 'preferred video selects cursor without reordering queue');
 equal(queue.previous(queue.create({ videos, goalId: 'cet4', source: 'direct' }), 2).id, '1', 'previous returns prior video');
 
+let visited = queue.commit({ ...all, loop: true }, '2');
+const preview = queue.next(visited, '2');
+equal(visited.history, ['2'], 'preview does not mutate successful visits');
+visited = queue.commit(preview.queue, '1');
+equal(queue.previous(visited, '1').id, '2', 'wrapped playback returns to actual last video');
+visited = queue.commit(queue.previous(visited, '1').queue, '2');
+equal(visited.history, ['2'], 'back consumes history without adding a forward visit');
+equal(queue.commit(visited, 'missing').history, ['2'], 'invalid destination cannot enter history');
+equal(queue.create({ videos, source: 'direct' }).history, [], 'new queue has independent history');
+for(let i=0;i<150;i++) visited=queue.commit(visited, i%2?'1':'2');
+equal(visited.history.length,100,'successful history is bounded');
+equal(queue.previous({...visited,ids:['1']},'1').id,null,'removed videos are excluded from history');
+
 const playbackWindow = load(new URL('../shared/playback-controller.js', import.meta.url));
 let done = 0;
 const controller = playbackWindow.EastudyPlayback.createCountdown({ seconds: 1, onDone: () => { done += 1; } });

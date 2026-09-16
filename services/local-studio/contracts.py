@@ -51,7 +51,7 @@ def validate_learning(source, payload, minimum_schema_version=3):
     if not isinstance(output, list) or len(output) != len(source):
         raise StudioError('AI_SENTENCE_COUNT', 'AI 返回的字幕数量不一致。', True)
     expected = {row['id'] for row in source}
-    if {row.get('id') for row in output if isinstance(row, dict)} != expected:
+    if any(not isinstance(row, dict) or not isinstance(row.get('id'), str) for row in output) or {row['id'] for row in output} != expected:
         raise StudioError('AI_SENTENCE_IDS', 'AI 返回了错误的字幕编号。', True)
     by_id = {row['id']: row for row in output}
     schema_version = payload.get('teachingSchemaVersion', 0)
