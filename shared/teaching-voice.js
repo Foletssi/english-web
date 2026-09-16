@@ -32,7 +32,7 @@
     function stop() {
       generation++;
       clearTimeout(timer);timer = null;
-      if (audio) { audio.onended = audio.onerror = audio.onplaying = null;audio.pause();audio.removeAttribute('src');audio.load();audio = null; }
+      if (audio) { audio.onended = audio.onerror = audio.onplaying = audio.onwaiting = audio.onstalled = audio.ontimeupdate = null;audio.pause();audio.removeAttribute('src');audio.load();audio = null; }
       selected = null;
       onState('idle');
     }
@@ -41,14 +41,32 @@
       const own = generation;
       selected = item;
       onState('loading');
-      timer = setTimeout(() => { if (own === generation) {stop();onState('error');} }, 12000);
+      const watchWaiting = () => {
+        if (own !== generation || timer !== null) return;
+        timer = setTimeout(() => { if (own === generation) {stop();onState('error');} }, 12000);
+      };
+      const resumed = () => {
+        if (own !== generation) return;
+        clearTimeout(timer);timer = null;onState('playing');
+      };
+      watchWaiting();
       try {
         const result = await authorize();
         if (own !== generation) return false;
         if (result?.stale) throw new Error('VOICE_SESSION_STALE');
         const current = makeAudio();audio = current;
         current.preload = 'none';current.playbackRate = 1;current.src = item.url;
-        current.onplaying = () => {if (own === generation) {clearTimeout(timer);onState('playing');}};
+        let lastTime = 0;
+        current.onplaying = resumed;
+        current.onwaiting = () => {if (own === generation) {onState('loading');watchWaiting();}};
+        // A stalled download may still have buffered audio: arm a watchdog,
+        // then cancel it as soon as the playhead actually advances.
+        current.onstalled = watchWaiting;
+        current.ontimeupdate = () => {
+          if (own !== generation) return;
+          if (current.currentTime > lastTime && timer !== null) resumed();
+          lastTime = current.currentTime;
+        };
         current.onended = () => {if (own === generation) {stop();onState('ready');}};
         current.onerror = () => {if (own === generation) {stop();onState('error');}};
         await current.play();

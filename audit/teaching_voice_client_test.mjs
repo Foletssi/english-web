@@ -28,4 +28,20 @@ const racing=api.create({makeAudio:()=>({play:()=>new Promise((_,reject)=>reject
 const old=racing.play(item);await new Promise(resolve=>setImmediate(resolve));assert.equal(typeof rejectPlay,'function');racing.stop();rejectPlay(Error('interrupted'));await old;assert.equal(states.at(-1),'idle','late play rejection cannot replace new UI state');
 const blocked=api.create({makeAudio:()=>({play:()=>Promise.reject(Error('NotAllowedError')),pause(){},removeAttribute(){},load(){}}),authorize:async()=>({}),onState:state=>states.push(state)});
 assert.equal(await blocked.play(item),false);assert.equal(states.at(-1),'error','mobile gesture rejection is retryable');
-console.log('Teaching voice identity and playback races passed.');
+// Deterministic timers cover interruption after playback starts, not just the
+// initial load. Repeated waiting events must not postpone the timeout forever.
+const timers=new Map();let nextTimer=0,recoveryAudio;
+const recoveryContext={window:{},setTimeout:fn=>{timers.set(++nextTimer,fn);return nextTimer},clearTimeout:id=>timers.delete(id)};
+vm.runInNewContext(fs.readFileSync('shared/teaching-voice.js','utf8'),recoveryContext);
+const recovery=recoveryContext.window.EastudyTeachingVoice.create({authorize:async()=>({}),onState:state=>states.push(state),makeAudio:()=>recoveryAudio={currentTime:0,play(){this.onplaying();return Promise.resolve()},pause(){},removeAttribute(){},load(){}}});
+assert.equal(await recovery.play(item),true);assert.equal(timers.size,0);
+recoveryAudio.onwaiting();assert.equal(states.at(-1),'loading');assert.equal(timers.size,1);
+const pendingTimer=[...timers.keys()][0];recoveryAudio.onwaiting();assert.equal([...timers.keys()][0],pendingTimer);
+recoveryAudio.currentTime=.2;recoveryAudio.ontimeupdate();assert.equal(timers.size,0);assert.equal(states.at(-1),'playing');
+recoveryAudio.onstalled();assert.equal(timers.size,1);
+const lateWaiting=recoveryAudio.onwaiting;
+[...timers.values()][0]();assert.equal(states.at(-1),'error');assert.equal(recoveryAudio.onwaiting,null);
+assert.equal(await recovery.play(item),true,'a stalled pronunciation can be retried');
+lateWaiting();assert.equal(timers.size,0,'old media events cannot stall a replacement');
+recoveryAudio.onwaiting();recovery.stop();assert.equal(timers.size,0);assert.equal(states.at(-1),'idle');
+console.log('Teaching voice identity, playback races and stall recovery passed.');

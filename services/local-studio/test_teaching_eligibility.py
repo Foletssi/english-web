@@ -123,6 +123,25 @@ class EligibilityTests(unittest.TestCase):
         checked, _ = refine_eligibility(original, request=request)
         self.assertEqual(checked[0], original[0])
 
+    def test_later_scene_evidence_reaches_eligibility_review(self):
+        original = fixture()
+        original[0]['english'] = 'I want to see this girl.'
+        original[0]['expressions'][0]['surface'] = 'see'
+        for index in range(2, 9):
+            original.append({'english': 'She works at the drive-thru.' if index == 7 else 'Context.',
+                             'expressions': [], 'keyWords': [], 'selectionLocked': True,
+                             'coverageAnalysis': {'pairs': []}})
+        for index, row in enumerate(original):
+            row['coverageAnalysis']['pairs'] = [
+                {'pairId': f'p{i}', 'status': 'no_eligible_source'}
+                for i in (index-1, index) if 0 <= i < len(original)-1]
+        def request(prompt, payload):
+            target = payload['items'][0]
+            self.assertIn('She works at the drive-thru.', target['contextAfter'])
+            self.assertNotIn(target['english'], target['contextAfter'])
+            return self.answer(prompt, payload)
+        refine_eligibility(original, request=request)
+
     def test_missing_or_duplicate_decisions_cannot_be_published(self):
         for duplicate in (False, True):
             def request(prompt, payload):

@@ -100,6 +100,26 @@ class CoverageTests(unittest.TestCase):
         checked, _ = complete_coverage(rows(1), request=self.answer)
         self.assertEqual(checked[0]['coverageAnalysis']['pairs'], [])
 
+    def test_recheck_and_independent_review_receive_original_scene(self):
+        original = rows(12)
+        for i, row in enumerate(original):
+            row['english'] = f'Scene number {i}.'
+            row['coverageAnalysis'] = {'pairs': [
+                {'pairId': f'p{j}', 'status': 'no_eligible_source', 'reasonZh': '基础场景词。'}
+                for j in (i-1, i) if 0 <= j < len(original)-1]}
+        observed = []
+        def request(prompt, payload):
+            pair = payload['pairs'][0]
+            self.assertEqual(pair['sentenceIds'], ['s2', 's3'])
+            self.assertEqual(pair['contextBefore'], [r['english'] for r in original[:2]])
+            self.assertEqual(pair['contextAfter'], [r['english'] for r in original[4:12]])
+            self.assertEqual([r['id'] for r in payload['sentences']], ['s2', 's3'])
+            observed.append(copy.deepcopy(pair))
+            return self.answer(prompt, payload)
+        complete_coverage(original, request=request, recheck_pairs={2})
+        self.assertEqual(len(observed), 2)
+        self.assertEqual(observed[0], observed[1])
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -24,6 +24,9 @@ go do/go mail、did get（do强调）、not that hard、feel like（觉得）、
 可保留 gatekeeping、run its course、hardware（包的五金）、drop（新品发售）、
 gravitate toward、underwhelmed 等具有具体学习价值的表达。
 排除 I cannot remember the last time、set this up 等普通句型，不因句子长而列为重点。
+熟词生义必须有前后情境证据，不能为制造高级重点臆造义项。
+例如去咖啡店见店员的 see someone 只是见到某人，不是约会；
+throw in some laundry 通常是把衣服放进洗衣机洗，不是额外赠送或增加项目。
 '''
 PROMPT = CRITERIA + '''
 每个输入 itemId 返回一次 {itemId,keep,reasonZh,coreMeaningZh,contextMeaningZh}。
@@ -69,6 +72,8 @@ def refine_eligibility(rows, config=None, progress=None, cache_dir=None, request
             items.append({'itemId': f'{index}:{position}', 'english': row['english'],
                 'before': rows[index-1]['english'] if index else '',
                 'after': rows[index+1]['english'] if index+1 < len(rows) else '',
+                'contextBefore': [r['english'] for r in rows[max(0, index-8):index]],
+                'contextAfter': [r['english'] for r in rows[index+1:index+9]],
                 'expression': expression})
 
     def process(offset):

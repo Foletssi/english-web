@@ -21,6 +21,8 @@ DETAIL_PROMPT = '''你是 DeepSeek，一位面向四级以上成年人的英语�
 词义简短、中文口语自然，不能输出待生成、待补充或无意义占位文本。
 按上下文修正整句中文，保持事实、人物指代、否定、时态、程度和说话意图；
 不硬翻，不添剧情。疑似转录问题在 sourceConcerns 中说明，不修改英文或时间轴。
+人物关系必须由前后文支持：去咖啡店 see 一位店员是见到她，不能自行写成约会。
+结合生活场景解释动作：throw in some laundry 是放衣服进去洗，不是额外赠送。
 每个 token 都必须给 pronunciationHint：仅一组美式英语 IPA，例如 /riːd/，
 多音词必须结合语境选一个正确读音，不能给两个候选；不要伪称听过音频。
 对输入 expressions 仅返回 expressionId 和 pronunciationHint，不得修改表达或释义。
@@ -182,8 +184,8 @@ def complete_details(rows, config=None, progress=None, cache_dir=None, request=N
         payload = {'sentences': [{'id': row['id'], 'english': row['english'],
             'chinese': row.get('chinese', ''), 'translationLocked': bool(row.get('translationLocked')),
             'tokens': source_tokens(row)['tokens'], 'expressions': expression_voice_sources(row)} for row in batch],
-            'contextBefore': [r['english'] for r in rows[max(0, offset-2):offset]],
-            'contextAfter': [r['english'] for r in rows[offset+len(batch):offset+len(batch)+2]]}
+            'contextBefore': [r['english'] for r in rows[max(0, offset-8):offset]],
+            'contextAfter': [r['english'] for r in rows[offset+len(batch):offset+len(batch)+8]]}
         records = []
         for phase, prompt in [('generate', DETAIL_PROMPT), ('review', REVIEW_PROMPT)]:
             key = canonical_hash({'version': DETAIL_VERSION, 'phase': phase, 'prompt': prompt,

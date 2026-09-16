@@ -65,21 +65,39 @@ async function handle({ request, env, params, waitUntil }, headOnly) {
   const authorized=performance.now();
   const timing=(headers,cacheStatus)=>{headers.set('Server-Timing',`authorization;dur=${(authorized-started).toFixed(1)},delivery;dur=${(performance.now()-authorized).toFixed(1)}`);headers.set('X-Eastudy-Media-Cache',cacheStatus)};
   const requested = request.headers.get('Range');
-  if(!headOnly&&!requested&&typeof caches!=='undefined'){
+  const voiceAsset=/^voice\/[a-f0-9]{64}\.mp3$/.test(path);
+  // Pronunciation files are small, immutable registered assets. Keep one full
+  // edge object so mobile byte probes and subsequent ranges share the same hit.
+  // Entitlement resolution above still runs before every cache read.
+  if(!headOnly&&(!requested||voiceAsset)&&typeof caches!=='undefined'){
     const cache= caches.default,cacheUrl=new URL(request.url);cacheUrl.pathname='/__eastudy_media_cache__/'+key;cacheUrl.search='';
     const cacheKey=new Request(cacheUrl.toString(),{method:'GET'});
-    let cached=await cache.match(cacheKey);
+    let cached;
+    try { cached=await cache.match(cacheKey); } catch { /* Cache outages fall back to the authorized origin. */ }
     const hit=Boolean(cached);
     if(!cached){
       const object=await env.VIDEO_BUCKET.get(key);
       if(!object?.body)return json({error:'MEDIA_NOT_FOUND'},404);
       const headers=new Headers();object.writeHttpMetadata(headers);headers.set('Accept-Ranges','bytes');headers.set('ETag',object.httpEtag||object.etag);headers.set('Content-Length',String(object.size));headers.set('Cache-Control',path.endsWith('.m3u8')?'public, max-age=300':'public, max-age=31536000, immutable');
       cached=new Response(object.body,{status:200,headers});
-      const cacheWrite=cache.put(cacheKey,cached.clone());
+      const cacheWrite=cache.put(cacheKey,cached.clone()).catch(()=>{});
       if(typeof waitUntil==='function')waitUntil(cacheWrite);
       else await cacheWrite;
     }
-    const outgoing=new Response(cached.body,cached);outgoing.headers.set('Cache-Control','private, no-store');outgoing.headers.set('X-Content-Type-Options','nosniff');timing(outgoing.headers,hit?'HIT':'MISS');return outgoing;
+    let outgoing;
+    if(requested){
+      const size=Number(cached.headers.get('Content-Length'));
+      // Match the registered voice asset limit; never buffer video segments.
+      if(!Number.isSafeInteger(size)||size<1||size>1048576)return json({error:'VOICE_ASSET_INVALID'},502);
+      const range=rangeFromHeader(requested,size);
+      if(!range)return new Response(null,{status:416,headers:{'Content-Range':`bytes */${size}`,'Cache-Control':'private, no-store'}});
+      const bytes=await cached.arrayBuffer(),headers=new Headers(cached.headers);
+      if(bytes.byteLength!==size)return json({error:'VOICE_ASSET_INVALID'},502);
+      headers.set('Content-Range',`bytes ${range.start}-${range.end}/${size}`);
+      headers.set('Content-Length',String(range.end-range.start+1));
+      outgoing=new Response(bytes.slice(range.start,range.end+1),{status:206,headers});
+    }else outgoing=new Response(cached.body,cached);
+    outgoing.headers.set('Cache-Control','private, no-store');outgoing.headers.set('X-Content-Type-Options','nosniff');timing(outgoing.headers,hit?'HIT':'MISS');return outgoing;
   }
   const head = await env.VIDEO_BUCKET.head(key);
   if (!head) return json({ error: 'MEDIA_NOT_FOUND' }, 404);
