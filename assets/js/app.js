@@ -342,7 +342,20 @@ function renderQueueControls(){
  $('#autoplayNext').checked=State.settings.autoplayNext!==false;
  $('#autoplayNext').onchange=event=>{State.settings.autoplayNext=event.target.checked;applySettings();PlaybackCountdown?.cancel('autoplay-changed')};
  $('#openQueueDirectory').onclick=()=>{
-  const list=$('#queueDirectoryList');list.replaceChildren(...(q?.ids||[]).map((id,i)=>{const button=document.createElement('button');button.type='button';button.textContent=(i+1)+'. '+displayVideoTitle(nextVideoDetails(id));button.setAttribute('aria-current',String(String(activeVideoId())===id));button.onclick=()=>switchQueueVideo({id,queue:{...q,cursor:i,historyBackTo:null}});return button}));
+  const list=$('#queueDirectoryList');
+  list.replaceChildren(...(q?.ids||[]).map((id,i)=>{
+   const video=nextVideoDetails(id),current=String(activeVideoId())===String(id);
+   const button=document.createElement('button');button.type='button';button.className='directory-row';
+   button.setAttribute('aria-current',String(current));
+   const thumb=document.createElement('img');thumb.alt='';applyCover(thumb,video,{sizes:'80px'});
+   const copy=document.createElement('span');copy.className='directory-copy';
+   const title=document.createElement('strong');title.textContent=displayVideoTitle(video);
+   const meta=document.createElement('span');meta.className='directory-meta';meta.textContent=[difficultyLabel(video),video?.duration?fmt(video.duration):''].filter(Boolean).join(' · ');
+   copy.append(title,meta);
+   const status=document.createElement('span');status.className='directory-status';status.textContent=current?'当前视频':String(i+1).padStart(2,'0');
+   button.append(thumb,copy,status);
+   button.onclick=()=>switchQueueVideo({id,queue:{...q,cursor:i,historyBackTo:null}});return button;
+  }));
   window.EastudyMobilePlayer?.openDirectory();
  };
 }
@@ -355,7 +368,7 @@ function updateMobilePlayerGeometry(){
 function confirmedTeachingEntries(){
  const entries=new Map();
  DATA.sentences.forEach((sentence,index)=>approvedExpressions(sentence).forEach(expression=>{
-  const word=normalizePhrase(expression.surface),key=normalizePhrase(expression.lemma||word);if(word&&!entries.has(key))entries.set(key,{word,index});
+  const word=normalizePhrase(expression.surface),key=normalizePhrase(expression.lemma||word);if(word&&!entries.has(key))entries.set(key,{word,index,expression});
  }));
  return [...entries.values()];
 }
@@ -380,7 +393,29 @@ function renderPlayerWordList(){
  const entries=kind==='saved'?playerVocabularyEntries().filter(x=>!filter.checked||String(x.sourceVideoId)===String(activeVideoId())):confirmedTeachingEntries();
  const list=$('#playerWordList');list.replaceChildren();
  if(!known||!entries.length){const p=document.createElement('p');p.textContent=!known?(kind==='saved'?'生词本尚未同步，请稍后重试':'字幕正在加载…'):'暂无词汇';list.append(p);if(!known&&kind==='saved'){const retry=document.createElement('button');retry.type='button';retry.textContent='重新同步生词本';retry.onclick=async()=>{retry.disabled=true;try{await window.EastudyData.hydrateStudentLearning()}catch{p.textContent='同步失败，请检查网络后重试'}finally{if(retry.isConnected)retry.disabled=false}};list.append(retry)}return}
- for(const entry of entries){const button=document.createElement('button');button.type='button';button.textContent=entry.word;button.dataset.word=entry.word;button.dataset.idx=String(entry.index);button.onclick=event=>{event.stopPropagation();$('#playerWordPanel').close();openDict(button,event,kind==='saved'?entry.source:null);$('#dictClose')?.focus()};list.append(button)}
+ const subtitleTokens=new Map();
+ for(const entry of entries){
+  const button=document.createElement('button');button.type='button';button.className='learning-word-row';button.dataset.word=entry.word;button.dataset.idx=String(entry.index);
+  const copy=document.createElement('span');copy.className='learning-word-copy';
+  const term=document.createElement('strong');term.className='learning-word-term teaching-expression';term.textContent=entry.word;
+  if(kind==='teaching'){
+   // Use normal subtitle rendering even when blind listening or cloze hides its DOM.
+   if(!subtitleTokens.has(entry.index)){
+    const sentence=DATA.sentences[entry.index],template=document.createElement('template');
+    template.innerHTML=tokenHTML(sentence.en,entry.index,sentence.wordTimings);
+    subtitleTokens.set(entry.index,[...template.content.querySelectorAll('[data-word]')]);
+   }
+   const token=subtitleTokens.get(entry.index).find(node=>normalizePhrase(node.dataset.word)===entry.word);
+   const tone=token&&[...token.classList].find(name=>/^keyword-tone-[1-4]$/.test(name));
+   if(tone)term.classList.add(tone);
+  }
+  copy.append(term);
+  const meaning=entry.expression?.coreMeaningZh||entry.source?.meaning;
+  if(meaning){const detail=document.createElement('span');detail.className='learning-word-meaning';detail.textContent=meaning;copy.append(detail)}
+  const arrow=document.createElement('span');arrow.className='learning-word-arrow';arrow.textContent='›';arrow.setAttribute('aria-hidden','true');
+  button.append(copy,arrow);
+  button.onclick=event=>{event.stopPropagation();$('#playerWordPanel').close();openDict(button,event,kind==='saved'?entry.source:null);$('#dictClose')?.focus()};list.append(button);
+ }
 }
 function syncMobilePlayer(){
  const page=$('#videoPage');if(!page)return;
@@ -722,6 +757,7 @@ function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':
 function openLogic(){$('#logicDrawer').classList.add('show');renderLogic()}
 
 const ICON_PATHS={
+ copy:'<rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/>',
  home:'<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5"/><path d="M9.5 20v-6h5v6"/>',
  grid:'<rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/>',
  users:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',

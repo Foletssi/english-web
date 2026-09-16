@@ -201,7 +201,7 @@ try {
   await page.locator('#dictClose').click();
   await page.locator('#openSavedWords').click();
   await page.locator('#playerWordVideoOnly').check();
-  assert.equal(await page.locator('#playerWordList button').innerText(),'good','current video filter uses saved cloud source');
+  assert.equal(await page.locator('#playerWordList button .learning-word-term').innerText(),'good','current video filter uses saved cloud source');
   await page.locator('#playerWordList button').click();
   assert.ok(await page.locator('#dictClose').isVisible(),'list opens existing word card');
   await page.locator('#dictClose').click();
@@ -288,6 +288,34 @@ try {
   assert.equal(await page.locator('#savedWordCount').innerText(),'—');
   await page.evaluate(()=>window.dispatchEvent(new CustomEvent('eastudy:learning-hydrated',{detail:{userId:'second-fixture',vocabularyLoaded:true}})));
   assert.equal(await page.locator('#savedWordCount').innerText(),'0','second account never inherits first account words');
+ });
+ await check('compact notebook fits light and dark screens with real saved words',async()=>{
+  await page.evaluate(()=>{
+   window.__eastudyStudentId='student-fixture';
+   const prefix='zs:user:student-fixture:';
+   localStorage.setItem(prefix+'vocab',JSON.stringify(['take something for granted','resilient']));
+   localStorage.setItem(prefix+'vocabRemoved','[]');
+   localStorage.setItem(prefix+'vocabDetails',JSON.stringify({
+    'take something for granted':{meaning:'把某事视为理所当然',context:'We should never take their support for granted.',sourceVideoId:'other-video'},
+    resilient:{meaning:'有韧性的；能迅速恢复的',context:'The community has proved remarkably resilient.',sourceVideoId:'other-video'}
+   }));
+   window.dispatchEvent(new CustomEvent('eastudy:learning-hydrated',{detail:{userId:'student-fixture',vocabularyLoaded:true}}));
+  });
+  await go('/vocabulary?state=all');await page.locator('#vocabularyPage.active').waitFor();
+  if(await page.locator('#vocabReviewClose').isVisible())await page.locator('#vocabReviewClose').click();
+  for(const theme of ['light','dark'])for(const width of [320,390,768,1024,1440]){
+   await page.setViewportSize({width,height:844});await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'notebook fits '+theme+' '+width);
+   const actions=await page.locator('#vocabPageList .vocab-actions button').evaluateAll(nodes=>nodes.map(el=>el.getBoundingClientRect().toJSON()));
+   await page.screenshot({path:`tmp/study-notebook-${theme}-${width}.png`});
+   assert.ok(actions.length>0&&actions.every(r=>r.width>=40&&r.height>=40&&r.left>=0&&r.right<=width),'notebook actions remain reachable '+theme+' '+width+' '+JSON.stringify(actions));
+   await page.locator('#vocabViewToggle').click();
+   const gridActions=await page.locator('#vocabPageList .vocab-actions button').evaluateAll(nodes=>nodes.map(el=>el.getBoundingClientRect().toJSON()));
+   assert.ok(gridActions.every(r=>r.width>=40&&r.height>=40&&r.left>=0&&r.right<=width),'grid notebook actions remain reachable '+theme+' '+width);
+   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'grid notebook fits '+theme+' '+width);
+   await page.locator('#vocabViewToggle').click();
+  }
+  await page.setViewportSize({width:390,height:844});
  });
  assert.deepEqual(errors,[],'no uncaught browser errors');
  if(process.env.EASTUDY_VISUAL_DIR){

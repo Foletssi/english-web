@@ -261,8 +261,31 @@ assert.equal(await page.locator('#video').evaluate(video => video.currentTime), 
 assert.equal(await page.locator('#previousVideo').isDisabled(), true, 'first item cannot go backwards');
 await page.locator('#openQueueDirectory').click();
 assert.equal(await page.locator('#closeQueueDirectory').evaluate(el=>el===document.activeElement),true);
+assert.ok(await page.locator('#queueDirectoryList img').count()>1,'directory includes covers');
+assert.ok(await page.locator('#queueDirectoryList .directory-meta').first().innerText(),'directory includes actual metadata');
+for(const theme of ['light','dark']){
+ await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+ await page.screenshot({path:`tmp/study-directory-${theme}.png`});
+}
 await page.keyboard.press('Escape');
 assert.equal(await page.locator('#queueDirectory').isVisible(),false);
+await page.locator('#openTeachingWords').click();
+assert.equal(await page.locator('#playerWordVideoOnly').isVisible(),false,'video-only filter belongs to saved words, not teaching words');
+assert.equal(await page.locator('#playerWordList .learning-word-meaning').first().innerText(),'测试核心含义');
+const teachingTones=await page.locator('#playerWordList .learning-word-term').evaluateAll(nodes=>nodes.map(el=>[el.textContent,[...el.classList].find(name=>/^keyword-tone-[1-4]$/.test(name))]));
+assert.ok(teachingTones.every(([,tone])=>tone),'all approved expressions retain a teaching color');
+for(const theme of ['light','dark']){
+ await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+ await page.screenshot({path:`tmp/study-highlights-${theme}.png`});
+}
+await page.locator('#playerWordList button').first().click();
+assert.equal(await page.locator('#dictMeaning').innerText(),'测试核心含义','redesigned teaching row still opens its actual definition');
+await page.locator('#dict').evaluate(async el=>{await Promise.all(el.getAnimations({subtree:true}).map(animation=>animation.finished.catch(()=>{})))});
+for(const theme of ['light','dark']){
+ await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+ await page.screenshot({path:`tmp/study-word-card-${theme}.png`});
+}
+await page.locator('#dictClose').click();
 await page.locator('#openLessonMore').click();
 await page.locator('#autoplayNext').uncheck();
 await page.locator('#lessonMore [data-close]').click();
@@ -273,6 +296,9 @@ assert.match(page.url(), /#\/video\/9001$/);
 await page.locator('#cancelNextLesson').click();
 await page.locator('#closeLessonComplete').click();
 await page.locator('[data-mobile-practice="cloze"]').click();
+await page.locator('#openTeachingWords').click();
+assert.deepEqual(await page.locator('#playerWordList .learning-word-term').evaluateAll(nodes=>nodes.map(el=>[el.textContent,[...el.classList].find(name=>/^keyword-tone-[1-4]$/.test(name))])),teachingTones,'cloze preserves teaching list colors');
+await page.keyboard.press('Escape');
 await page.locator('#video').evaluate(video=>{video.currentTime=1.25;video.dispatchEvent(new Event('timeupdate'))});
 const cloze=page.locator('#transcript .cloze-input');
 await cloze.fill('taking');
@@ -295,6 +321,9 @@ await page.locator('#transcript').evaluate(el=>el.scrollTop=el.scrollHeight);
 assert.deepEqual(await page.locator('.mobile-learning-dock').boundingBox(),controlBefore,'video navigation stays fixed when captions scroll');
 await page.locator('#dockBlind').click();
 assert.equal(await page.locator('#dockBlind').getAttribute('aria-pressed'),'true');
+await page.locator('#openTeachingWords').click();
+assert.deepEqual(await page.locator('#playerWordList .learning-word-term').evaluateAll(nodes=>nodes.map(el=>[el.textContent,[...el.classList].find(name=>/^keyword-tone-[1-4]$/.test(name))])),teachingTones,'blind listening preserves teaching list colors');
+await page.keyboard.press('Escape');
 await page.locator('#transcript .line-en').first().click();
 assert.match(await page.locator('#transcript .line-en').first().innerText(),/Taking a short break/,'hidden captions can be revealed on mobile');
 await page.locator('#openLessonMore').click();

@@ -153,3 +153,84 @@ html[data-theme="dark"] #dict{--card-surface:#172536;--card-text:#e8eff8;--card-
 #dict button:focus-visible{outline:2px solid var(--card-action);outline-offset:-2px}
 #dict [hidden]{display:none!important}
 @media(max-width:760px){#dict.mobile-dict{left:8px!important;right:auto!important;bottom:max(8px,env(safe-area-inset-bottom))!important;top:auto!important}}
+
+/* Compact study surfaces: shared palette, real content, existing actions. */
+#playerWordPanel .sheet-filter[hidden]{display:none!important}
+#dict{--accentSoft:#E8F1FA;--muted:#536983;--line:#DCE5EF;--panel2:#F3F7FB}
+html[data-theme="dark"] #dict{--accentSoft:#243D57;--muted:#A3B5CC;--line:#2D4057;--panel2:#1C2D41}
+#vocabularyPage{--panel:#fff;--text:#17263D;--text2:#344D68;--muted:#536983;--line:#DCE5EF;--accent:#346DA5;--accentSoft:#E8F1FA;--panel2:#F3F7FB}
+html[data-theme="dark"] #vocabularyPage{--panel:#172536;--text:#E8EFF8;--text2:#CBD7E6;--muted:#A3B5CC;--line:#2D4057;--accent:#85B7E7;--accentSoft:#243D57;--panel2:#1C2D41}
+#vocabularyPage .page-heading{margin-bottom:20px;gap:12px}
+#vocabularyPage .section-kicker{display:none}
+#vocabularyPage .page-heading h1{font-size:26px;line-height:1.3;margin:0}
+#vocabularyPage .page-heading p{font-size:12px;margin:8px 0 0;color:var(--muted)}
+#vocabularyPage .vocab-heading-actions{display:flex;gap:8px;flex-wrap:wrap}
+#vocabularyPage .vocab-heading-actions button{height:40px;min-height:40px;padding:0 12px;border-radius:10px;font-size:12px;background:var(--panel);color:var(--accent);border:1px solid var(--line);box-shadow:none}
+#vocabularyPage .vocab-heading-actions .primary{background:var(--accentSoft);border-color:transparent}
+#vocabularyPage .vocab-stats{grid-template-columns:repeat(4,minmax(0,1fr));gap:0;border:1px solid var(--line);border-radius:14px;background:var(--panel);padding:12px 0;margin-bottom:16px}
+#vocabularyPage .vocab-stats article{display:block;text-align:center;min-width:0;padding:0 4px;border:0;border-right:1px solid var(--line);border-radius:0;background:transparent}
+#vocabularyPage .vocab-stats article:last-child{border-right:0}
+#vocabularyPage .vocab-stats .metric-icon{display:none}
+#vocabularyPage .vocab-stats b{display:block;font-size:22px;line-height:1.3;color:var(--text)}
+#vocabularyPage .vocab-stats small{display:block;font-size:10px;line-height:1.5;margin-top:4px;color:var(--muted)}
+#vocabularyPage .vocab-toolbar{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;margin-bottom:16px}
+#vocabularyPage .toolbar-search{width:auto;min-width:0;background:var(--panel);border-radius:10px}
+#vocabularyPage .vocab-filter-tabs{display:flex;gap:2px;min-width:0;padding:3px;border-radius:10px;background:var(--accentSoft)}
+#vocabularyPage .vocab-filter-tabs button{min-height:38px;flex:1;padding:6px 10px;border:0;border-radius:8px;background:transparent;color:var(--muted);font-size:12px;white-space:nowrap}
+#vocabularyPage .vocab-filter-tabs button.active{background:var(--panel);color:var(--accent);box-shadow:0 1px 3px #10243b12}
+#vocabularyPage #vocabViewToggle{width:44px;min-height:44px;padding:0;justify-content:center;border-radius:10px}
+#vocabularyPage .vocab-list{gap:10px}
+#vocabularyPage .vocab-row{grid-template-columns:minmax(140px,1fr) minmax(140px,1fr) minmax(120px,1fr) auto;gap:12px;padding:16px;border:1px solid var(--line);border-radius:14px;background:var(--panel);box-shadow:none}
+#vocabularyPage .vocab-row>div{min-width:0;overflow-wrap:anywhere}
+#vocabularyPage .vocab-word-block b{font-size:18px;line-height:1.4;color:var(--text)}
+#vocabularyPage .vocab-word-block .mastery-pill{display:inline-flex;font-size:10px;padding:2px 8px;background:var(--accentSoft);color:var(--accent)}
+#vocabularyPage .vocab-definition b{display:none}
+#vocabularyPage .vocab-definition p{font-size:14px;line-height:1.6;margin:0;color:var(--text2)}
+#vocabularyPage .vocab-context{font-family:inherit;font-size:12px;line-height:1.6;color:var(--muted)}
+#vocabularyPage .vocab-actions{gap:0}
+#vocabularyPage .vocab-actions button{width:40px;height:40px;flex:none;border:0;background:transparent;color:var(--muted);border-radius:10px}
+#vocabularyPage .vocab-actions button:is(:hover,.active){background:var(--accentSoft);color:var(--accent)}
+#vocabularyPage .vocab-actions svg{width:18px;height:18px}
+#vocabularyPage .grid-view .vocab-row{grid-template-columns:minmax(0,1fr) auto}
+#vocabularyPage :is(button,input):focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#vocabularyPage .vocab-review-panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:none}
+#vocabularyPage .vocab-review-card h2{font-size:26px;overflow-wrap:anywhere}
+#dict .dict-top{padding:16px 12px 12px 16px;background:linear-gradient(110deg,var(--accentSoft),var(--card-surface) 80%)!important}
+#dict .dict-word{font-weight:650;letter-spacing:-.02em}
+#dict .dict-phon{margin-top:6px;color:var(--muted)}
+#dict .sense b{letter-spacing:.04em}
+#dict .context-box{border-left:3px solid var(--card-action);border-radius:4px 12px 12px 4px}
+#dict .dict-actions .saveword{border:1px solid var(--line);border-radius:10px}
+#dict .dict-actions button:disabled{opacity:.5}
+#dict .dict-actions button{display:flex;align-items:center;justify-content:center;gap:4px}
+#dict .dict-actions i{display:inline-flex;flex:none}
+#dict .dict-actions svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8}
+#videoPage #queueDirectoryList .directory-row{display:grid;grid-template-columns:80px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px;border-color:transparent;border-bottom-color:var(--line);border-radius:10px}
+#videoPage #queueDirectoryList .directory-row[aria-current="true"]{border-color:var(--line);background:var(--accentSoft)}
+.directory-row img{display:block;width:80px;height:45px;object-fit:cover;border-radius:6px;background:var(--accentSoft)}
+.directory-copy{min-width:0;display:grid;gap:6px}
+.directory-copy strong{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:13px;line-height:1.5;font-weight:600}
+.directory-meta{font-size:11px;color:var(--muted)}
+.directory-status{max-width:28px;font-size:10px;line-height:1.4;color:var(--muted);text-align:center}
+[aria-current="true"] .directory-status{color:var(--accent);font-weight:600}
+#videoPage #playerWordList .learning-word-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;border-color:transparent;border-bottom-color:var(--line);border-radius:10px}
+#videoPage #playerWordList .learning-word-row:hover{background:var(--accentSoft)}
+.learning-word-copy{display:block;min-width:0}
+.learning-word-term{font-size:17px;line-height:1.6;font-weight:600;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:4px}
+.learning-word-meaning{display:block;font-size:13px;line-height:1.5;margin-top:6px;color:var(--muted)}
+.learning-word-arrow{font-size:24px;flex:none;color:var(--muted)}
+@media(max-width:850px){
+ #vocabularyPage .product-shell{padding-top:20px!important;padding-bottom:24px}
+ #vocabularyPage .vocab-toolbar{grid-template-columns:minmax(0,1fr) 44px}
+ #vocabularyPage .toolbar-search{grid-column:1/-1}
+ #vocabularyPage .vocab-filter-tabs{width:auto;overflow-x:auto}
+ #vocabularyPage .vocab-filter-tabs button{padding:6px}
+ #vocabularyPage .vocab-row{grid-template-columns:minmax(0,1fr) auto;gap:6px 8px;padding:12px}
+ #vocabularyPage .vocab-word-block{grid-column:1;grid-row:1}
+ #vocabularyPage .vocab-definition{grid-column:1/-1;grid-row:2}
+ #vocabularyPage .vocab-context{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;grid-column:1/-1;grid-row:3}
+ #vocabularyPage .vocab-actions{grid-column:2;grid-row:1;align-self:start}
+ #vocabularyPage .vocab-list.grid-view{grid-template-columns:1fr}
+ #vocabularyPage .grid-view .vocab-row{grid-template-columns:minmax(0,1fr) auto}
+}
+@media(prefers-reduced-motion:reduce){#vocabularyPage *,#dict *,#playerWordPanel *,#queueDirectory *{animation:none!important;transition:none!important}}
