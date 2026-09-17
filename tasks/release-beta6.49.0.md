@@ -17,6 +17,15 @@
 - 五个迁移在事务中配合本地恢复、提交回执、步骤控制及兼容包装夹具执行，通过后整体回滚；验证包含清理权限隔离及未完成来源保护。
 - 五个正式迁移已成功应用，安装后的数据库回滚夹具再次通过；video-processing Edge 已通过官方 CLI 部署。Pages、Worker 和 HTTPS 验证结果在发布完成后追加。
 
+## 生产发布记录（2026-09-17 20:44，北京时间）
+
+- 应用提交 `e878c68` 已推送 main，Cloudflare Pages 已生效。学生入口 `/`、管理入口 `/admin/` 对应的 HTML，以及 studio-v2、local-processing-client、local-file-hash-worker、local-reservation、processing-control、admin、cloud-content 脚本均从生产 HTTPS 读取，与本地发布代码逐字核对一致（仅规范化 Git 的 CRLF/LF 差异）。
+- `/api/processing/output` GET 未带运行票据返回 JSON `401 OUTPUT_TOKEN_INVALID`，确认新版对账路由存在；不是静态页面回退，也不是无保护地读取资源。
+- 隐藏计划任务已重新启用并启动，Worker 2.5.0 正常运行。云端心跳确认 `localInputV1=true`、`mediaProfile=balanced-540-v1`。启动错误日志为空；ASR、DeepSeek、发音依赖和 FFmpeg 就绪。发音健康检查命中缓存，不能据此宣称本轮已实测 GPU 发音吞吐。
+- 带正式网站 Origin 的本机 `/v2/capability` 返回 `ready=true`、协议版本 1；本机工作盘空闲约154 GiB。OPTIONS 返回204，包含正式 Origin、所需方法及本地网络响应头。错误 Origin 和无票据请求均被拒绝。
+- 所有依赖就绪后启用生产 `local_input_v1=true`，SQL 返回值已确认。启动前数据库只有一项已取消任务，无活动任务；本轮没有重处理旧视频、没有上传测试原片，也没有物理删除 R2 媒体。
+- 浏览器连接器的认证障碍尚未解除：以上是实际 HTTPS、进程及生产数据库检查，不代表真实 Chrome 的本地网络授权弹窗或约400MB新原片端到端制作已通过。该项保留为未完成验收，不标记“全流程正式验收通过”，也不承诺无任何 Bug。
+
 ## code-review
 
 ### Standards
