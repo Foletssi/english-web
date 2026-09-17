@@ -3,14 +3,20 @@ import argparse
 import json
 import os
 import shutil
+import sqlite3
 import threading
 import time
 import urllib.request
+import uuid
+from contextlib import closing
+from contextlib import ExitStack
 from pathlib import Path
 
 from worker import (ApiError, EdgeClient, DEFAULT_ENDPOINT, download, heartbeat_loop,
                     report_failure, report_progress, selected_assets, upload_assets, worker_root)
 from media_tools import probe, run, transcode
+from local_intake_store import IntakeError, digest_file
+from local_storage import source_access
 
 PROJECT_URL = 'https://ehxqtgakjgqgmghhdmjg.supabase.co'
 SITE_URL = 'https://english-web-lce.pages.dev'
@@ -27,8 +33,57 @@ def rpc(name, values):
         return json.load(response)
 
 
-def prepare(original_job, output, progress=None, cover=None):
-    source = worker_root() / original_job / 'source.mp4'
+def verified_local_source(descriptor):
+    """Read the durable store without claiming the running intake server's writer lock."""
+    if descriptor.get('protocolVersion') != 1:
+        raise IntakeError('SOURCE_DECLARATION_CONFLICT')
+    source_id = descriptor.get('sourceId', '')
+    try:
+        if str(uuid.UUID(source_id)) != source_id:
+            raise ValueError()
+    except (ValueError, TypeError, AttributeError):
+        raise IntakeError('SOURCE_ID_INVALID') from None
+    root = (worker_root() / 'local-inputs-v1').resolve()
+    directory = root / source_id
+    source = directory / 'source.bin'
+    if directory.is_symlink() or source.is_symlink() or not source.resolve().is_relative_to(root):
+        raise IntakeError('SOURCE_PATH_INVALID')
+    database = root / 'intakes.sqlite3'
+    if not database.is_file() or database.is_symlink():
+        raise IntakeError('LOCAL_SOURCE_MISSING')
+    with closing(sqlite3.connect(database.as_uri() + '?mode=ro', uri=True, timeout=30)) as db:
+        row = db.execute('SELECT state,declaration FROM inputs WHERE source_id=?', (source_id,)).fetchone()
+    if not row or row[0] != 'READY':
+        raise IntakeError('LOCAL_SOURCE_MISSING')
+    declaration = json.loads(row[1])
+    for key in ('sourceId', 'jobId', 'workerId', 'size', 'sha256', 'protocolVersion'):
+        if declaration.get(key) != descriptor.get(key):
+            raise IntakeError('SOURCE_DECLARATION_CONFLICT')
+    if not source.is_file() or source.stat().st_size != descriptor['size']:
+        raise IntakeError('LOCAL_SOURCE_MISSING')
+    if digest_file(source) != descriptor['sha256']:
+        raise IntakeError('LOCAL_SOURCE_SHA_MISMATCH')
+    return source
+
+
+def resolve_reencode_source(lease, original_job):
+    descriptor = lease.get('inputSource')
+    if 'inputSource' not in lease:
+        # Compatibility with maintenance leases created before local-first intake existed.
+        descriptor = {'kind': 'cloud_r2', 'key': lease['job']['source_key']}
+    if not isinstance(descriptor, dict):
+        raise IntakeError('SOURCE_DECLARATION_CONFLICT')
+    if descriptor.get('kind') == 'local_file':
+        return verified_local_source(descriptor)
+    if descriptor.get('kind') != 'cloud_r2' or descriptor.get('key') != lease['job']['source_key']:
+        raise IntakeError('SOURCE_DECLARATION_CONFLICT')
+    target = worker_root() / original_job / 'source.mp4'
+    download(lease['downloadUrl'], target, source_key=descriptor['key'])
+    return target
+
+
+def prepare(original_job, output, progress=None, cover=None, source=None):
+    source = source or worker_root() / original_job / 'source.mp4'
     if not source.is_file():
         raise RuntimeError('Verified local source is missing; use the cloud worker source cache')
     info = probe(source)
@@ -72,11 +127,12 @@ def apply(original_job, output):
     stop, cancelled = threading.Event(), threading.Event()
     thread = threading.Thread(target=heartbeat_loop, args=(client, lease, stop, cancelled), daemon=True)
     thread.start()
+    source_locks = ExitStack()
     try:
-        # HEAD/ETag+length revalidates the cached original against cloud storage.
-        source = worker_root() / original_job / 'source.mp4'
-        download(lease['downloadUrl'], source)
-        cover = source.parent / 'reencode-cover.webp'
+        if lease.get('inputSource', {}).get('kind') == 'local_file':
+            source_locks.enter_context(source_access(worker_root() / 'local-inputs-v1', lease['inputSource']['sourceId']))
+        source = resolve_reencode_source(lease, original_job)
+        cover = output / 'reencode-cover.webp'
         download(lease['downloadUrl'] + '&asset=cover', cover)
         last_report = [0.0]
         def progress(_index, _count, label, current, total):
@@ -88,7 +144,7 @@ def apply(original_job, output):
             report_progress(client, lease, 'TRANSCODE', min(95, 10 + int(85 * current / max(total, 1))),
                             '正在生成均衡540P，保留现有学习内容',
                             {'current': current, 'total': total, 'unit': 'media_seconds', 'substage': label})
-        summary = prepare(original_job, output, progress, cover=cover)
+        summary = prepare(original_job, output, progress, cover=cover, source=source)
         if cancelled.is_set():
             raise ApiError('JOB_LEASE_LOST_OR_CANCELLED')
         assets = selected_assets(output, {'video': {'playback': {'variants': summary['variants']}}})
@@ -104,6 +160,7 @@ def apply(original_job, output):
             pass
         raise
     finally:
+        source_locks.close()
         stop.set()
         thread.join(timeout=20)
 

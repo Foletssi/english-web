@@ -74,7 +74,7 @@ def transient_request_error(error):
     if error.status is not None and error.status not in {429, 500, 502, 503, 504}:
         return False
     # Named business errors, including unknown ones, must not inherit HTTP retries.
-    return error.code in {'EDGE_UNAVAILABLE', 'OUTPUT_UNAVAILABLE'} or (
+    return error.code in {'EDGE_UNAVAILABLE', 'OUTPUT_UNAVAILABLE', 'OUTPUT_STATUS_UNAVAILABLE'} or (
         error.status is not None and error.code in {
             f'EDGE_HTTP_{error.status}', f'OUTPUT_HTTP_{error.status}', 'REQUEST_FAILED'})
 
@@ -119,7 +119,7 @@ class EdgeClient:
             'User-Agent': f'EastudyCloudWorker/{VERSION}'})
         timeout = 15 if 'heartbeat' in action else 45
         return request_json(request, timeout, retryable=action in {
-            'worker-telemetry-v2', 'worker-output-receipt-v2'})
+            'worker-telemetry-v2', 'worker-output-receipt-v2', 'worker-complete-v2'})
 
     def upload(self, base_url, token, job_id, path, source):
         url = base_url + '&path=' + urllib.parse.quote(path, safe='/')
@@ -129,7 +129,25 @@ class EdgeClient:
         request = urllib.request.Request(url, data=data, method='PUT', headers={
             'Content-Type': content_type(path), 'Content-Length': str(len(data)),
             'User-Agent': f'EastudyCloudWorker/{VERSION}'})
-        return request_json(request, 300, 'OUTPUT', retryable=True)
+        # A PUT response can disappear after R2 committed it. Reconcile the
+        # current run's object before sending bytes again, including on resume.
+        expected_hash = hashlib.sha256(data).hexdigest()
+        has_run = bool(urllib.parse.parse_qs(urllib.parse.urlsplit(url).query).get('run'))
+        for attempt in range(3):
+            if has_run:
+                status = request_json(urllib.request.Request(url, method='GET'), 30, 'OUTPUT', retryable=True)
+                if status.get('found'):
+                    if status.get('sha256') != expected_hash or status.get('size') != len(data):
+                        raise ApiError('OUTPUT_RECEIPT_CONFLICT')
+                    return status
+            try:
+                return request_json(request, 300, 'OUTPUT')
+            except ApiError as error:
+                recoverable = transient_request_error(error) or error.code in {
+                    'OUTPUT_ACK_PENDING', 'OUTPUT_UPLOAD_RETRY', 'OUTPUT_INVALID_RESPONSE'}
+                if not recoverable or attempt == 2:
+                    raise
+                time.sleep(2 ** attempt)
 
 
 class RemoteProgressStore:
@@ -142,7 +160,7 @@ class RemoteProgressStore:
         self._samples = 0
         self._lock = threading.RLock()
         self.job = {'id': job['id'], 'status': 'PROCESSING', 'currentStep': 'upload', 'progress': 1,
-                    'message': '正在下载云端原片', 'error': None, 'result': None,
+                    'message': '正在读取并校验原片', 'error': None, 'result': None,
                     'sourceName': Path(job['source_key']).name, 'metadata': job.get('input') or {}}
 
     def get(self, job_id):
@@ -644,6 +662,11 @@ def process_lease(client, lease, local_inputs=None):
             return
         output = work / 'output' / job_id
         manifest = result_job['result'].pop('_uploadedManifest')
+        expected = sorted((path.relative_to(output).as_posix(), path.stat().st_size, file_sha256(path))
+                          for path in selected_assets(output, result_job['result']))
+        actual = sorted((item['path'], item['size'], item['sha256']) for item in manifest)
+        if actual != expected:
+            raise ApiError('OUTPUT_MANIFEST_MISMATCH')
         if cancelled.is_set():
             raise ApiError('JOB_LEASE_LOST_OR_CANCELLED')
         final = rewrite_result(result_job['result'], job_id, lease['job']['source_key'])
@@ -711,7 +734,7 @@ def main():
         print(f'[startup-heartbeat] {error}', flush=True)
     while True:
         try:
-            if not caps.get('teachingVoiceV1'):
+            if not all(caps.get(name) for name in ('ffmpeg', 'whisper', 'deepseek', 'teachingVoiceV1')):
                 client.call('worker-heartbeat')
                 if args.once:
                     return 2

@@ -64,7 +64,13 @@ async function handleWorker(action: string, body: any) {
   if (action === 'worker-local-ticket') return { intake: await rpc('processing_local_ticket_v1', {
     p_worker_id: workerId, p_ticket: body.ticket, p_origin: body.origin
   }) };
+  if (action === 'worker-local-cleanup-status') return { cleanup: await rpc('processing_local_cleanup_status_v1', {
+    p_worker_id: workerId, p_source_id: body.sourceId
+  }) };
   if (action === 'worker-local-ready') return { input: await rpc('processing_local_ready_v1', {
+    p_worker_id: workerId, p_source_id: body.sourceId, p_sha256: body.sha256
+  }) };
+  if (action === 'worker-local-missing') return { input: await rpc('processing_local_missing_v1', {
     p_worker_id: workerId, p_source_id: body.sourceId, p_sha256: body.sha256
   }) };
   if (action === 'worker-claim' || action === 'worker-claim-local-v1') {

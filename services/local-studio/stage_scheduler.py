@@ -1,5 +1,6 @@
 """Small dependency scheduler: ready stages only, bounded resources, cancellation."""
 import os
+import subprocess
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from contextvars import ContextVar, copy_context
 from dataclasses import dataclass
@@ -24,8 +25,19 @@ class Stage:
 
 
 def parallel_workers():
-    # ASR/voice share one GPU; encoding is CPU-only. Small machines stay serial.
-    return 1 if os.getenv('EASTUDY_SERIAL_PIPELINE') == '1' or (os.cpu_count() or 1) < 4 else 3
+    # Fail conservatively when the GPU budget cannot be measured. ASR and voice
+    # still share one resource slot even on machines with ample free memory.
+    if os.getenv('EASTUDY_SERIAL_PIPELINE') == '1' or (os.cpu_count() or 1) < 4:
+        return 1
+    try:
+        result = subprocess.run(
+            ['nvidia-smi', '--query-gpu=memory.free', '--format=csv,noheader,nounits'],
+            capture_output=True, text=True, check=True, timeout=3,
+            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+        free = [int(line.strip()) for line in result.stdout.splitlines() if line.strip()]
+        return 3 if free and min(free) >= 4096 else 1
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return 1
 
 
 def run_stages(stages, cancelled=None, observe=None, workers=None):
@@ -73,10 +85,11 @@ def run_stages(stages, cancelled=None, observe=None, workers=None):
                 occupied.remove(stage.resource)
                 try:
                     results[stage.name] = future.result()
-                    event(stage.name, 'DONE')
                 except Exception as error:
                     failures[stage.name] = error
                     event(stage.name, 'ERROR', errorCode=type(error).__name__)
+                else:
+                    event(stage.name, 'DONE')
     if failures:
         raise next(iter(failures.values()))
     return results

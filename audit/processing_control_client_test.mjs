@@ -36,6 +36,17 @@ click(event);
 assert.notEqual(requests[2].requestId, requests[0].requestId, 'New lease needs a distinct command');
 resolveRequest({ok: true}); await tick();
 assert.equal(window.EastudyProcessingControl.actions({id: 'job', status: 'RUNNING'}, 'TRASHED'), '');
+const missingInput = {id: 'missing-job', videoId: '42', status: 'WAITING', error: {code: 'LOCAL_SOURCE_MISSING'}};
+window.EastudyStudioV2.isRetrying = id => id === 'missing-job';
+window.EastudyStudioV2.recoveryMessage = () => '正在传入原视频 20%';
+const recoveryButton = window.EastudyProcessingControl.actions(missingInput, 'ACTIVE');
+assert.match(recoveryButton, /data-recover-local-input="missing-job"/);
+assert.match(recoveryButton, /data-video-id="42" disabled/);
+assert.match(recoveryButton, /正在传入原视频 20%/);
+assert.match(recoveryButton, /data-processing-command="cancel"/, 'Receiving input remains independently cancellable');
+const cancelledButton = window.EastudyProcessingControl.actions({...missingInput, status: 'CANCELLED'}, 'ACTIVE');
+assert.doesNotMatch(cancelledButton, /data-recover-local-input/);
+assert.match(cancelledButton, /data-processing-command="retry_failed_stage"/);
 
 let calls = [], scenario = 'offline';
 const local = {window: {}, AbortSignal, URLSearchParams, async fetch(url, options) {

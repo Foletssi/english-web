@@ -34,7 +34,7 @@
       for (let attempt = 0; attempt < 3; attempt++) {
         const result = await context.cloud.reserveLocalProcessingJob(input, context.revision());
         if (result.error) {
-          if (!String(result.error.code || result.error.message || '').includes('CONTENT_REVISION_CONFLICT') || attempt === 2) throw result.error;
+          if (![result.error.code, result.error.message].some(value => String(value || '').includes('CONTENT_REVISION_CONFLICT')) || attempt === 2) throw result.error;
           const remote = await context.cloud.pullAdmin();
           if (remote.error) throw remote.error;
           if (!remote.snapshot || !Number.isSafeInteger(remote.revision) || remote.revision < context.revision()) throw new Error('LOCAL_RESERVATION_RESPONSE_INVALID');

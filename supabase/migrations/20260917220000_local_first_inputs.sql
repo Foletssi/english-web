@@ -102,7 +102,7 @@ begin
       p_source->>'coverSha256',v_binding,p_origin,encode(extensions.digest(v_ticket,'sha256'),'hex'),now()+interval '20 minutes') returning * into v_local;
     update public.processing_jobs set status='WAITING',stage='LOCAL_DOWNLOAD',provider='local-worker',
       input=input||jsonb_build_object('localInputV1',true,'teachingVoiceRequired',true),
-      metrics=jsonb_build_object('substage','local_receive','sourceKind','local_file','current',0,'total',v_local.source_size,'unit','bytes')
+      work=jsonb_set(coalesce(work,'{}'::jsonb),'{telemetry}',coalesce(work->'telemetry','{}'::jsonb)||jsonb_build_object('substage','local_receive','sourceKind','local_file','current',0,'total',v_local.source_size,'unit','bytes'))
       where id=v_job.id returning * into v_job;
     select * into strict v_content from private.content_snapshots where environment='production';
     select x into v_video from jsonb_array_elements(v_content.draft->'videos') x where x->>'id'=v_id;
@@ -146,7 +146,7 @@ begin
   update private.processing_local_inputs set intake_state='READY',source_sha256=p_sha256,ready_at=coalesce(ready_at,now()),updated_at=now() where job_id=v_job.id;
   if v_job.status='WAITING' and v_job.run_id is null then
     update public.processing_jobs set status='QUEUED',next_run_at=now(),updated_at=now(),
-      metrics=metrics||jsonb_build_object('substage','local_ready','current',v_local.source_size) where id=v_job.id;
+      work=jsonb_set(coalesce(work,'{}'::jsonb),'{telemetry}',coalesce(work->'telemetry','{}'::jsonb)||jsonb_build_object('substage','local_ready','current',v_local.source_size)) where id=v_job.id;
   end if;
   return jsonb_build_object('state','READY');
 end $$;
@@ -193,7 +193,12 @@ returns table(source_key text) language plpgsql stable security definer set sear
 begin
   if not exists(select 1 from public.processing_jobs j where j.id=p_job_id and j.status in ('QUEUED','RUNNING','WAITING')
     and j.cancel_requested_at is null and j.source_token_expires_at>now()
-    and encode(extensions.digest(p_token,'sha256'),'hex')=j.source_token_hash) then return; end if;
+    and encode(extensions.digest(p_token,'sha256'),'hex')=j.source_token_hash
+    and not exists(select 1 from private.content_video_trash t where t.environment='production'
+      and t.video_id=j.video_id and t.restored_at is null)
+    and not exists(select 1 from private.video_deletion_jobs d where d.environment='production'
+      and d.confirmed_at is not null and (d.video_id=j.video_id or j.id=any(d.job_ids)
+        or d.source_keys ? j.source_key))) then return; end if;
   if (private.processing_input_descriptor_v1(p_job_id)->>'kind')='local_file' then raise exception 'SOURCE_LOCAL_ONLY'; end if;
   return query select j.source_key from public.processing_jobs j where j.id=p_job_id;
 end $$;

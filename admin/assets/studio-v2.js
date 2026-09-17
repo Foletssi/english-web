@@ -94,6 +94,36 @@ async function retry(jobId,videoId){
  }catch(error){reportRecovery(jobId,String(error?.message||error).includes('JOB_SUPERSEDED')?'此任务已被新版视频替代，请在当前视频卡片中继续处理。':'暂未确认继续处理成功。请先刷新状态；如果任务仍然失败，再点击继续处理。')}
  finally{state.retrying.delete(jobId);global.dispatchEvent(new CustomEvent('eastudy:studio-job-updated'))}
 }
+function selectRecoveryFiles(source){
+ return new Promise(resolve=>{
+  const dialog=document.createElement('dialog');
+  dialog.style.cssText='width:min(440px,calc(100vw - 32px));max-height:85dvh;overflow:auto;border:1px solid var(--border,#ddd);border-radius:16px;padding:24px;background:var(--surface,#fff);color:inherit';
+  dialog.innerHTML=`<form><h3>继续原视频处理</h3><p>请选择原视频：<strong>${escapeHtml(source.name)}</strong>。校验一致后继续当前任务，已完成内容会保留。</p><label>原视频<input name="original" type="file" accept="video/*" required></label>${source.coverSha256?'<label>原任务的封面图片<input name="cover" type="file" accept="image/jpeg,image/png,image/webp" required></label>':''}<p role="status"></p><div class="job-actions"><button class="ghost" type="button" data-close>取消</button><button class="primary" type="submit">校验并继续处理</button></div></form>`;
+  const finish=value=>{dialog.close();dialog.remove();resolve(value)};
+  dialog.addEventListener('cancel',event=>{event.preventDefault();finish(null)});
+  dialog.querySelector('[data-close]').addEventListener('click',()=>finish(null));
+  dialog.querySelector('form').addEventListener('submit',event=>{event.preventDefault();
+   const file=dialog.querySelector('[name="original"]').files[0],cover=dialog.querySelector('[name="cover"]')?.files[0];
+   if(!file||source.coverSha256&&!cover)return;
+   finish({file,cover});
+  });
+  document.body.append(dialog);dialog.showModal();
+ });
+}
+async function recoverLocal(jobId,videoId){
+ if(state.retrying.has(jobId))return;
+ state.retrying.add(jobId);reportRecovery(jobId,'正在读取原任务信息…');
+ try{
+  const input=await cloud().getLocalProcessingInput(jobId);
+  if(!input?.inputSource)throw new Error('该任务没有本机原视频记录，请刷新任务状态。');
+  const files=await selectRecoveryFiles(input.inputSource);
+  if(!files){reportRecovery(jobId,'已保留原任务，可随时重新选择原视频继续。');return}
+  await global.EastudyLocalProcessing.submit({...files,recoveryJobId:jobId,onProgress:(progress,message)=>reportRecovery(jobId,message)});
+  reportRecovery(jobId,'原视频已恢复，将在同一个任务继续处理。');pollJob(jobId,videoId);
+  try{await syncJobs()}catch{reportRecovery(jobId,'原视频已恢复，状态同步暂时失败，请刷新状态。')}
+ }catch(error){reportRecovery(jobId,error.message||'恢复失败，请重新选择原文件后继续。')}
+ finally{state.retrying.delete(jobId);global.dispatchEvent(new CustomEvent('eastudy:studio-job-updated'))}
+}
 async function checkService(){
   if(state.submitting)return;
   state.serviceReady=false;const health=$('#studioV2Health'),button=$('#studioV2Submit');
@@ -101,8 +131,9 @@ async function checkService(){
   health.textContent='正在检查视频处理服务…';$('#studioV2Recheck').hidden=false;
   if(!Store.localOnly){$('#studioV2Intro').textContent='选择原视频后点击开始处理：本机自动制作540P、字幕、教学内容和发音，只上传成品。';
     $('#studioV2ServiceCopy').textContent='原片接收完成前请保留网页；完成后可关闭网页，制作期间电脑需开机、不休眠。完成后学生从云端观看。';
-    try{await global.EastudyLocalProcessing.capability();
-      state.serviceReady=true;health.dataset.state='ok';health.textContent='本机处理服务已连接';button.disabled=false;button.textContent='开始处理';
+    try{const feature=await cloud().localProcessingCapability();if(feature.error)throw feature.error;if(feature.data?.enabled!==true)throw new Error('本机制作功能正在更新，请稍后重新检测。');const capability=await global.EastudyLocalProcessing.capability();
+      const storage=capability.storage,gb=value=>(Number(value)/1073741824).toFixed(1);
+      state.serviceReady=true;health.dataset.state='ok';health.textContent='本机处理服务已连接'+(storage?` · 原片副本 ${gb(storage.applicationBytes)} GB · 可用 ${gb(storage.freeBytes)} GB`:'');button.disabled=false;button.textContent='开始处理';
     }catch(error){health.dataset.state='unavailable';health.textContent=error.message;button.textContent='请先连接本机服务'}
     return}
   $('#studioV2Intro').textContent='选择视频、填写创作者并核对标题，处理完成后进入人工审核。';
@@ -114,6 +145,7 @@ async function checkService(){
 function open(){if(state.submitting){$('#studioV2Modal').classList.add('show');return}state.rows=state.rows.filter(row=>!row.submitted);renderRows();const creator=$('#studioV2Creator');if(/^(null|undefined)$/i.test(creator.value.trim()))creator.value='';$('#studioV2Videos').value='';$('#studioCreatorOptions').innerHTML=Store.listCreators().filter(row=>row.name&&!/^(null|undefined)$/i.test(String(row.name))).map(row=>`<option value="${escapeHtml(row.name)}"></option>`).join('');$('#studioV2Modal').classList.add('show');void checkService()}
 
 function bind(){const form=$('#studioV2Form');if(!form)return;form.addEventListener('submit',submitQueue);$('#studioV2Recheck').addEventListener('click',checkService);$('#studioV2Videos').addEventListener('change',event=>addFiles(event.target.files));$('#studioV2Rows').addEventListener('input',event=>{const row=state.rows.find(item=>item.id===event.target.dataset.rowTitle);if(row)row.title=event.target.value});$('#studioV2Rows').addEventListener('change',event=>{const row=state.rows.find(item=>item.id===event.target.dataset.rowCover);if(row){row.cover=event.target.files[0]||null;renderRows()}});$('#studioV2Rows').addEventListener('click',event=>{const button=event.target.closest('[data-remove-row]');if(button)state.rows=state.rows.filter(row=>row.id!==button.dataset.removeRow),renderRows()});document.addEventListener('click',event=>{if(event.target.closest('[data-refresh-studio-jobs]'))void refreshJobs();const retryButton=event.target.closest('[data-retry-studio-job]');if(retryButton)retry(retryButton.dataset.retryStudioJob,retryButton.dataset.videoId)});global.addEventListener('online',wakeCloudPoll);document.addEventListener('visibilitychange',()=>{if(!document.hidden)wakeCloudPoll()});if(Store.localOnly)void syncJobs().catch(()=>{});else wakeCloudPoll()}
-global.EastudyStudioV2={open,retry,syncJobs,refreshJobs,recoveryMessage,isRetrying:jobId=>state.retrying.has(jobId),localOnly:Store.localOnly};
+document.addEventListener('click',event=>{const button=event.target.closest('[data-recover-local-input]');if(button)void recoverLocal(button.dataset.recoverLocalInput,button.dataset.videoId)});
+global.EastudyStudioV2={open,retry,recoverLocal,syncJobs,refreshJobs,recoveryMessage,isRetrying:jobId=>state.retrying.has(jobId),localOnly:Store.localOnly};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();
 })(window);

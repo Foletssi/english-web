@@ -52,7 +52,7 @@ export async function onRequestPut({ request, env }) {
   try {
     upload = await env.VIDEO_BUCKET.createMultipartUpload(key, {
       httpMetadata: { contentType: contentType(path), cacheControl: path.endsWith('.m3u8') ? 'private, max-age=60' : 'private, max-age=31536000, immutable' },
-      customMetadata: { processingJobId: job }
+      customMetadata: { processingJobId: job, sha256 }
     });
     receipt = await serviceRpc(env, 'begin_processing_output_write', {
       ...body, p_run_id: run || null, p_upload_id: upload.uploadId
@@ -83,4 +83,25 @@ async function acknowledge(env, writeId) {
     } catch { /* Idempotent; an uncertain response is safe to retry. */ }
   }
   return false;
+}
+
+// The current run's resolver derives the object key; callers never supply R2 keys.
+export async function onRequestGet({ request, env }) {
+  const bucketError = requireBucket(env);
+  if (bucketError) return bucketError;
+  const url = new URL(request.url);
+  const job = url.searchParams.get('job') || '', run = url.searchParams.get('run') || '';
+  const token = url.searchParams.get('token') || '', path = url.searchParams.get('path') || '';
+  if (!/^[0-9a-f-]{36}$/i.test(job) || !/^[0-9a-f-]{36}$/i.test(run) ||
+      token.length < 32 || token.length > 256 || !path) return json({ error: 'OUTPUT_TOKEN_INVALID' }, 401);
+  try {
+    const resolved = await serviceRpc(env, 'resolve_processing_output_v2', {
+      p_job_id: job, p_run_id: run, p_token: token, p_path: path
+    });
+    const key = resolved?.object_key;
+    if (!key) return json({ error: 'OUTPUT_NOT_ALLOWED' }, 403);
+    const object = await env.VIDEO_BUCKET.head(key);
+    if (!object || !/^[a-f0-9]{64}$/.test(object.customMetadata?.sha256 || '')) return json({ ok: true, found: false });
+    return json({ ok: true, found: true, path, size: object.size, etag: object.etag, sha256: object.customMetadata.sha256 });
+  } catch { return json({ error: 'OUTPUT_STATUS_UNAVAILABLE' }, 503); }
 }

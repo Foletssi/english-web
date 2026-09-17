@@ -96,7 +96,8 @@ def start_local_intake(store, client, port=8790):
                         return
                     challenge = str(uuid.uuid4())
                     client.call('worker-local-challenge', challenge=challenge, origin=origin)
-                    self.reply(200, {'protocolVersion': 1, 'workerId': client.worker_id, 'challenge': challenge, 'ready': True})
+                    self.reply(200, {'protocolVersion': 1, 'workerId': client.worker_id, 'challenge': challenge,
+                                     'ready': True, 'storage': store.storage_usage()})
                     return
                 source = self.authorize(origin, refresh=self.command == 'POST')
                 source_id = source['sourceId']

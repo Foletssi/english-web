@@ -28,28 +28,28 @@ assert.ok(!sql.includes('processing_commit_result('));
 assert.match(sql, /from public,anon,authenticated/);
 const operation = read('services/cloud-worker/reencode-existing.py');
 assert.ok(!operation.includes('repair_learning(') && !operation.includes('process_job('));
-assert.match(operation, /download\(lease\['downloadUrl'\], source\)/);
+assert.match(operation, /source = resolve_reencode_source\(lease, original_job\)/);
+assert.match(operation, /download\(lease\['downloadUrl'\], target, source_key=descriptor\['key'\]\)/);
 const admin = read('admin/assets/admin.js');
 const replacement = admin.slice(admin.indexOf('async function queueVideoReplacement('), admin.indexOf("$('#videoForm').onsubmit"));
-assert.ok(replacement.includes('createProcessingJob'));
+assert.ok(replacement.includes('EastudyLocalProcessing.submit'));
 assert.ok(!replacement.includes('Cloud.publish') && !replacement.includes('Store.saveVideo'));
 const calls = [];
-const box = { Date, crypto: { randomUUID: () => 'fixture-request' }, automaticTags: () => ['daily-life'],
-  flushCloudDraftSync: async () => {}, cancelCloudDraftSync: () => {}, CloudState: { revision: 9 },
-  Cloud: { createProcessingJob: async (...args) => { calls.push(args); return {data:{job:{id:'queued'}}}; } },
-  importCloudMutation: () => {}, closeModal: () => {}, toast: () => {}, location: {} };
+const box = { automaticTags: () => ['daily-life'],
+  window:{EastudyLocalProcessing:{submit:async input=>{calls.push(input);return {job:{id:'queued'}}}}},
+  setUploadProgress:()=>{}, closeModal: () => {}, toast: () => {}, location: {} };
 vm.runInNewContext(replacement + ';this.queue=queueVideoReplacement;', box);
-await box.queue({id:4,status:'PUBLISHED',doTranscript:'off'}, {id:4,creator:'Alice',collectionIds:['one']}, null,
-  {key:'videos/fixture/source.mp4',size:100,url:'/raw-original'}, 60);
-assert.equal(calls[0][0].status, 'DRAFT');
-assert.equal(calls[0][0].playback, null);
-assert.equal(calls[0][0].mediaUrl, '');
-assert.equal(calls[0][0].processingOptions.transcript, true);
-assert.equal(calls[0][0].doTranscript, undefined);
-assert.equal(calls[0][0].id, 4);
-assert.equal(calls[0][3], 9);
+const original={name:'original.mp4',size:100};
+await box.queue({id:4,status:'PUBLISHED',doTranscript:'off'}, {id:4,creator:'Alice',collectionIds:['one']}, null,original,60);
+assert.equal(calls[0].video.status, 'DRAFT');
+assert.equal(calls[0].video.playback, null);
+assert.equal(calls[0].video.mediaUrl, '');
+assert.equal(calls[0].video.processingOptions.transcript, true);
+assert.equal(calls[0].video.doTranscript, undefined);
+assert.equal(calls[0].video.id, 4);
+assert.equal(calls[0].file,original,'replacement goes directly to local intake');
 assert.equal(box.location.hash, '#/pipeline');
-box.Cloud.createProcessingJob = async () => ({error:new Error('queue unavailable')});
+box.window.EastudyLocalProcessing.submit = async () => {throw new Error('queue unavailable')};
 await assert.rejects(() => box.queue({}, {id:4}, null, {key:'source'}, 60), /queue unavailable/);
 console.log('Balanced media, replacement intake and hidden worker contracts passed.');
 const cloud = read('shared/cloud-content.js');

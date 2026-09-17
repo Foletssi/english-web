@@ -39,7 +39,7 @@ context.cloud = {
     calls++;
     if (calls === 1) {
       snapshot = current;
-      return {error: new Error('CONTENT_REVISION_CONFLICT')};
+      return {error: Object.assign(new Error('CONTENT_REVISION_CONFLICT'), {code: 'P0001'})};
     }
     assert.equal(expectedRevision, 2);
     return {data: {...response.data, revision: 3}};

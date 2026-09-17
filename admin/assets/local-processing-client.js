@@ -10,6 +10,10 @@
     LOCAL_INPUT_CANCELLED: '任务已取消，请重新创建处理任务。',
     LOCAL_PROCESSING_NOT_READY: '本机制作组件尚未就绪，请启动处理服务后重新检测。',
     CONTENT_REVISION_CONFLICT: '云端内容已更新。当前文件已保留，请先同步内容再继续。',
+    LOCAL_INPUT_DISABLED: '本机制作功能正在更新，请稍后重新检测。',
+    LOCAL_WORKER_MISMATCH: '请在接收原视频的同一台电脑上恢复任务。',
+    LOCAL_CHALLENGE_EXPIRED: '本机连接验证已过期，请重新检测服务后继续。',
+    JOB_ALREADY_COMPLETE: '该视频已完成处理，请刷新任务查看结果。',
   };
   async function request(path, {ticket, method = 'GET', body, headers = {}, timeout = 90000} = {}) {
     const controller = new AbortController(), timer = setTimeout(() => controller.abort(), timeout);
@@ -45,9 +49,14 @@
       worker.postMessage(file);
     });
   }
-  async function submit({file, cover, video, onProgress = () => {}}) {
+  async function submit({file, cover, video = {}, recoveryJobId = null, onProgress = () => {}}) {
     if (!file?.size || file.size > 2 * 1024 ** 3) throw new Error('请选择不超过 2GB 的原视频。');
     if (cover?.size > 15 * 1024 ** 2) throw new Error('封面不能超过 15MB。');
+    if(!recoveryJobId){
+      const feature=await global.EastudyCloudContent.localProcessingCapability();
+      if(feature.error)throw feature.error;
+      if(feature.data?.enabled!==true)throw new Error(MESSAGES.LOCAL_INPUT_DISABLED);
+    }
     await capability();
     const sha256 = await hashFile(file, (current, total) => onProgress(Math.round(10 * current / total), '正在校验本地原视频'));
     const coverSha256 = cover?.size ? await hashFile(cover) : null;
@@ -55,7 +64,7 @@
     const session = await global.EastudyAuth.client('admin').auth.getSession();
     const adminId = session.data?.session?.user?.id;
     if (session.error || !adminId) throw new Error('登录已失效，请重新登录控制端后继续。');
-    const key = 'eastudy:local-intake:v1:' + adminId + ':' + (video.id || 'new') + ':' + sha256;
+    const key = 'eastudy:local-intake:v1:' + adminId + ':' + (recoveryJobId || video.id || 'new') + ':' + sha256;
     let pending;
     try { pending = JSON.parse(localStorage.getItem(key) || 'null'); } catch { /* invalid metadata is replaced */ }
     if (pending && JSON.stringify(pending.source) !== JSON.stringify(source)) throw new Error('请保留原任务所选的封面和文件后继续。');
@@ -65,11 +74,18 @@
     let reservation, ticket, renewedAt;
     async function reserve() {
       const ready = await capability(); // Hashing can outlive the previous challenge.
-      const result = await global.EastudyAdminCloudBridge.reserveLocal({
+      const input={
         video: pending.video, source, requestId: pending.requestId,
         workerId: ready.workerId, challenge: ready.challenge, origin: location.origin
-      });
-      if (result.error) throw result.error;
+      };
+      const result = recoveryJobId
+        ? await global.EastudyCloudContent.recoverLocalProcessingInput({...input,jobId:recoveryJobId})
+        : await global.EastudyAdminCloudBridge.reserveLocal(input);
+      if (result.error) {
+        const code=String(result.error.message||result.error.code||'');
+        if(MESSAGES[code])throw Object.assign(new Error(MESSAGES[code]),{code});
+        throw result.error;
+      }
       reservation = result.data;
       ticket = reservation.intakeTicket;
       renewedAt = Date.now();
@@ -108,7 +124,12 @@
       if (status.error) throw new Error(MESSAGES[status.error] || '本机文件核验失败，已保留接收部分，请重试。');
     }
     if (status.state !== 'READY') throw new Error('原片尚未接收完整，请继续处理。');
-    localStorage.removeItem(key);
+    // Keep the idempotency receipt across reloads and caller/UI failures.
+    // Re-selecting the same original resumes this job instead of creating a duplicate.
+    pending.jobId = reservation.job.id;
+    pending.videoId = reservation.job.video_id;
+    pending.ready = true;
+    localStorage.setItem(key, JSON.stringify(pending));
     onProgress(100, '原片已保存到本机，可关闭网页；请保持电脑运行');
     return reservation;
   }

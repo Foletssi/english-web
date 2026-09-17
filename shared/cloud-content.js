@@ -264,6 +264,29 @@
     return {data: firstRow(data), error: error || null};
   }
 
+  async function localProcessingCapability() {
+    const api=auth('admin');
+    if(!api)return {error:new Error('SUPABASE_NOT_CONFIGURED')};
+    const {data,error}=await api.rpc('admin_local_processing_capability_v1');
+    return {data:firstRow(data),error:error||null};
+  }
+  async function getLocalProcessingInput(jobId) {
+    const api=auth('admin');
+    if(!api)throw new Error('SUPABASE_NOT_CONFIGURED');
+    const {data,error}=await api.rpc('admin_get_local_processing_input_v1',{p_job_id:jobId});
+    if(error)throw error;
+    return firstRow(data);
+  }
+  async function recoverLocalProcessingInput(input) {
+    const api=auth('admin');
+    if(!api)return {error:new Error('SUPABASE_NOT_CONFIGURED')};
+    const {data,error}=await api.rpc('admin_recover_local_processing_input_v1',{
+      p_job_id:input.jobId,p_source:input.source,p_worker_id:input.workerId,
+      p_challenge:input.challenge,p_origin:input.origin
+    });
+    return {data:firstRow(data),error:error||null};
+  }
+
   function normalizeProcessingJob(job) {
     job={...job,videoId:job.videoId??job.video_id,type:job.type||job.input?.kind||'CLOUD_PIPELINE',inputTitle:job.inputTitle||job.input?.title||job.input?.titleZh,
       createdAt:job.createdAt||job.created_at,updatedAt:job.updatedAt||job.updated_at,completedAt:job.completedAt||job.completed_at,
@@ -473,6 +496,6 @@
   }
 
   global.EastudyCloudContent = Object.freeze({ selectCurrentProcessingJob, pullPublished, pullVideoTeaching, pullAdmin, saveDraft, publish, publishEntity, setCreatorStatus, setVideoPublication, createLearningRepair, listTrash, trashVideos, restoreVideo,planPermanentVideoDeletion,confirmPermanentVideoDeletion,getVideoDeletion,getVideoDeletionCapability,retryVideoDeletion,
-    processingHealth, createProcessingJob, reserveLocalProcessingJob, listProcessingJobs, listProcessingHistory, getProcessingJob, retryProcessingJob, controlProcessingJob,
+    processingHealth, createProcessingJob, reserveLocalProcessingJob, localProcessingCapability, getLocalProcessingInput, recoverLocalProcessingInput, listProcessingJobs, listProcessingHistory, getProcessingJob, retryProcessingJob, controlProcessingJob,
     syncMediaSession, clearMediaSession, uploadVideo, uploadCreatorAvatar });
 })(window);

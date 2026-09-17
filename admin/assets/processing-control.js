@@ -33,7 +33,11 @@
  function actions(job,state){
    if(state!=='ACTIVE'||global.ZoContent?.localOnly)return '';
    const raw=job.rawStatus||job.status,id=String(job.id),action=['RUNNING','QUEUED','WAITING'].includes(raw)?'cancel':['ERROR','CANCELLED'].includes(raw)&&job.type!=='MEDIA_REENCODE'?'retry_failed_stage':'';
-   return (action?`<button class="${action==='cancel'?'ghost':'primary'}" data-processing-command="${action}" data-job-id="${escape(id)}" data-run-id="${escape(job.runId||job.run_id||'')}" data-updated-at="${escape(job.updatedAt||job.updated_at)}" ${pending.has(id)?'disabled':''}>${action==='cancel'?'取消处理':'继续处理'}</button>`:'')+`<span role="status">${escape(messages.get(id)||'')}</span>`;
+   const substage=job.telemetry?.substage||job.metrics?.substage||job.substage;
+   const needsSource=job.error?.code==='LOCAL_SOURCE_MISSING'||['local_missing','local_receive'].includes(substage);
+   const commandButton=action?`<button class="${action==='cancel'?'ghost':'primary'}" data-processing-command="${action}" data-job-id="${escape(id)}" data-run-id="${escape(job.runId||job.run_id||'')}" data-updated-at="${escape(job.updatedAt||job.updated_at)}" ${pending.has(id)?'disabled':''}>${action==='cancel'?'取消处理':'继续处理'}</button>`:'';
+   if(needsSource&&['WAITING','ERROR'].includes(raw))return `<button class="primary" data-recover-local-input="${escape(id)}" data-video-id="${escape(job.videoId||job.video_id||'')}" ${global.EastudyStudioV2?.isRetrying?.(id)?'disabled':''}>${substage==='local_receive'?'继续传入原视频':'重新选择原视频'}</button>`+(action==='cancel'?commandButton:'')+`<span role="status">${escape(global.EastudyStudioV2?.recoveryMessage?.(id)||messages.get(id)||'')}</span>`;
+   return commandButton+`<span role="status">${escape(messages.get(id)||'')}</span>`;
  }
  async function command(button){
    const id=button.dataset.jobId;if(pending.has(id))return;

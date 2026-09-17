@@ -16,7 +16,9 @@ MAX_BYTES = 2 * 1024 ** 3
 
 
 class IntakeError(ValueError):
-    pass
+    def __init__(self, code):
+        super().__init__(code)
+        self.code = code
 
 
 def digest_file(path):
@@ -32,10 +34,19 @@ class LocalInputs:
         self.root = Path(root).resolve()
         self.root.mkdir(parents=True, exist_ok=True)
         self.lock = threading.RLock()
+        self.closed = False
         self.finalizers = {}
         self.finalize_errors = {}
         # One writer process owns these files; SQLite alone cannot fence file replacement.
         self._ownership = (self.root / 'owner.lock').open('a+b')
+        try:
+            self._initialize()
+        except BaseException:
+            self.closed = True
+            self._ownership.close()
+            raise
+
+    def _initialize(self):
         self._ownership.seek(0)
         if os.name == 'nt':
             import msvcrt
@@ -68,7 +79,22 @@ class LocalInputs:
         with self.lock:
             if self.finalizers:
                 raise IntakeError('LOCAL_INPUT_FINALIZATION_ACTIVE')
-        self._ownership.close()
+            self.closed = True
+            self._ownership.close()
+
+    def storage_usage(self):
+        with self.connect() as db:
+            ids = [row[0] for row in db.execute('SELECT source_id FROM inputs')]
+        used = 0
+        for source_id in ids:
+            directory = self.directory(source_id)
+            for path in directory.iterdir():
+                if path.is_file() and not path.is_symlink():
+                    try:
+                        used += path.stat().st_size
+                    except FileNotFoundError:
+                        pass
+        return {'applicationBytes': used, 'freeBytes': shutil.disk_usage(self.root).free}
 
     def reserve_capacity(self, db, size):
         receiving = list(db.execute("SELECT declaration FROM inputs WHERE state IN ('RECEIVING','VERIFYING')"))
@@ -80,18 +106,23 @@ class LocalInputs:
 
     @contextmanager
     def connect(self):
-        db = sqlite3.connect(self.root / 'intakes.sqlite3', timeout=30)
-        db.row_factory = sqlite3.Row
-        db.execute('PRAGMA busy_timeout=30000')
-        db.execute('PRAGMA synchronous=FULL')
-        db.execute('PRAGMA foreign_keys=ON')
-        try:
-            with db:
-                yield db
-        finally:
-            db.close()
+        with self.lock:
+            if self.closed:
+                raise IntakeError('LOCAL_INPUT_STORE_CLOSED')
+            db = sqlite3.connect(self.root / 'intakes.sqlite3', timeout=30)
+            try:
+                db.row_factory = sqlite3.Row
+                db.execute('PRAGMA busy_timeout=30000')
+                db.execute('PRAGMA synchronous=FULL')
+                db.execute('PRAGMA foreign_keys=ON')
+                with db:
+                    yield db
+            finally:
+                db.close()
 
     def directory(self, source_id):
+        if self.closed:
+            raise IntakeError('LOCAL_INPUT_STORE_CLOSED')
         if str(uuid.UUID(source_id)) != source_id:
             raise IntakeError('SOURCE_ID_INVALID')
         path = self.root / source_id
@@ -302,7 +333,12 @@ class LocalInputs:
         for key in ('size', 'sha256', 'workerId', 'jobId'):
             if status['source'].get(key) != descriptor.get(key):
                 raise IntakeError('SOURCE_DECLARATION_CONFLICT')
-        path = self.file(source_id, 'source.bin')
+        try:
+            path = self.file(source_id, 'source.bin')
+        except IntakeError as error:
+            if error.code == 'SOURCE_PATH_INVALID':
+                self.mark_missing(source_id)
+            raise
         if path.is_symlink() or not path.is_file() or path.stat().st_size != descriptor['size']:
             self.mark_missing(source_id)
             raise IntakeError('LOCAL_SOURCE_MISSING')
@@ -317,13 +353,15 @@ class LocalInputs:
 
     def drain_outbox(self, client):
         with self.connect() as db:
-            pending = [json.loads(r[0]) for r in db.execute("SELECT declaration FROM inputs WHERE state='READY' AND notified=0")]
-        for source in pending:
+            pending = [(json.loads(r[0]), r[1]) for r in db.execute("SELECT declaration,state FROM inputs WHERE state IN ('READY','MISSING') AND notified=0")]
+        for source, state in pending:
             try:
-                self.require_ready(source)
-                client.call('worker-local-ready', sourceId=source['sourceId'], sha256=source['sha256'])
+                if state == 'READY':
+                    self.require_ready(source)
+                client.call('worker-local-ready' if state == 'READY' else 'worker-local-missing',
+                            sourceId=source['sourceId'], sha256=source['sha256'])
                 with self.connect() as db:
-                    db.execute('UPDATE inputs SET notified=1 WHERE source_id=?', (source['sourceId'],))
+                    db.execute('UPDATE inputs SET notified=1 WHERE source_id=? AND state=?', (source['sourceId'], state))
             except Exception as error:
                 if getattr(error, 'code', '') in {'VIDEO_IN_TRASH', 'JOB_LEASE_LOST_OR_CANCELLED', 'LOCAL_INPUT_CANCELLED'}:
                     with self.connect() as db:

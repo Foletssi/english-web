@@ -11,10 +11,10 @@ const checks=[
   js.includes('Math.min(2,state.rows.length)'),
   js.includes('completePipeline'),
   js.includes('Client.retryJob'),
-  admin.includes('原片与成品保存在云端')&&js.includes('createProcessingJob')&&js.includes('processingHealth'),
+  js.includes('EastudyLocalProcessing.submit')&&js.includes('localProcessingCapability')&&js.includes('processingHealth'),
   !admin.includes('data-advance-job='),
   js.includes('runCloudPoll')&&((js.match(/listProcessingJobs/g)||[]).length===1),
-  js.includes('上传并加入等待队列'),
+  js.includes('开始处理')&&js.includes('只上传成品')&&js.includes('data-recover-local-input'),
   admin.includes('本步骤预计剩余')&&admin.includes('最近真实进展'),
   admin.includes('return Store.localOnly?Store.listJobs():CloudState.jobs'),
 ];

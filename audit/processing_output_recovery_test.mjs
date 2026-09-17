@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { onRequestPut } from '../functions/api/processing/output.js';
+import { onRequestPut, onRequestGet } from '../functions/api/processing/output.js';
 import { runDeletionWorker } from '../functions/api/admin/video-deletions/[[path]].js';
 
 // In-memory R2 and RPCs only. Never connects to production or deletes real media.
@@ -14,7 +14,7 @@ function fixture(options = {}) {
   const receipts = new Map(), uploads = new Map(), objects = new Map(), staged = new Set(), calls = [];
   let seq = 0, deletionConfirmed = false, ackFailures = options.ackFailures || 0;
   const bucket = {
-    async createMultipartUpload(objectKey) {
+    async createMultipartUpload(objectKey, metadata) {
       const uploadId = 'upload-' + ++seq;
       const upload = {
         uploadId, active: true,
@@ -28,6 +28,7 @@ function fixture(options = {}) {
           calls.push('complete');
           if (!upload.active) throw new Error('NoSuchUpload');
           objects.set(objectKey, 3); upload.active = false;
+          bucket.metadata = metadata.customMetadata;
           return { etag: 'completed-etag', size: 3 };
         },
         async abort() {
@@ -40,7 +41,7 @@ function fixture(options = {}) {
       return upload;
     },
     resumeMultipartUpload(objectKey, id) { assert.equal(objectKey, key); return uploads.get(id); },
-    async head(objectKey) { return objects.has(objectKey) ? { size: objects.get(objectKey) } : null; },
+    async head(objectKey) { return objects.has(objectKey) ? { size: objects.get(objectKey), etag: 'completed-etag', customMetadata: bucket.metadata } : null; },
     async list({ prefix }) { calls.push('inventory'); return { objects: [...objects].filter(([k]) => k.startsWith(prefix)).map(([key, size]) => ({ key, size })) }; },
     async delete(keys) { calls.push('delete'); for (const k of keys) objects.delete(k); }
   };
@@ -117,4 +118,19 @@ assert.ok(!f.calls.includes('inventory')); assert.ok(!f.calls.includes('delete')
 f = fixture({ rejectBegin: true });
 assert.equal((await onRequestPut({ request: request(), env: f.env })).status, 503);
 assert.ok(!f.calls.includes('part')); assert.ok(f.calls.includes('abort'));
+// Reconciliation is fenced by the current run and returns the stored digest.
+f = fixture();
+const statusRequest = () => new Request(request().url + '&run=' + job);
+response = await onRequestGet({ request: statusRequest(), env: f.env });
+assert.equal((await response.json()).found, false);
+await onRequestPut({ request: request(), env: f.env });
+response = await onRequestGet({ request: statusRequest(), env: f.env });
+const confirmed = await response.json();
+assert.equal(confirmed.found, true);
+assert.equal(confirmed.size, 3);
+assert.match(confirmed.sha256, /^[a-f0-9]{64}$/);
+assert.equal(f.calls.filter(x => x === 'resolve_processing_output_v2').length, 2);
+assert.equal((await onRequestGet({ request: new Request(request().url), env: f.env })).status, 401);
+f.env.VIDEO_BUCKET.metadata = {};
+assert.equal((await (await onRequestGet({ request: statusRequest(), env: f.env })).json()).found, false);
 console.log('Output recovery: completion, lost responses, abort fencing, replay and failed abort isolation passed.');

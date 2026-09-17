@@ -15,6 +15,35 @@ SPEC.loader.exec_module(worker)
 
 
 class WorkerTests(unittest.TestCase):
+    def test_output_lost_response_reconciles_without_second_put(self):
+        client = worker.EdgeClient('https://example.test', 'secret', 'worker', {})
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / 'segment.ts'
+            source.write_bytes(b'abc')
+            receipt = {'ok': True, 'found': True, 'size': 3, 'sha256': worker.file_sha256(source), 'etag': 'etag'}
+            with patch.object(worker, 'request_json', side_effect=[{'ok': True, 'found': False},
+                    worker.ApiError('OUTPUT_UNAVAILABLE'), receipt]) as request, patch.object(worker.time, 'sleep'):
+                self.assertEqual(client.upload('https://example.test?run=run', '', '', 'segment.ts', source), receipt)
+            self.assertEqual([call.args[0].method for call in request.call_args_list], ['GET', 'PUT', 'GET'])
+
+    def test_output_reconcile_conflict_does_not_overwrite(self):
+        client = worker.EdgeClient('https://example.test', 'secret', 'worker', {})
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / 'segment.ts'
+            source.write_bytes(b'abc')
+            with patch.object(worker, 'request_json', return_value={'ok': True, 'found': True, 'size': 3, 'sha256': 'bad'}) as request:
+                with self.assertRaisesRegex(worker.ApiError, 'OUTPUT_RECEIPT_CONFLICT'):
+                    client.upload('https://example.test?run=run', '', '', 'segment.ts', source)
+            self.assertEqual(request.call_count, 1)
+
+    def test_commit_retries_identical_payload_after_lost_response(self):
+        client = worker.EdgeClient('https://example.test', 'secret', 'worker', {})
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = b'{"ok":true}'
+        with patch.object(worker.urllib.request, 'urlopen', side_effect=[TimeoutError(), response]) as request, patch.object(worker.time, 'sleep'):
+            self.assertTrue(client.call('worker-complete-v2', result={'video': {}}, manifest=[])['ok'])
+        self.assertEqual(request.call_args_list[0].args[0].data, request.call_args_list[1].args[0].data)
+
     def test_voice_progress_exposes_counts_without_changing_item_manifest(self):
         client = MagicMock()
         lease = {'job': {'id': 'job', 'video_id': 'video', 'run_id': 'run'}, 'token': 'token'}
