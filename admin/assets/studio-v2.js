@@ -23,23 +23,18 @@ function addFiles(files){for(const video of files){if(!video.type.startsWith('vi
 function updateRow(id,changes){const row=state.rows.find(item=>item.id===id);if(row)Object.assign(row,changes);renderRows()}
 
 async function submitOne(row,creator){
-  updateRow(row.id,{locked:true,status:Store.localOnly?'正在上传到本地服务':'正在上传原片到云端'});
+  updateRow(row.id,{locked:true,status:Store.localOnly?'正在上传到本地服务':'正在准备本机接收'});
   try{
     const localVideoId=row.localVideoId||(row.localVideoId=Date.now()+state.rows.indexOf(row));
     if(!Store.localOnly){
       const Cloud=cloud(),Bridge=bridge();if(!Cloud||!Bridge)throw new Error('CLOUD_PROCESSING_CLIENT_NOT_READY');
-      const uploaded=row.uploaded||(row.uploaded=await Cloud.uploadVideo(row.video,progress=>updateRow(row.id,{progress,status:progress<100?'正在上传原片':'正在确认云端保存'}),status=>updateRow(row.id,{status})));
-      const video=row.videoRecord||(row.videoRecord=Store.saveVideo({id:localVideoId,title:row.title||titleFrom(row.video.name),titleZh:'待云端生成',creator:creator.name,creatorId:creator.id,
+      const video={title:row.title||titleFrom(row.video.name),titleZh:'待生成',creator:creator.name,creatorId:creator.id,
         category:'AI 自动分类',level:'AI 分析中',description:'云端正在生成字幕与学习内容。',status:'DRAFT',pipelineStatus:'QUEUED',
-        cover:'assets/images/home_video_1.png',mediaUrl:uploaded.url,mediaKey:uploaded.key,mediaSize:uploaded.size,collectionIds:[],processingOptions:{transcript:true,translate:true,dictionary:true,learningAnalysis:true}}));
-      await Bridge.flush();
-      let created=await Cloud.createProcessingJob(video,uploaded.key,row.id,Bridge.revision());
-      if(created.error?.message?.includes('CONTENT_REVISION_CONFLICT')){
-        const remote=await Cloud.pullAdmin();if(remote.error)throw remote.error;
-        created=await Cloud.createProcessingJob(video,uploaded.key,row.id,remote.revision);
-      }
-      if(created.error)throw created.error;Bridge.importMutation(created);updateRow(row.id,{progress:100,submitted:true,status:'已安全排队，等待处理节点领取'});
-      pollJob(created.data.job.id,localVideoId);return;
+        cover:'assets/images/home_video_1.png',collectionIds:[],processingOptions:{transcript:true,translate:true,dictionary:true,learningAnalysis:true}};
+      const created=await global.EastudyLocalProcessing.submit({file:row.video,cover:row.cover,video,
+        onProgress:(progress,status)=>updateRow(row.id,{progress,status})});
+      updateRow(row.id,{progress:100,submitted:true,status:'已保存到本机，可关闭网页；请保持电脑运行'});
+      pollJob(created.job.id,created.job.video_id);return;
     }
     const job=await Client.createJob({video:row.video,cover:row.cover,aiConfig:aiConfig(),metadata:{
       localVideoId,title:row.title||titleFrom(row.video.name),creator:creator.name,creatorId:creator.id,creatorGroup:creator.group
@@ -104,10 +99,12 @@ async function checkService(){
   state.serviceReady=false;const health=$('#studioV2Health'),button=$('#studioV2Submit');
   button.disabled=true;button.textContent='检查服务中…';health.dataset.state='checking';
   health.textContent='正在检查视频处理服务…';$('#studioV2Recheck').hidden=false;
-  if(!Store.localOnly){$('#studioV2Intro').textContent='原片上传 R2 后，本机 Worker 自动转码、识别英文字幕并调用 DeepSeek 生成学习内容，成品回传 R2 后进入人工审核。';
-    $('#studioV2ServiceCopy').textContent='网页可以关闭；处理期间请保持这台电脑和 Eastudy Worker 运行。处理完成后，学生播放完全来自云端，不再依赖本机。';
-    const result=await cloud()?.processingHealth();if(result?.error||!result?.data?.ready){state.serviceReady=true;health.dataset.state='unavailable';health.textContent='处理节点暂未就绪；可以先上传并排队，电脑和 Worker 恢复后会自动处理。';button.disabled=false;button.textContent='上传并加入等待队列';return}
-    state.serviceReady=true;health.dataset.state='ok';health.textContent='本机云任务 Worker 已连接（FFmpeg / Whisper / DeepSeek）';button.disabled=false;button.textContent='开始批量处理';return}
+  if(!Store.localOnly){$('#studioV2Intro').textContent='选择原视频后点击开始处理：本机自动制作540P、字幕、教学内容和发音，只上传成品。';
+    $('#studioV2ServiceCopy').textContent='原片接收完成前请保留网页；完成后可关闭网页，制作期间电脑需开机、不休眠。完成后学生从云端观看。';
+    try{await global.EastudyLocalProcessing.capability();
+      state.serviceReady=true;health.dataset.state='ok';health.textContent='本机处理服务已连接';button.disabled=false;button.textContent='开始处理';
+    }catch(error){health.dataset.state='unavailable';health.textContent=error.message;button.textContent='请先连接本机服务'}
+    return}
   $('#studioV2Intro').textContent='选择视频、填写创作者并核对标题，处理完成后进入人工审核。';
   $('#studioV2ServiceCopy').textContent='当前为本地开发环境：由这台电脑处理视频。上传完成后可关闭网页，请保持电脑和处理程序运行。';
   try{const result=await Client.health();if(!result.ok)throw new Error(result.message||'服务不可用');

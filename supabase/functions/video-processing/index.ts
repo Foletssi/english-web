@@ -55,19 +55,32 @@ async function handleWorker(action: string, body: any) {
     });
     return { worker };
   }
-  if (action === 'worker-claim') {
+  if (action === 'worker-local-challenge') {
+    await rpc('processing_worker_heartbeat', { p_worker_id: workerId, p_capabilities: capabilities, p_version: String(body.version || '') });
+    return { challenge: await rpc('processing_local_challenge_v1', {
+      p_worker_id: workerId, p_challenge: body.challenge, p_origin: body.origin
+    }) };
+  }
+  if (action === 'worker-local-ticket') return { intake: await rpc('processing_local_ticket_v1', {
+    p_worker_id: workerId, p_ticket: body.ticket, p_origin: body.origin
+  }) };
+  if (action === 'worker-local-ready') return { input: await rpc('processing_local_ready_v1', {
+    p_worker_id: workerId, p_source_id: body.sourceId, p_sha256: body.sha256
+  }) };
+  if (action === 'worker-claim' || action === 'worker-claim-local-v1') {
     await rpc('processing_worker_heartbeat', {
       p_worker_id: workerId, p_capabilities: capabilities, p_version: String(body.version || '').slice(0, 80) || null
     });
     const token = randomToken();
-    const job = await rpc('processing_claim_local_job_v5', {
+    const job = await rpc(action === 'worker-claim-local-v1' ? 'processing_claim_local_input_v1' : 'processing_claim_local_job_v5', {
       p_worker_id: workerId, p_token_hash: await sha256(token), p_lease_seconds: 240
     });
     if (!job) return { job: null };
     const base = required('PUBLIC_SOURCE_BASE_URL').replace(/\/$/, '');
     return {
-      job, token, protocolVersion: job.run_id ? 2 : 1,
-      downloadUrl: `${base}/api/processing/source?job=${encodeURIComponent(job.id)}&token=${encodeURIComponent(token)}`,
+      job, token, protocolVersion: job.run_id ? 2 : 1, workerId,
+      inputSource: job.inputSource || { kind: 'cloud_r2', key: job.source_key },
+      downloadUrl: job.inputSource ? null : `${base}/api/processing/source?job=${encodeURIComponent(job.id)}&token=${encodeURIComponent(token)}`,
       outputUrl: `${base}/api/processing/output?job=${encodeURIComponent(job.id)}&token=${encodeURIComponent(token)}${job.run_id ? `&run=${encodeURIComponent(job.run_id)}` : ''}`
     };
   }

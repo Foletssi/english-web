@@ -6,17 +6,28 @@ import subprocess
 import threading
 import time
 import uuid
+import wave
 from collections import deque
 from fractions import Fraction
 from pathlib import Path
 from contracts import StudioError
 from media_cancellation import check_cancelled
+from checkpoint import canonical_hash, file_sha256, read_valid_json, save_json_checkpoint
 
 
 def require_tools():
     missing = [name for name in ('ffmpeg', 'ffprobe') if not shutil.which(name)]
     if missing:
         raise StudioError('FFMPEG_NOT_FOUND', '请先安装 FFmpeg，并确保 ffmpeg/ffprobe 在 PATH 中。')
+
+
+def encoding_threads():
+    ceiling = max(1, (os.cpu_count() or 1) // 2)
+    try:
+        requested = int(os.getenv('EASTUDY_FFMPEG_THREADS', str(ceiling)))
+    except ValueError:
+        requested = ceiling
+    return max(1, min(ceiling, requested))
 
 
 def run(args, timeout=7200):
@@ -238,9 +249,10 @@ def transcode(source, output, info, progress=None):
             partial = output / f".{level['label']}.{uuid.uuid4().hex}.partial"
             partial.mkdir()
             try:
-                run_progress(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-nostdin', '-y', '-i', str(source),
+                run_progress(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-nostdin', '-y',
+             '-threads', str(encoding_threads()), '-filter_threads', str(encoding_threads()), '-i', str(source),
              '-map', '0:v:0', '-map', '0:a:0', '-sn', '-dn', '-vf', f'scale={scale}:flags=lanczos,setsar=1,fps={fps}',
-             '-c:v', 'libx264', '-profile:v', 'high', '-pix_fmt', 'yuv420p', '-preset', level['preset'],
+             '-c:v', 'libx264', '-threads:v', str(encoding_threads()), '-profile:v', 'high', '-pix_fmt', 'yuv420p', '-preset', level['preset'],
              '-crf', str(level['crf']), '-maxrate', f'{rate}k', '-bufsize', f'{rate * 2}k',
              '-g', str(gop), '-keyint_min', str(gop), '-sc_threshold', '0',
              '-force_key_frames', f'expr:gte(t,n_forced*{segment_seconds})',
@@ -282,30 +294,69 @@ def transcode(source, output, info, progress=None):
     return variants
 
 
-def extract_audio(source, target):
-    if Path(target).is_file() and Path(target).stat().st_size > 44:
-        return Path(target)
-    run(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-nostdin', '-y', '-i', str(source),
-         '-map', '0:a:0', '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', str(target)])
-    if not Path(target).is_file() or Path(target).stat().st_size <= 44:
-        raise StudioError('AUDIO_EMPTY', '提取出的音频为空。')
-    return Path(target)
+def _valid_asr_audio(path):
+    try:
+        with wave.open(str(path), 'rb') as audio:
+            if (audio.getnchannels(), audio.getsampwidth(), audio.getframerate(), audio.getcomptype()) != (1, 2, 16000, 'NONE'):
+                return False
+            frames = audio.getnframes()
+            if frames <= 0:
+                return False
+            size = 0
+            while data := audio.readframes(65536):
+                size += len(data)
+            return size == frames * 2
+    except (OSError, EOFError, wave.Error):
+        return False
+
+
+def extract_audio(source, target, source_identity=None):
+    target = Path(target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    key = canonical_hash({'source': source_identity or file_sha256(source), 'audio': 'pcm16k-mono-v1'})
+    receipt = target.with_suffix('.receipt.json')
+
+    def valid(value):
+        return value if (target.is_file() and target.stat().st_size == value['size'] and
+                         file_sha256(target) == value['sha256'] and _valid_asr_audio(target)) else None
+
+    if read_valid_json(receipt, key, valid):
+        return target
+    temporary = target.with_name(f'.{target.stem}.{uuid.uuid4().hex}.wav')
+    try:
+        run(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-nostdin', '-y', '-i', str(source),
+             '-map', '0:a:0', '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', str(temporary)])
+        if not _valid_asr_audio(temporary):
+            raise StudioError('AUDIO_EMPTY', '提取出的音频不完整，请继续处理以重新提取。')
+        with temporary.open('r+b') as stream:
+            os.fsync(stream.fileno())
+        os.replace(temporary, target)
+        save_json_checkpoint(receipt, key, {'size': target.stat().st_size, 'sha256': file_sha256(target)})
+        return target
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def make_cover(source, target, duration, uploaded=None):
-    if Path(target).is_file() and Path(target).stat().st_size > 0:
-        return Path(target)
+    from PIL import Image
+    target = Path(target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_name(f'.{target.stem}.{uuid.uuid4().hex}.webp')
     input_file = Path(uploaded) if uploaded else Path(source)
     args = ['ffmpeg', '-hide_banner', '-loglevel', 'error', '-nostdin', '-y']
     if not uploaded:
         args.extend(['-ss', str(max(0.1, duration * .25))])
     args.extend(['-i', str(input_file), '-frames:v', '1', '-vf',
                  'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2',
-                 '-c:v', 'libwebp', '-quality', '85', str(target)])
-    run(args, 120)
-    if not Path(target).is_file() or Path(target).stat().st_size == 0:
-        raise StudioError('COVER_INVALID', '封面图片无法读取。')
-    return Path(target)
+                 '-c:v', 'libwebp', '-quality', '85', str(temporary)])
+    try:
+        run(args, 120)
+        with Image.open(temporary) as image:
+            image.load()
+        os.replace(temporary, target)
+        return target
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def make_cover_variants(source, output):

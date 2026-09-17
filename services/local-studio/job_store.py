@@ -50,9 +50,10 @@ class JobStore:
         return data
 
     def update(self, job_id, **changes):
-        job = self.get(job_id)
-        job.update(changes)
-        return self.write(job)
+        with self._lock:
+            job = self.get(job_id)
+            job.update(changes)
+            return self.write(job)
 
     def queue_retry(self, job_id):
         # Atomically reserve the retry; concurrent requests cannot submit twice.

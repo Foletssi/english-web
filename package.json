@@ -24,5 +24,8 @@
     "test:mapping-ui": "node audit/student_mapping_ui_test.mjs",
     "test:all": "npm run audit && npm run contract-test && npm run auth-test && npm run learning-test && npm run learner-admin-test && npm run deletion-test && npm run cloud-test && npm run studio-test && npm run test:module-boundaries && npm run test:m01 && npm run test:m08 && npm run test:m10 && npm run test:mapping && npm run test:mapping-ui"
   },
-  "description": "Eastudy Student Web + Chinese Admin Studio + sentence-aware learning analysis"
+  "description": "Eastudy Student Web + Chinese Admin Studio + sentence-aware learning analysis",
+  "devDependencies": {
+    "js-sha256": "0.11.1"
+  }
 }

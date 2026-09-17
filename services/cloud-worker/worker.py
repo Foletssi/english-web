@@ -1,4 +1,5 @@
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -12,7 +13,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -29,10 +30,12 @@ from teaching_completion import complete_teaching  # noqa: E402
 from voice_runtime import generate_worker_voice, voice_assets, voice_capability  # noqa: E402
 from media_cancellation import cancellation_scope  # noqa: E402
 from local_source import SourceCache, start_intake  # noqa: E402
-from processing_metrics import stage_metrics  # noqa: E402
+from processing_metrics import stage_metrics, parallel_progress, record_stage  # noqa: E402
+from local_intake_store import LocalInputs  # noqa: E402
+from local_intake_v2 import start_local_intake  # noqa: E402
 
 
-VERSION = '2.4.0'
+VERSION = '2.5.0'
 DEFAULT_ENDPOINT = 'https://ehxqtgakjgqgmghhdmjg.supabase.co/functions/v1/video-processing'
 STAGE_MAP = {'probe': 'PROBE', 'transcode': 'TRANSCODE', 'asr': 'ASR', 'enrich': 'ENRICH'}
 
@@ -120,6 +123,8 @@ class EdgeClient:
 
     def upload(self, base_url, token, job_id, path, source):
         url = base_url + '&path=' + urllib.parse.quote(path, safe='/')
+        if not 0 < Path(source).stat().st_size <= 15 * 1024 ** 2:
+            raise ApiError('OUTPUT_SIZE_LIMIT')
         data = Path(source).read_bytes()
         request = urllib.request.Request(url, data=data, method='PUT', headers={
             'Content-Type': content_type(path), 'Content-Length': str(len(data)),
@@ -135,6 +140,7 @@ class RemoteProgressStore:
         self._last_metric = None
         self._rate = None
         self._samples = 0
+        self._lock = threading.RLock()
         self.job = {'id': job['id'], 'status': 'PROCESSING', 'currentStep': 'upload', 'progress': 1,
                     'message': '正在下载云端原片', 'error': None, 'result': None,
                     'sourceName': Path(job['source_key']).name, 'metadata': job.get('input') or {}}
@@ -145,8 +151,14 @@ class RemoteProgressStore:
         return dict(self.job)
 
     def update(self, job_id, **changes):
+        with self._lock:
+            return self._update(job_id, **changes)
+
+    def _update(self, job_id, **changes):
         if job_id != self.job['id']:
             raise KeyError(job_id)
+        if changes.get('status') == 'PROCESSING':
+            changes['progress'] = max(self.job['progress'], changes.get('progress', 0))
         self.job.update(changes)
         if changes.get('status') == 'PROCESSING':
             step = str(changes.get('currentStep') or self.job.get('currentStep') or 'probe')
@@ -184,6 +196,15 @@ def sequence(lease):
 
 
 def report_progress(client, lease, stage, progress, message, metrics=None):
+    # One reducer and ordered sender for every branch; heartbeat never takes this lock.
+    lock = lease.setdefault('_progress_lock', threading.RLock())
+    with lock:
+        progress = max(int(lease.get('_progress', 0)), parallel_progress(lease, progress))
+        lease['_progress'] = progress
+        return _report_progress(client, lease, stage, progress, message, metrics)
+
+
+def _report_progress(client, lease, stage, progress, message, metrics=None):
     current_run = run_id(lease)
     if current_run:
         metrics = stage_metrics(lease, stage, metrics)
@@ -225,10 +246,10 @@ def content_type(path):
 
 def upload_concurrency():
     try:
-        value = int(os.getenv('EASTUDY_UPLOAD_CONCURRENCY', '6'))
+        value = int(os.getenv('EASTUDY_UPLOAD_CONCURRENCY', '2'))
     except ValueError:
-        value = 6
-    return min(8, max(1, value))
+        value = 2
+    return min(2, max(1, value))
 
 
 def upload_assets(client, lease, output, assets, cancelled=None):
@@ -243,23 +264,44 @@ def upload_assets(client, lease, output, assets, cancelled=None):
         if cancelled and cancelled.is_set():
             raise ApiError('JOB_LEASE_LOST_OR_CANCELLED')
         relative = path.relative_to(output).as_posix()
+        if path.is_symlink() or not path.resolve().is_relative_to(Path(output).resolve()):
+            raise ApiError('OUTPUT_PATH_INVALID')
+        if not 0 < path.stat().st_size <= 15 * 1024 ** 2:
+            raise ApiError('OUTPUT_SIZE_LIMIT')
         receipt = client.upload(lease['outputUrl'], lease['token'], job_id, relative, path)
+        if int(receipt['size']) != path.stat().st_size or str(receipt['sha256']) != file_sha256(path):
+            raise ApiError('OUTPUT_RECEIPT_MISMATCH')
         return relative, receipt
 
     with ThreadPoolExecutor(max_workers=min(upload_concurrency(), len(ordered))) as executor:
-        futures = {executor.submit(upload_one, path): path for path in ordered}
-        for completed, future in enumerate(as_completed(futures), 1):
+        remaining = iter(ordered)
+        futures = {executor.submit(upload_one, path): path for path in
+                   [next(remaining) for _ in range(min(upload_concurrency(), len(ordered))) ]}
+        completed = 0
+        while futures:
             if cancelled and cancelled.is_set():
                 for pending in futures:
                     pending.cancel()
                 raise ApiError('JOB_LEASE_LOST_OR_CANCELLED')
+            finished, _ = wait(futures, timeout=.25, return_when=FIRST_COMPLETED)
+            if not finished:
+                continue
+            future = next(iter(finished))
+            futures.pop(future)
             relative, receipt = future.result()
+            completed += 1
             item = {'path': relative, 'size': int(receipt['size']), 'sha256': str(receipt['sha256'])}
             manifest[relative] = item
             if run_id(lease):
                 client.call('worker-output-receipt-v2', jobId=job_id, token=lease['token'],
                             runId=run_id(lease), path=relative, size=item['size'],
                             sha256=item['sha256'], etag=str(receipt['etag']))
+            receipt_key = hashlib.sha256((relative + ':' + item['sha256']).encode()).hexdigest()
+            atomic_json(Path(output) / '_upload_receipts' / (receipt_key + '.json'),
+                        {'jobId': job_id, 'runId': run_id(lease), **item, 'etag': str(receipt['etag'])})
+            following = next(remaining, None)
+            if following is not None:
+                futures[executor.submit(upload_one, following)] = following
             now = time.monotonic()
             if last_progress is None or completed == len(ordered) or now - last_progress >= 5:
                 progress = 96 + int(3 * completed / len(ordered))
@@ -467,20 +509,40 @@ def rewrite_result(result, job_id, source_key):
 
 
 def heartbeat_loop(client, lease, stop, cancelled):
+    last_success = time.monotonic()
     while not stop.wait(5):
         try:
             current_run = run_id(lease)
             client.call('worker-job-heartbeat-v2' if current_run else 'worker-job-heartbeat',
                         jobId=lease['job']['id'], token=lease['token'], **({'runId': current_run} if current_run else {}))
+            last_success = time.monotonic()
         except Exception as error:
             print(f'[heartbeat] {error}', flush=True)
-            if lease_cancelled(error):
+            if lease_cancelled(error) or time.monotonic() - last_success >= 120:
                 cancelled.set()
                 stop.set()
                 return
 
 
-def process_lease(client, lease):
+def resolve_input_source(lease, local_inputs, cloud_download, target, progress=None):
+    descriptor = lease.get('inputSource') or {'kind': 'cloud_r2', 'key': lease['job']['source_key']}
+    if descriptor.get('kind') == 'local_file':
+        if not local_inputs or descriptor.get('workerId') != lease.get('workerId'):
+            raise ApiError('LOCAL_SOURCE_WRONG_WORKER')
+        if descriptor.get('jobId') != lease['job']['id']:
+            raise ApiError('SOURCE_DECLARATION_CONFLICT')
+        source = local_inputs.require_ready(descriptor)
+        cover = local_inputs.file(descriptor['sourceId'], 'cover.input') if descriptor.get('coverSha256') else None
+        if cover and (not cover.is_file() or file_sha256(cover) != descriptor['coverSha256']):
+            raise ApiError('COVER_INCOMPLETE')
+        return source, cover
+    if descriptor.get('kind') != 'cloud_r2':
+        raise ApiError('SOURCE_KIND_INVALID')
+    cloud_download(lease['downloadUrl'], target, progress, descriptor['key'])
+    return target, None
+
+
+def process_lease(client, lease, local_inputs=None):
     job_id = lease['job']['id']
     stop = threading.Event()
     cancelled = threading.Event()
@@ -489,7 +551,11 @@ def process_lease(client, lease):
     try:
         if not re.fullmatch(r'[0-9a-f-]{36}', job_id, re.I):
             raise ApiError('JOB_ID_INVALID')
-        work = worker_root() / job_id
+        current_run = run_id(lease)
+        if current_run and not re.fullmatch(r'[0-9a-f-]{36}', current_run, re.I):
+            raise ApiError('RUN_ID_INVALID')
+        job_root = worker_root() / job_id
+        work = job_root / (current_run or 'legacy')
         work.mkdir(parents=True, exist_ok=True)
         if not work.resolve().is_relative_to(worker_root()):
             raise ApiError('WORK_PATH_INVALID')
@@ -547,12 +613,29 @@ def process_lease(client, lease):
             report_progress(client, lease, 'LOCAL_DOWNLOAD', percent,
                             f'正在下载原片 {current}/{total} 字节',
                             {'substage': 'source', 'current': current, 'total': total, 'unit': 'bytes'})
-        download(lease['downloadUrl'], source, report_download, lease['job']['source_key'])
+        source, cover = resolve_input_source(lease, local_inputs, download, source, report_download)
         if cancelled.is_set():
             raise ApiError('JOB_LEASE_LOST_OR_CANCELLED')
         store = RemoteProgressStore(client, lease)
+        def upload_media(value, output):
+            partial = {'video': {'coverImages': value['coverImages'], 'playback': {'variants': value['variants']}}}
+            return upload_assets(client, lease, output, selected_assets(output, partial), cancelled)
+
+        def observe(stage, state):
+            with lease.setdefault('_progress_lock', threading.RLock()):
+                record_stage(lease, stage, state)
+                wire_stage = {'media': 'TRANSCODE', 'asr': 'ASR', 'teaching': 'ENRICH',
+                              'voice': 'ENRICH', 'upload_media': 'LOCAL_UPLOAD', 'upload_voice': 'LOCAL_UPLOAD'}[stage]
+                report_progress(client, lease, wire_stage, 15, '正在自动制作视频', {'stageName': stage})
+            if local_inputs:
+                local_inputs.stage(job_id, current_run, stage, state)
+
+        execution = {'cache_root': job_root / 'artifacts', 'observe': observe,
+            'voice': lambda rows, output: prepare_voice(client, lease, rows, output, cancelled),
+            'upload_media': upload_media,
+            'upload_voice': lambda voice, output: upload_assets(client, lease, output, voice_assets(output, voice), cancelled)}
         with cancellation_scope(cancelled):
-            result_job = process_job(store, job_id, source, None, ai_config, work / 'output', base_url='')
+            result_job = process_job(store, job_id, source, cover, ai_config, work / 'output', base_url='', execution=execution)
         if cancelled.is_set():
             raise ApiError('JOB_LEASE_LOST_OR_CANCELLED')
         if result_job.get('status') != 'REVIEW':
@@ -560,11 +643,7 @@ def process_lease(client, lease):
             report_failure(client, lease, error, bool(error.get('retryable', True)))
             return
         output = work / 'output' / job_id
-        result_job['result']['video']['voiceManifest'] = prepare_voice(
-            client, lease, result_job['result']['sentences'], output, cancelled)
-        report_progress(client, lease, 'LOCAL_UPLOAD', 96, '正在上传视频、封面与发音')
-        assets = selected_assets(output, result_job['result'])
-        manifest = upload_assets(client, lease, output, assets, cancelled)
+        manifest = result_job['result'].pop('_uploadedManifest')
         if cancelled.is_set():
             raise ApiError('JOB_LEASE_LOST_OR_CANCELLED')
         final = rewrite_result(result_job['result'], job_id, lease['job']['source_key'])
@@ -609,6 +688,17 @@ def main():
         return 2
     worker_id = os.getenv('EASTUDY_WORKER_ID', '').strip() or default_worker_id()
     client = EdgeClient(os.getenv('EASTUDY_PROCESSING_ENDPOINT', DEFAULT_ENDPOINT).strip(), secret, worker_id, caps)
+    local_inputs = None
+    try:
+        local_inputs = LocalInputs(worker_root() / 'local-inputs-v1')
+        start_local_intake(local_inputs, client)
+        caps['localInputV1'] = True
+    except (OSError, ValueError) as error:
+        if local_inputs:
+            local_inputs.close()
+        local_inputs = None
+        caps['localInputV1'] = False
+        print(f'[local-input] unavailable: {type(error).__name__}', flush=True)
     try:
         start_intake(SourceCache(worker_root() / 'source-intake'))
         print('[source-intake] loopback ready', flush=True)
@@ -627,11 +717,14 @@ def main():
                     return 2
                 time.sleep(60)
                 caps = capabilities()
+                caps['localInputV1'] = local_inputs is not None
                 client.capabilities = caps
                 continue
-            lease = client.call('worker-claim')
+            lease = client.call('worker-claim-local-v1') if caps.get('localInputV1') else {}
+            if not lease.get('job'):
+                lease = client.call('worker-claim')
             if lease.get('job'):
-                process_lease(client, lease)
+                process_lease(client, lease, local_inputs)
             elif args.once:
                 return 0
             else:

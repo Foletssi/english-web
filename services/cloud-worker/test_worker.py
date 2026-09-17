@@ -161,22 +161,22 @@ class WorkerTests(unittest.TestCase):
             pipeline.assert_not_called()
 
     def test_worker_reports_v5_protocol_version(self):
-        self.assertEqual(worker.VERSION, '2.4.0')
+        self.assertEqual(worker.VERSION, '2.5.0')
         source = MODULE.read_text(encoding='utf-8')
         self.assertIn("'learningRepairV5': True", source)
         self.assertIn("'teachingSchemaVersion': 3", source)
 
     def test_upload_concurrency_is_bounded(self):
         with patch.dict('os.environ', {'EASTUDY_UPLOAD_CONCURRENCY': '99'}):
-            self.assertEqual(worker.upload_concurrency(), 8)
+            self.assertEqual(worker.upload_concurrency(), 2)
         with patch.dict('os.environ', {'EASTUDY_UPLOAD_CONCURRENCY': 'invalid'}):
-            self.assertEqual(worker.upload_concurrency(), 6)
+            self.assertEqual(worker.upload_concurrency(), 2)
 
     def test_parallel_upload_preserves_manifest_order_and_receipts(self):
         calls = []
         class Client:
             def upload(self, _url, _token, _job_id, path, source):
-                return {'size': source.stat().st_size, 'sha256': path.replace('/', '-'), 'etag': path}
+                return {'size': source.stat().st_size, 'sha256': worker.file_sha256(source), 'etag': path}
             def call(self, action, **values):
                 calls.append((action, values))
                 return {'ok': True}
@@ -197,7 +197,7 @@ class WorkerTests(unittest.TestCase):
 
     def test_missing_receipt_never_returns_publishable_manifest(self):
         client = MagicMock()
-        client.upload.return_value = {'size': 1, 'sha256': 'sha', 'etag': 'etag'}
+        client.upload.return_value = {'size': 1, 'sha256': worker.hashlib.sha256(b'x').hexdigest(), 'etag': 'etag'}
         client.call.side_effect = worker.ApiError('EDGE_HTTP_503', status=503)
         lease = {'job': {'id': 'job', 'run_id': 'run'}, 'token': 'token', 'outputUrl': 'https://example.test'}
         with tempfile.TemporaryDirectory() as folder:
@@ -312,14 +312,15 @@ class WorkerTests(unittest.TestCase):
 
     def test_upload_pipeline_receives_run_bound_usage_and_cancel_event(self):
         lease = {'job': {'id': '00000000-0000-0000-0000-000000000001',
-                        'video_id': 'video', 'run_id': 'run', 'source_key': 'source.mp4'},
+                        'video_id': 'video', 'run_id': '00000000-0000-0000-0000-000000000002', 'source_key': 'source.mp4'},
                  'downloadUrl': 'https://example.test/source', 'token': 'secret'}
         client = MagicMock()
-        def process(store, job_id, source, subtitles, config, output, base_url):
+        def process(store, job_id, source, subtitles, config, output, base_url, execution):
             self.assertEqual(config['jobId'], job_id)
-            self.assertEqual(config['runId'], 'run')
+            self.assertEqual(config['runId'], lease['job']['run_id'])
             self.assertFalse(config['cancelled'].is_set())
-            return {'status': 'REVIEW', 'result': {'video': {}, 'sentences': [],
+            self.assertEqual(set(execution), {'cache_root', 'observe', 'voice', 'upload_media', 'upload_voice'})
+            return {'status': 'REVIEW', 'result': {'video': {}, 'sentences': [], '_uploadedManifest': [],
                 'evidence': {'aiUsage': worker.summarize_usage(config['usageLogPath'], config['runId'])}}}
         with tempfile.TemporaryDirectory() as folder, \
                 patch.object(worker, 'worker_root', return_value=Path(folder)), \
@@ -380,7 +381,7 @@ class WorkerTests(unittest.TestCase):
 
     def test_incomplete_voice_cannot_upload_or_complete_repair(self):
         lease = {'job': {'id': '00000000-0000-0000-0000-000000000001', 'video_id': 'v',
-            'run_id': 'r', 'input': {'kind': 'LEARNING_REPAIR', 'sentences': [{'id': 's'}]}}, 'token': 'secret'}
+            'run_id': '00000000-0000-0000-0000-000000000002', 'input': {'kind': 'LEARNING_REPAIR', 'sentences': [{'id': 's'}]}}, 'token': 'secret'}
         client = MagicMock()
         with tempfile.TemporaryDirectory() as folder, patch.object(worker, 'worker_root', return_value=Path(folder)), \
              patch.object(worker, 'heartbeat_loop'), patch.object(worker, 'repair_learning', return_value=([{}], [])), \
