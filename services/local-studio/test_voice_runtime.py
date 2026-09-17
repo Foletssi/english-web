@@ -12,6 +12,36 @@ from voice_runtime import generate_worker_voice, voice_assets, voice_capability
 
 
 class VoiceRuntimeTests(unittest.TestCase):
+    def test_gpu_fallback_respects_remaining_total_budget(self):
+        for elapsed, expected_calls in ((4, 2), (10, 1)):
+            with tempfile.TemporaryDirectory() as folder, \
+                 patch('voice_runtime.runtime_paths', return_value=(Path('python'), {'provider': 'cuda', 'modelPath': 'fp32'})), \
+                 patch('voice_runtime.time.monotonic', side_effect=[100, 100 + elapsed]), \
+                 patch('voice_runtime._generate_worker_voice', side_effect=[StudioError('VOICE_GENERATION_TIMEOUT', 'timeout'), {'status': 'complete'}]) as attempt:
+                if elapsed < 10:
+                    generate_worker_voice('v', 'r', [], folder, timeout=10)
+                    self.assertEqual(attempt.call_args.args[6], 6)
+                else:
+                    with self.assertRaises(StudioError):
+                        generate_worker_voice('v', 'r', [], folder, timeout=10)
+                self.assertEqual(attempt.call_count, expected_calls)
+
+    def test_gpu_native_failure_retries_once_same_model_cpu(self):
+        with tempfile.TemporaryDirectory() as folder, patch('voice_runtime.runtime_paths', return_value=(Path('python'), {'provider': 'cuda', 'modelPath': 'fp32'})), \
+             patch('voice_runtime._generate_worker_voice', side_effect=[StudioError('VOICE_PROCESS_CRASHED', 'native'), {'status': 'complete'}]) as attempt:
+            result = generate_worker_voice('v', 'r', [], folder)
+            self.assertTrue(result['cpuFallback'])
+            self.assertEqual(attempt.call_count, 2)
+            self.assertEqual(attempt.call_args.args[-1], {'provider': 'cpu', 'modelPath': 'fp32'})
+
+    def test_gpu_invalid_content_and_cancel_do_not_retry(self):
+        for code in ('VOICE_SOURCE_STALE', 'VOICE_ASSET_HASH_MISMATCH', 'JOB_LEASE_LOST_OR_CANCELLED'):
+            with patch('voice_runtime.runtime_paths', return_value=(Path('python'), {'provider': 'cuda'})), \
+                 patch('voice_runtime._generate_worker_voice', side_effect=StudioError(code, 'error')) as attempt:
+                with self.assertRaises(StudioError):
+                    generate_worker_voice('v', 'r', [], 'unused')
+                self.assertEqual(attempt.call_count, 1)
+
     def test_assets_reject_traversal_mismatched_hash_and_duplicates_are_one_upload(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
@@ -78,6 +108,19 @@ class VoiceRuntimeTests(unittest.TestCase):
                 generate_worker_voice('v', 'r', [], folder)
             self.assertEqual(raised.exception.code, 'VOICE_SOURCE_STALE')
             assets.assert_not_called()
+
+    def test_failed_item_progress_is_forwarded_and_not_a_terminal_error(self):
+        event = {'event': 'progress', 'status': 'failed', 'current': 1, 'total': 1,
+                 'failed': 1, 'generated': 0, 'reused': 0, 'errorCode': 'VOICE_CONTEXT_REQUIRED'}
+        process = MagicMock(stdout=io.StringIO(''), stderr=io.StringIO(json.dumps(event) + '\n'), returncode=2)
+        process.poll.return_value = 2
+        updates = []
+        with tempfile.TemporaryDirectory() as folder, patch('voice_runtime.runtime_paths', return_value=(Path('python'), {})), \
+             patch('voice_runtime.subprocess.Popen', return_value=process):
+            with self.assertRaises(StudioError) as raised:
+                generate_worker_voice('v', 'r', [], folder, progress=updates.append)
+        self.assertEqual(updates, [event])
+        self.assertEqual(raised.exception.code, 'VOICE_GENERATION_INCOMPLETE')
 
 
 if __name__ == '__main__':

@@ -1,5 +1,6 @@
 import importlib.util
 import io
+import json
 import sys
 import tempfile
 import unittest
@@ -14,6 +15,23 @@ SPEC.loader.exec_module(worker)
 
 
 class WorkerTests(unittest.TestCase):
+    def test_voice_progress_exposes_counts_without_changing_item_manifest(self):
+        client = MagicMock()
+        lease = {'job': {'id': 'job', 'video_id': 'video', 'run_id': 'run'}, 'token': 'token'}
+        manifest = {'status': 'complete', 'items': ['unchanged']}
+        def generate(video_id, revision, rows, output, cancelled, progress):
+            self.assertEqual((video_id, revision), ('video', 'run'))
+            progress({'current': 3, 'total': 3, 'uniqueTotal': 2, 'uniqueReady': 1,
+                      'generated': 1, 'reused': 1, 'failed': 1, 'elapsedSeconds': 2.5})
+            return manifest
+        with patch.object(worker, 'generate_worker_voice', side_effect=generate):
+            self.assertIs(worker.prepare_voice(client, lease, [], Path('unused'), None), manifest)
+        args = client.call.call_args.kwargs
+        self.assertEqual(args['metrics']['generated'], 1)
+        self.assertEqual(args['metrics']['reused'], 1)
+        self.assertIn('失败 1', args['message'])
+        self.assertEqual(args['runId'], 'run')
+
     def test_idempotent_network_retry_is_bounded(self):
         client = worker.EdgeClient('https://example.test', 'secret', 'test-worker', {})
         with patch.object(worker.urllib.request, 'urlopen', side_effect=TimeoutError()) as request, \
@@ -143,7 +161,7 @@ class WorkerTests(unittest.TestCase):
             pipeline.assert_not_called()
 
     def test_worker_reports_v5_protocol_version(self):
-        self.assertEqual(worker.VERSION, '2.3.2')
+        self.assertEqual(worker.VERSION, '2.4.0')
         source = MODULE.read_text(encoding='utf-8')
         self.assertIn("'learningRepairV5': True", source)
         self.assertIn("'teachingSchemaVersion': 3", source)
@@ -248,6 +266,74 @@ class WorkerTests(unittest.TestCase):
         with self.assertRaisesRegex(worker.ApiError, 'SOURCE_CONTENT_RANGE_MISMATCH'):
             worker.download_response_mode(206, headers, 0, 100, 'v1')
 
+    def test_download_reuse_requires_matching_digest_not_only_size(self):
+        data = b'original-video'
+        def response(body=b'', status=200):
+            result = MagicMock()
+            result.__enter__.return_value = result
+            result.headers = {'Content-Length': str(len(data)), 'ETag': 'v1'}
+            result.status = status
+            result.read = io.BytesIO(body).read
+            return result
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder) / 'source.mp4'
+            with patch.object(worker.urllib.request, 'urlopen', side_effect=[response(), response(data)]) as request:
+                worker.download('https://example.test/source', target)
+            self.assertEqual(request.call_count, 2)
+            receipt = json.loads(target.with_suffix('.mp4.source.json').read_text())
+            self.assertEqual(receipt['contentHash'], worker.file_sha256(target))
+            with patch.object(worker.urllib.request, 'urlopen', return_value=response()) as request:
+                worker.download('https://example.test/source', target)
+            self.assertEqual(request.call_count, 1)
+            target.write_bytes(b'x' * len(data))
+            with patch.object(worker.urllib.request, 'urlopen', side_effect=[response(), response(data)]) as request:
+                worker.download('https://example.test/source', target)
+            self.assertEqual(request.call_count, 2)
+            self.assertEqual(target.read_bytes(), data)
+
+    def test_legacy_receipt_and_complete_partial_are_not_trusted_as_valid_source(self):
+        data = b'original-video'
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder) / 'source.mp4'
+            target.write_bytes(b'x' * len(data))
+            target.with_suffix('.mp4.part').write_bytes(b'x' * len(data))
+            worker.atomic_json(target.with_suffix('.mp4.source.json'),
+                {'version': 1, 'etag': 'v1', 'totalBytes': len(data)})
+            response = MagicMock()
+            response.__enter__.return_value = response
+            response.headers = {'Content-Length': str(len(data)), 'ETag': 'v1'}
+            response.status = 200
+            response.read = io.BytesIO(data).read
+            with patch.object(worker.urllib.request, 'urlopen', return_value=response) as request:
+                worker.download('https://example.test/source', target)
+            self.assertEqual(request.call_count, 2)
+            self.assertIsNone(request.call_args.args[0].get_header('Range'))
+            self.assertEqual(target.read_bytes(), data)
+
+    def test_upload_pipeline_receives_run_bound_usage_and_cancel_event(self):
+        lease = {'job': {'id': '00000000-0000-0000-0000-000000000001',
+                        'video_id': 'video', 'run_id': 'run', 'source_key': 'source.mp4'},
+                 'downloadUrl': 'https://example.test/source', 'token': 'secret'}
+        client = MagicMock()
+        def process(store, job_id, source, subtitles, config, output, base_url):
+            self.assertEqual(config['jobId'], job_id)
+            self.assertEqual(config['runId'], 'run')
+            self.assertFalse(config['cancelled'].is_set())
+            return {'status': 'REVIEW', 'result': {'video': {}, 'sentences': [],
+                'evidence': {'aiUsage': worker.summarize_usage(config['usageLogPath'], config['runId'])}}}
+        with tempfile.TemporaryDirectory() as folder, \
+                patch.object(worker, 'worker_root', return_value=Path(folder)), \
+                patch.object(worker, 'heartbeat_loop'), patch.object(worker, 'download'), \
+                patch.object(worker, 'process_job', side_effect=process), \
+                patch.object(worker, 'prepare_voice', return_value={'status': 'complete'}), \
+                patch.object(worker, 'selected_assets', return_value=[]), \
+                patch.object(worker, 'upload_assets', return_value=[]), \
+                patch.object(worker, 'rewrite_result', side_effect=lambda result, *args: result):
+            worker.process_lease(client, lease)
+        completed = [c for c in client.call.call_args_list if c.args[0] == 'worker-complete-v2']
+        self.assertEqual(len(completed), 1)
+        self.assertTrue(completed[0].kwargs['result']['evidence']['aiUsage']['complete'])
+
     def test_worker_root_honors_dedicated_directory(self):
         with tempfile.TemporaryDirectory() as folder, patch.dict('os.environ', {'EASTUDY_WORK_ROOT': folder}):
             self.assertEqual(worker.worker_root(), Path(folder).resolve())
@@ -269,8 +355,8 @@ class WorkerTests(unittest.TestCase):
                      'coreMeaningZh': '早上好', 'contextMeaningZh': '日常问候'}]}]
         with tempfile.TemporaryDirectory() as folder, \
              patch.dict('os.environ', {'EASTUDY_WORK_ROOT': folder}), \
-             patch.object(worker, 'repair_learning', return_value=(repaired, [{'model': 'test'}])), \
-             patch.object(worker, 'complete_teaching', side_effect=lambda rows, *args: (rows, [])), \
+             patch.object(worker, 'repair_learning', return_value=(repaired, [{'model': 'test'}])) as repair_mock, \
+             patch.object(worker, 'complete_teaching', side_effect=lambda rows, *args: (rows, [])) as complete_mock, \
              patch.object(worker, 'download') as download_mock, \
              patch.object(worker, 'process_job') as process_mock, \
              patch.object(worker, 'prepare_voice', return_value={'status': 'complete'}) as voice_mock, \
@@ -285,6 +371,12 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(calls[-2][0], 'upload-voice')
         self.assertEqual(calls[-1][1]['result']['sentences'], repaired)
         self.assertEqual(calls[-1][1]['result']['voiceManifest'], {'status': 'complete'})
+        config = repair_mock.call_args.args[1]
+        self.assertIs(config, complete_mock.call_args.args[1])
+        self.assertEqual(config['runId'], lease['job']['run_id'])
+        self.assertEqual(config['jobId'], lease['job']['id'])
+        self.assertFalse(config['cancelled'].is_set())
+        self.assertTrue(calls[-1][1]['result']['evidence']['aiUsage']['complete'])
 
     def test_incomplete_voice_cannot_upload_or_complete_repair(self):
         lease = {'job': {'id': '00000000-0000-0000-0000-000000000001', 'video_id': 'v',

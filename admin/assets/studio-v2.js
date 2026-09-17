@@ -28,7 +28,7 @@ async function submitOne(row,creator){
     const localVideoId=row.localVideoId||(row.localVideoId=Date.now()+state.rows.indexOf(row));
     if(!Store.localOnly){
       const Cloud=cloud(),Bridge=bridge();if(!Cloud||!Bridge)throw new Error('CLOUD_PROCESSING_CLIENT_NOT_READY');
-      const uploaded=row.uploaded||(row.uploaded=await Cloud.uploadVideo(row.video,progress=>updateRow(row.id,{progress,status:progress<100?'正在上传原片':'正在创建云端任务'})));
+      const uploaded=row.uploaded||(row.uploaded=await Cloud.uploadVideo(row.video,progress=>updateRow(row.id,{progress,status:progress<100?'正在上传原片':'正在确认云端保存'}),status=>updateRow(row.id,{status})));
       const video=row.videoRecord||(row.videoRecord=Store.saveVideo({id:localVideoId,title:row.title||titleFrom(row.video.name),titleZh:'待云端生成',creator:creator.name,creatorId:creator.id,
         category:'AI 自动分类',level:'AI 分析中',description:'云端正在生成字幕与学习内容。',status:'DRAFT',pipelineStatus:'QUEUED',
         cover:'assets/images/home_video_1.png',mediaUrl:uploaded.url,mediaKey:uploaded.key,mediaSize:uploaded.size,collectionIds:[],processingOptions:{transcript:true,translate:true,dictionary:true,learningAnalysis:true}}));

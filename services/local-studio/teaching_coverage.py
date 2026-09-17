@@ -68,7 +68,7 @@ def complete_coverage(rows, config=None, progress=None, cache_dir=None, request=
         for attempt in range(3):
             try:
                 value, meta, reused = _cached_ai(cache_dir, name, key,
-                    lambda: request(prompt, payload), validator)
+                    lambda: request(prompt, payload), validator, usage_config=config)
                 provenance.append({**meta, 'stage': name, 'cacheReused': reused})
                 return value
             except StudioError as error:

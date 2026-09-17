@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from checkpoint import canonical_hash
 from contracts import StudioError
 from teaching_voice import AMBIGUOUS_WORDS
+from teaching_review import apply_review, REVIEW_PROMPT as DELTA_REVIEW_PROMPT, REVIEW_VERSION as DELTA_REVIEW_VERSION
 
 DETAIL_VERSION = 'context-lookup-v2-20260916'
 DETAIL_REVIEW_VERSION = 'context-lookup-review-v2-20260916'
@@ -176,6 +177,9 @@ def complete_details(rows, config=None, progress=None, cache_dir=None, request=N
     from ai_tools import call_json, retry_ai, _cached_ai, ai_concurrency
     config, progress = config or {}, progress or (lambda *a, **k: None)
     request = request or (lambda prompt, payload: call_json(config, prompt, payload))
+    review_mode = config.get('detailReviewMode') or os.getenv('EASTUDY_DETAIL_REVIEW_MODE', 'full')
+    if review_mode not in ('full', 'delta'):
+        raise StudioError('AI_REVIEW_MODE_INVALID', '语义复核模式配置不正确。', False)
     provenance = []
     batches = [(offset, rows[offset:offset + 8]) for offset in range(0, len(rows), 8)]
 
@@ -188,14 +192,19 @@ def complete_details(rows, config=None, progress=None, cache_dir=None, request=N
             'contextAfter': [r['english'] for r in rows[offset+len(batch):offset+len(batch)+8]]}
         records = []
         for phase, prompt in [('generate', DETAIL_PROMPT), ('review', REVIEW_PROMPT)]:
+            delta = phase == 'review' and review_mode == 'delta'
+            if delta:
+                prompt = DELTA_REVIEW_PROMPT
             key = canonical_hash({'version': DETAIL_VERSION, 'phase': phase, 'prompt': prompt,
                                   'payload': payload,
                                   'model': config.get('model') or os.getenv('ZOSPEAK_AI_MODEL', ''),
                                   'baseUrl': config.get('baseUrl') or os.getenv('ZOSPEAK_AI_BASE_URL', '')})
             checked, meta, reused = retry_ai(lambda: _cached_ai(cache_dir,
                 f'details-{offset:04d}-{phase}', key, lambda: request(prompt, payload),
-                lambda result: validate_details(batch, result)), max_attempts=3)
-            records.append({**meta, 'stage': 'context-' + phase, 'cacheReused': reused})
+                lambda result: apply_review(batch, payload['candidate'], result) if delta else validate_details(batch, result),
+                usage_config=config), max_attempts=3)
+            records.append({**meta, 'stage': 'context-' + phase, 'cacheReused': reused,
+                            'reviewMode': review_mode if phase == 'review' else None})
             payload = {**payload, 'candidate': {'sentences': [{'id': r['id'], 'chinese': r['chinese'],
                 'tokens': r['wordLookup']['tokens'],
                 'expressions': [{**e, 'pronunciationHint': r['expressions'][i].get('pronunciationHint', '')}
@@ -203,6 +212,9 @@ def complete_details(rows, config=None, progress=None, cache_dir=None, request=N
                 'sourceConcerns': r['translationAnalysis']['sourceConcerns']}
                 for r in checked]}}
         checked = finalize_source_status(checked, batch)
+        if review_mode == 'delta':
+            for row in checked:
+                row['translationAnalysis']['reviewVersion'] = DELTA_REVIEW_VERSION
         return checked, records
 
     merged = []

@@ -279,7 +279,7 @@
     if (!data || !Array.isArray(data.items)) return { rows: [], groups: [], error: new Error('INVALID_PROCESSING_GROUP_RESPONSE') };
     const groups=data.items.map(group=>{
       const records=(Array.isArray(group.records)?group.records:[]).map(normalizeProcessingJob);
-      const current=records.find(job=>['RUNNING','QUEUED','WAITING'].includes(job.rawStatus))||records.find(job=>job.rawStatus!=='CANCELLED')||records[0]||null;
+      const current=selectCurrentProcessingJob(records,group.video);
       return {videoId:String(group.videoId),video:group.video||null,recordCount:Number(group.recordCount)||records.length,current,records};
     }).filter(group=>group.current);
     const keys=['active','failed','review','completed','cancelled','total'];
@@ -386,6 +386,15 @@
     else releaseCleanup();
   }
 
+  async function controlProcessingJob(command) {
+    const api=auth('admin');
+    if(!api)return {error:new Error('SUPABASE_NOT_CONFIGURED')};
+    return api.rpc('admin_control_processing_job_v1',{
+      p_job_id:command.id,p_expected_run_id:command.runId||null,
+      p_expected_updated_at:command.updatedAt,p_action:command.action,p_request_id:command.requestId
+    });
+  }
+
   async function apiRequest(path, init) {
     const token = await sessionToken('admin');
     const headers = new Headers(init?.headers || {});
@@ -396,7 +405,7 @@
     return payload;
   }
 
-  async function uploadVideo(file, onProgress) {
+  async function uploadVideo(file, onProgress, onPhase) {
     if (!(file instanceof File)) throw new Error('VIDEO_FILE_REQUIRED');
     if (!file.size || file.size > MAX_FILE_BYTES) throw new Error('VIDEO_FILE_SIZE_INVALID');
     const started = await apiRequest('/api/admin/uploads/init', {
@@ -416,12 +425,17 @@
         uploaded += chunk.size;
         if (onProgress) onProgress(Math.round(uploaded / file.size * 100));
       }
-      await apiRequest('/api/admin/uploads/complete', {
+      const receipt = await apiRequest('/api/admin/uploads/complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key: started.key, uploadId: started.uploadId, parts })
       });
-      return { key: started.key, url: '/api/media?key=' + encodeURIComponent(started.key), size: file.size, type: file.type };
+      // A local optimization must never turn a durable cloud upload into a failure.
+      onPhase?.('正在保存本机原片副本');
+      let localSourceSaved=false;
+      try { localSourceSaved=Boolean(await global.EastudyLocalSource?.preserve(file,receipt)); } catch {}
+      onPhase?.('正在创建云端任务');
+      return { key: started.key, url: '/api/media?key=' + encodeURIComponent(started.key), size: file.size, type: file.type, localSourceSaved };
     } catch (error) {
       void apiRequest('/api/admin/uploads/abort', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -440,7 +454,14 @@
     return { key: payload.key, url: payload.url, size: Number(payload.size) || file.size, type: 'image/webp' };
   }
 
-  global.EastudyCloudContent = Object.freeze({ pullPublished, pullVideoTeaching, pullAdmin, saveDraft, publish, publishEntity, setCreatorStatus, setVideoPublication, createLearningRepair, listTrash, trashVideos, restoreVideo,planPermanentVideoDeletion,confirmPermanentVideoDeletion,getVideoDeletion,getVideoDeletionCapability,retryVideoDeletion,
-    processingHealth, createProcessingJob, listProcessingJobs, listProcessingHistory, getProcessingJob, retryProcessingJob,
+  function selectCurrentProcessingJob(records,video){
+    const ids=[video?.processingJobId,video?.learningRepairJobId].filter(Boolean).map(String);
+    const active=job=>['RUNNING','QUEUED','WAITING'].includes(job.rawStatus||job.status);
+    const date=job=>Date.parse(job.updatedAt||job.updated_at||job.createdAt||job.created_at||'')||0;
+    return [...records].sort((a,b)=>Number(ids.includes(String(b.id)))-Number(ids.includes(String(a.id)))||Number(active(b))-Number(active(a))||date(b)-date(a)||String(a.id).localeCompare(String(b.id)))[0]||null;
+  }
+
+  global.EastudyCloudContent = Object.freeze({ selectCurrentProcessingJob, pullPublished, pullVideoTeaching, pullAdmin, saveDraft, publish, publishEntity, setCreatorStatus, setVideoPublication, createLearningRepair, listTrash, trashVideos, restoreVideo,planPermanentVideoDeletion,confirmPermanentVideoDeletion,getVideoDeletion,getVideoDeletionCapability,retryVideoDeletion,
+    processingHealth, createProcessingJob, listProcessingJobs, listProcessingHistory, getProcessingJob, retryProcessingJob, controlProcessingJob,
     syncMediaSession, clearMediaSession, uploadVideo, uploadCreatorAvatar });
 })(window);

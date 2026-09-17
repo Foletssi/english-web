@@ -1,4 +1,4 @@
-"""Run pronunciation generation in the isolated, hidden CPU voice runtime."""
+"""Run pronunciation generation in an isolated, hidden, verified voice runtime."""
 import json
 import os
 from pathlib import Path
@@ -21,7 +21,24 @@ def runtime_paths():
     cache = Path.home() / '.cache' / 'eastudy-kokoro-v1.0'
     config = {'modelPath': os.getenv('ZOSPEAK_TTS_MODEL_PATH') or str(cache / 'kokoro-v1.0.int8.onnx'),
               'voicesPath': os.getenv('ZOSPEAK_TTS_VOICES_PATH') or str(cache / 'voices-v1.0.bin'),
-              'voice': 'af_heart', 'language': 'en-us'}
+              'voice': 'af_heart', 'language': 'en-us',
+              'cacheDirectory': os.getenv('EASTUDY_VOICE_CACHE') or str(
+                  Path(os.environ.get('LOCALAPPDATA') or str(Path.home() / '.cache')) /
+                  'Eastudy' / 'voice-audio-cache')}
+    gpu_python = ROOT / 'tmp/voice-gpu-venv' / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
+    gpu_model = cache / 'kokoro-v1.0.onnx'
+    marker = gpu_python.parent.parent / 'verified-gpu.json'
+    if (not os.getenv('EASTUDY_VOICE_PYTHON') and not os.getenv('ZOSPEAK_TTS_MODEL_PATH')
+            and os.getenv('EASTUDY_VOICE_GPU', 'auto') != 'off'):
+        try:
+            verified = json.loads(marker.read_text(encoding='utf-8'))
+            if (isinstance(verified, dict) and gpu_python.is_file() and gpu_model.is_file()
+                    and verified.get('provider') == 'CUDAExecutionProvider'
+                    and verified.get('modelHash') == file_hash(gpu_model)):
+                python = gpu_python
+                config.update(modelPath=str(gpu_model), provider='cuda')
+        except (OSError, ValueError, TypeError):
+            pass
     if not python.is_file() or any(not Path(config[key]).is_file() for key in ('modelPath', 'voicesPath')):
         raise StudioError('VOICE_RUNTIME_MISSING', '本地发音服务尚未安装完整。', True)
     return python, config
@@ -53,6 +70,29 @@ def voice_assets(output, manifest):
 def generate_worker_voice(video_id, revision, rows, output, cancelled=None, progress=None,
                           timeout=21600, idle_timeout=180):
     python, config = runtime_paths()
+    started = time.monotonic()
+    try:
+        return _generate_worker_voice(video_id, revision, rows, output, cancelled, progress,
+                                      timeout, idle_timeout, python, config)
+    except StudioError as error:
+        if (config.get('provider') != 'cuda' or error.code not in
+                ('VOICE_PROCESS_CRASHED', 'VOICE_GENERATION_TIMEOUT')):
+            raise
+        if cancelled and cancelled.is_set():
+            raise StudioError('JOB_LEASE_LOST_OR_CANCELLED', '任务已取消。') from error
+        remaining = timeout - (time.monotonic() - started)
+        if remaining <= 0:
+            raise
+        # Retry at most once, with the same FP32 model and validated audio cache.
+        manifest = _generate_worker_voice(video_id, revision, rows, output, cancelled, progress,
+            remaining, idle_timeout, python, {**config, 'provider': 'cpu'})
+        manifest['cpuFallback'] = True
+        atomic_json(Path(output) / 'voice-manifest.json', manifest)
+        return manifest
+
+
+def _generate_worker_voice(video_id, revision, rows, output, cancelled, progress,
+                           timeout, idle_timeout, python, config):
     output = Path(output).resolve()
     output.mkdir(parents=True, exist_ok=True)
     request_path, manifest_path = output / 'voice-request.json', output / 'voice-manifest.json'
@@ -100,17 +140,19 @@ def generate_worker_voice(video_id, revision, rows, output, cancelled=None, prog
             try:
                 event = events.get(timeout=.2)
                 last_progress = time.monotonic()
-                if event.get('status') == 'failed':
+                if event.get('event') == 'progress':
+                    if progress:
+                        progress(event)
+                elif event.get('status') == 'failed':
                     candidate = str(event.get('errorCode') or '')
                     if re.fullmatch(r'VOICE_[A-Z_]{1,70}', candidate):
                         failure_code = candidate
-                elif progress:
-                    progress(event)
             except queue.Empty:
                 if process.poll() is not None:
                     break
         if process.returncode != 0 or not manifest_path.is_file():
-            raise StudioError(failure_code or 'VOICE_GENERATION_INCOMPLETE', '发音未全部生成，已保留完成内容供重试。', True)
+            code = 'VOICE_PROCESS_CRASHED' if process.returncode not in (0, 2) else 'VOICE_GENERATION_INCOMPLETE'
+            raise StudioError(failure_code or code, '发音未全部生成，已保留完成内容供重试。', True)
         manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
         if (manifest.get('videoId') != str(video_id) or manifest.get('contentRevision') != str(revision)
                 or len(manifest.get('items', [])) != len(expected)
@@ -137,6 +179,7 @@ def voice_capability(output):
                         'pronunciationHint': '/ɹɛdi/'}]}}
     try:
         manifest = generate_worker_voice('runtime-probe', '1', [row], output, timeout=120)
-        return {'inferenceReady': True, 'engine': 'kokoro-onnx', 'version': manifest.get('revision')}
+        return {'inferenceReady': True, 'engine': 'kokoro-onnx', 'version': manifest.get('revision'),
+                'provider': manifest.get('inferenceProvider'), 'cpuFallback': manifest.get('cpuFallback', False)}
     except Exception as error:
         return {'inferenceReady': False, 'errorCode': getattr(error, 'code', 'VOICE_RUNTIME_FAILED')}

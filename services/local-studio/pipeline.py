@@ -1,10 +1,12 @@
 from pathlib import Path
 
 from ai_tools import asr_profile, enrich, transcribe, semantic_segments
+from ai_usage import job_usage_config, summarize_usage
 from checkpoint import canonical_hash, file_sha256, read_valid_json, save_json_checkpoint
 from contracts import StudioError, validate_transcript
 from media_tools import extract_audio, make_cover, make_cover_variants, probe, transcode
 from teaching_completion import complete_teaching
+from ai_tools import check_ai_cancelled
 
 
 def public_media(base_url, job_id, name):
@@ -18,8 +20,10 @@ def process_job(store, job_id, source_path, cover_path, ai_config, media_root,
     output.mkdir(parents=True, exist_ok=True)
     checkpoints = output / '_checkpoints'
     checkpoints.mkdir(exist_ok=True)
+    ai_config = job_usage_config(ai_config, job_id, output)
 
     def progress(step, percent, message, **telemetry):
+        check_ai_cancelled(ai_config)
         store.update(job_id, status='PROCESSING', currentStep=step,
                      progress=percent, message=message, error=None,
                      telemetry=telemetry or None)
@@ -94,6 +98,7 @@ def process_job(store, job_id, source_path, cover_path, ai_config, media_root,
             'asrEngine': 'faster-whisper', 'subtitleCount': len(learning),
             'asrProfile': profile,
             'aiRequestCount': len(provenance), 'aiRequests': provenance,
+            'aiUsage': summarize_usage(ai_config['usageLogPath'], ai_config['runId']),
             'mediaVariants': playback_variants, 'humanReviewRequired': True,
         }}
         return store.update(job_id, status='REVIEW', currentStep='review', progress=100,

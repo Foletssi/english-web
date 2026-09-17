@@ -10,6 +10,7 @@ from collections import deque
 from fractions import Fraction
 from pathlib import Path
 from contracts import StudioError
+from media_cancellation import check_cancelled
 
 
 def require_tools():
@@ -20,10 +21,28 @@ def require_tools():
 
 def run(args, timeout=7200):
     require_tools()
+    check_cancelled()
     try:
-        result = subprocess.run(args, check=True, capture_output=True, timeout=timeout,
-                                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
-        return result.stdout
+        with subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0) as process:
+            deadline = time.monotonic() + timeout
+            try:
+                while True:
+                    check_cancelled()
+                    if time.monotonic() >= deadline:
+                        raise subprocess.TimeoutExpired(args, timeout)
+                    try:
+                        stdout, stderr = process.communicate(timeout=.25)
+                        break
+                    except subprocess.TimeoutExpired:
+                        continue
+                if process.returncode:
+                    raise subprocess.CalledProcessError(process.returncode, args, stdout, stderr)
+                return stdout
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                    process.communicate(timeout=5)
     except subprocess.TimeoutExpired as error:
         raise StudioError('MEDIA_TIMEOUT', '视频处理超时。', True) from error
     except subprocess.CalledProcessError as error:
@@ -72,6 +91,7 @@ def run_progress(args, duration, progress=None, timeout=7200):
     last_report = 0.0
     try:
         while process.poll() is None:
+            check_cancelled()
             if time.monotonic() >= deadline:
                 raise StudioError('MEDIA_TIMEOUT', '视频处理超时。', True)
             if reader_errors:

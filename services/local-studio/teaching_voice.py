@@ -15,8 +15,10 @@ import time
 
 from contracts import StudioError
 from media_tools import run
+from voice_cache import copy_audio, restore_audio, store_audio, prune_cache
 
-VOICE_VERSION = 'kokoro-context-v1-20260916'
+LEGACY_VOICE_VERSION = 'kokoro-context-v1-20260916'
+VOICE_VERSION = 'kokoro-input-v2-20260917'
 PACKAGE_VERSION = '0.6.1'
 AMBIGUOUS_WORDS = frozenset(('read', 'live', 'wind', 'lead', 'tear', 'bow',
                            'close', 'does', 'bass', 'minute', 'wound', 'record',
@@ -168,13 +170,36 @@ def _espeak_config():
     return EspeakConfig(data_path=str(data), lib_path=espeakng_loader.get_library_path())
 
 
-def generate_voice_manifest(video_id, content_revision, rows, output_dir, config=None,
-                            previous_manifest=None, progress=None, engine=None):
-    """Generate approved rows with <=2 retries/item; caller persists the manifest.
+def _load_engine(model, voices, prefer_cuda=False):
+    from importlib.metadata import version as installed_version
+    from kokoro_onnx import Kokoro
+    import onnxruntime as ort
+    if installed_version('kokoro-onnx') != PACKAGE_VERSION:
+        raise StudioError('VOICE_RUNTIME_VERSION', '语音运行库版本不匹配。')
+    options = ort.SessionOptions()
+    options.intra_op_num_threads = 4
+    options.inter_op_num_threads = 1
+    from voice_provider import FallbackEngine, preload_cuda
+    def build(cuda):
+        if cuda:
+            preload_cuda(ort)
+        providers = [('CUDAExecutionProvider', {'gpu_mem_limit': 2 * 1024 ** 3,
+            'arena_extend_strategy': 'kSameAsRequested', 'cudnn_conv_algo_search': 'HEURISTIC'}),
+            'CPUExecutionProvider'] if cuda else ['CPUExecutionProvider']
+        session = ort.InferenceSession(str(model), sess_options=options, providers=providers)
+        return Kokoro.from_session(session, str(voices), espeak_config=_espeak_config()), session.get_providers()[0]
+    return FallbackEngine(build, prefer_cuda)
 
-    config: modelPath, voicesPath, voice (af_heart), language (en-us).
-    previous_manifest only permits identical fingerprints from this content
-    revision. A failed replacement never overwrites a valid older file/record.
+
+def generate_voice_manifest(video_id, content_revision, rows, output_dir, config=None,
+                            previous_manifest=None, progress=None, engine=None,
+                            progress_details=None):
+    """Generate approved rows with <=2 retries/unique input; caller persists manifest.
+
+    config: modelPath, voicesPath, voice (af_heart), language (en-us), cacheDirectory.
+    Reuse is keyed by resolved pronunciation and model configuration, while each
+    record retains its own video/revision/item identity. previous_manifest is only
+    failure evidence; it cannot turn a failed current item into a ready record.
     """
     config, progress = config or {}, progress or (lambda *_: None)
     items = collect_voice_items(video_id, content_revision, rows)
@@ -189,30 +214,55 @@ def generate_voice_manifest(video_id, content_revision, rows, output_dir, config
     version = {'revision': VOICE_VERSION, 'packageVersion': PACKAGE_VERSION,
                'modelHash': file_hash(model), 'voicesHash': file_hash(voices),
                'voice': voice, 'language': language}
-    if engine is None:
-        from importlib.metadata import version as installed_version
-        from kokoro_onnx import Kokoro
-        import onnxruntime as ort
-        if installed_version('kokoro-onnx') != PACKAGE_VERSION:
-            raise StudioError('VOICE_RUNTIME_VERSION', '语音运行库版本不匹配。')
-        options = ort.SessionOptions()
-        options.intra_op_num_threads = 4
-        options.inter_op_num_threads = 1
-        session = ort.InferenceSession(str(model), sess_options=options, providers=['CPUExecutionProvider'])
-        engine = Kokoro.from_session(session, str(voices), espeak_config=_espeak_config())
+    # Resolve contextual pronunciation BEFORE deduplication. Distinct meanings can
+    # share audio, but distinct pronunciations (read/read) must never be merged.
+    prepared, legacy_paths = [], {}
+    for item in items:
+        try:
+            text, phonemes = pronunciation_input(item)
+            fingerprint = _hash({'input': text, 'isPhonemes': phonemes,
+                'speed': 1.0, 'format': 'mp3-mono-24000-48k', **version})
+            legacy = _hash({'text': item['text'], 'hint': item['pronunciationHint'],
+                'meaning': item['meaning'], 'context': item['context'],
+                **{**version, 'revision': LEGACY_VOICE_VERSION}})
+            source = voice_dir / f'{legacy}.mp3'
+            if source.is_file():
+                legacy_paths.setdefault(fingerprint, []).append(source)
+            prepared.append((fingerprint, None))
+        except StudioError as error:
+            prepared.append((None, error))
+    unique_total = len({key for key, error in prepared if error is None})
+    cache_root = config.get('cacheDirectory')
     previous = {x.get('itemId'): x for x in (previous_manifest or {}).get('items', [])}
-    cached, output = {}, []
+    cached, failed_inputs, output = {}, {}, []
+    # A failed engine initialization is batch-wide. Do not repeatedly load the
+    # ONNX session for every distinct pronunciation when the runtime is broken.
+    engine_load_error = None
+    generated = reused_items = failed = cache_write_failures = 0
     started = time.monotonic()
+    def emit(current, status):
+        progress(current, len(items), status)
+        if progress_details:
+            progress_details({'event': 'progress', 'current': current, 'total': len(items),
+                'status': status, 'uniqueTotal': unique_total, 'uniqueReady': len(cached),
+                'generated': generated, 'reused': reused_items, 'failed': failed,
+                'elapsedSeconds': round(time.monotonic() - started, 3),
+                'cacheWriteFailures': cache_write_failures,
+                'inferenceProvider': getattr(engine, 'provider', 'cache-only'),
+                'cpuFallback': bool(getattr(engine, 'fallback', False))})
+    emit(0, 'running')
     for index, item in enumerate(items):
-        fingerprint = _hash({'text': item['text'], 'hint': item['pronunciationHint'],
-            'meaning': item['meaning'], 'context': item['context'], **version})
+        fingerprint, input_error = prepared[index]
+        fingerprint = fingerprint or _hash({'invalidItem': item['itemId'], **version})
         relative = f'voice/{fingerprint}.mp3'
         destination = root / relative
         record = {k: v for k, v in item.items() if k not in {'meaning', 'context'}}
         record.update(fingerprint=fingerprint, **version)
         old = previous.get(item['itemId'], {})
-        error = None
-        for attempt in range(3):
+        error = input_error or failed_inputs.get(fingerprint)
+        attempts = 0
+        for attempt in range(0 if error else 3):
+            attempts = attempt + 1
             try:
                 # This check precedes cache lookup: stale/ambiguous decisions cannot
                 # become accepted just because a matching file happened to exist.
@@ -223,30 +273,70 @@ def generate_voice_manifest(video_id, content_revision, rows, output_dir, config
                         metadata = validate_audio(destination)
                     except StudioError:
                         metadata = None
+                if metadata is None:
+                    metadata = restore_audio(cache_root, fingerprint, destination)
+                if metadata is None:
+                    for source in legacy_paths.pop(fingerprint, []):
+                        try:
+                            legacy_metadata = validate_audio(source)
+                            copy_audio(source, destination)
+                            metadata = legacy_metadata
+                            break
+                        except (StudioError, OSError):
+                            continue
                 reused = metadata is not None
                 if metadata is None:
+                    if engine is None:
+                        if engine_load_error is not None:
+                            raise engine_load_error
+                        try:
+                            engine = _load_engine(model, voices, prefer_cuda=config.get('provider') == 'cuda')
+                        except Exception as caught:
+                            engine_load_error = caught
+                            raise
                     metadata = _synthesize(engine, item, destination, voice, language)
+                    generated += 1
+                if fingerprint not in cached:
+                    try:
+                        store_audio(cache_root, fingerprint, destination, metadata)
+                    except OSError:
+                        # Cache availability must not invalidate an already
+                        # validated job asset (e.g. a read-only cache volume).
+                        cache_write_failures += 1
                 cached[fingerprint] = metadata
+                reused_items += int(reused)
                 record.update(metadata, status='ready', storagePath=relative,
                               attempts=attempt + 1, reused=reused)
                 error = None
                 break
             except Exception as caught:
                 error = caught
+                if isinstance(caught, StudioError) and (
+                        not caught.retryable or caught.code in {
+                            'VOICE_CONTEXT_REQUIRED', 'VOICE_PRONUNCIATION_AMBIGUOUS',
+                            'VOICE_PHONEMES_UNSUPPORTED'}):
+                    break
         if error is not None:
-            record.update(status='failed', attempts=3,
+            failed += 1
+            failed_inputs[fingerprint] = error
+            record.update(status='failed', attempts=attempts,
                           errorCode=getattr(error, 'code', 'VOICE_GENERATION_FAILED'))
             # Never retain a record for a different meaning/version as a success.
             if old.get('fingerprint') == fingerprint and old.get('status') == 'ready':
                 record['previousValidRecord'] = old
         output.append(record)
-        progress(index + 1, len(items), record['status'])
+        emit(index + 1, record['status'])
     ready = sum(x['status'] == 'ready' for x in output)
+    prune_cache(cache_root)
     return {'schemaVersion': 1, 'videoId': str(video_id),
         'contentRevision': str(content_revision), **version, 'items': output,
         'status': 'complete' if ready == len(output) and output else 'incomplete',
         'ready': ready, 'total': len(output), 'uniqueFiles': len(cached),
-        'elapsedSeconds': round(time.monotonic() - started, 3)}
+        'uniqueTotal': unique_total, 'generated': generated, 'reused': reused_items,
+        'failed': failed, 'cacheWriteFailures': cache_write_failures,
+        'elapsedSeconds': round(time.monotonic() - started, 3),
+        'inferenceProvider': getattr(engine, 'provider', 'cache-only'),
+        'cpuFallback': bool(getattr(engine, 'fallback', False))}
 
 
 def main(argv=None):
@@ -269,13 +359,12 @@ def main(argv=None):
             Path(args.request).read_text(encoding='utf-8-sig'))
         if not isinstance(request, dict) or not isinstance(request.get('rows'), list):
             raise StudioError('VOICE_REQUEST_INVALID', '发音请求格式不正确。')
-        def progress(current, total, status):
-            print(json.dumps({'event': 'progress', 'current': current, 'total': total,
-                              'status': status}), file=sys.stderr, flush=True)
+        def progress(event):
+            print(json.dumps(event), file=sys.stderr, flush=True)
         with contextlib.redirect_stdout(sys.stderr):
             manifest = generate_voice_manifest(request.get('videoId', ''),
                 request.get('contentRevision', ''), request['rows'], args.output_dir,
-                request.get('config'), request.get('previousManifest'), progress)
+                request.get('config'), request.get('previousManifest'), progress_details=progress)
         destination = Path(args.manifest).resolve()
         destination.parent.mkdir(parents=True, exist_ok=True)
         temporary_path = None

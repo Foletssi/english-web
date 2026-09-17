@@ -22,6 +22,28 @@ def fixture():
 
 
 class EligibilityTests(unittest.TestCase):
+    def test_default_preserves_legacy_payload_and_table_cannot_reuse_full_cache(self):
+        from teaching_eligibility import PROMPT, VERSION, CONTEXT_TABLE_VERSION
+        calls = []
+        def request(prompt, payload):
+            calls.append((prompt, payload))
+            return self.answer(prompt, payload)
+        with tempfile.TemporaryDirectory() as cache, patch.dict(
+                'os.environ', EASTUDY_ELIGIBILITY_CONTEXT_MODE='full'):
+            _, records = refine_eligibility(fixture(), cache_dir=cache, request=request)
+            self.assertEqual(records[0]['stage'], VERSION)
+            self.assertEqual(calls[0][0], PROMPT)
+            item = calls[0][1]['items'][0]
+            self.assertEqual(set(item), {'itemId', 'english', 'before', 'after',
+                                        'contextBefore', 'contextAfter', 'expression'})
+            _, records = refine_eligibility(fixture(), {'eligibilityContextMode': 'table'},
+                                           cache_dir=cache, request=request)
+            self.assertEqual(records[0]['stage'], CONTEXT_TABLE_VERSION)
+            self.assertIn('sentences', calls[1][1])
+            refine_eligibility(fixture(), {'eligibilityContextMode': 'table'},
+                               cache_dir=cache, request=request)
+        self.assertEqual(len(calls), 2)
+
     def answer(self, prompt, payload):
         return {'decisions': [{'itemId': item['itemId'],
             'keep': item['expression']['surface'] != 'like', 'reasonZh': '语境门槛判断',
@@ -137,10 +159,32 @@ class EligibilityTests(unittest.TestCase):
                 for i in (index-1, index) if 0 <= i < len(original)-1]
         def request(prompt, payload):
             target = payload['items'][0]
-            self.assertIn('She works at the drive-thru.', target['contextAfter'])
-            self.assertNotIn(target['english'], target['contextAfter'])
+            sentences = {s['index']: s['english'] for s in payload['sentences']}
+            after = [sentences[i] for i in target['contextAfter']]
+            self.assertIn('She works at the drive-thru.', after)
+            self.assertNotIn(sentences[target['sentenceIndex']], after)
             return self.answer(prompt, payload)
-        refine_eligibility(original, request=request)
+        refine_eligibility(original, {'eligibilityContextMode': 'table'}, request=request)
+
+    def test_context_table_retains_all_original_windows_and_candidate_fields(self):
+        from teaching_eligibility import eligibility_payload
+        rows = [{'english': f'Sentence {i}.'} for i in range(30)]
+        batch = [{'itemId': f'{i}:{p}', 'sentenceIndex': i,
+                  'expression': {'surface': 'test', 'coreMeaningZh': '原义', 'extra': 'retained'}}
+                 for i in (0, 12, 29) for p in range(2)]
+        before = copy.deepcopy((rows, batch))
+        payload = eligibility_payload(rows, batch)
+        table = {r['index']: r['english'] for r in payload['sentences']}
+        self.assertEqual(len(table), len(payload['sentences']))
+        for source, item in zip(batch, payload['items']):
+            index = source['sentenceIndex']
+            self.assertEqual(table[index], rows[index]['english'])
+            self.assertEqual([table[i] for i in item['contextBefore']],
+                             [r['english'] for r in rows[max(0, index-8):index]])
+            self.assertEqual([table[i] for i in item['contextAfter']],
+                             [r['english'] for r in rows[index+1:index+9]])
+            self.assertEqual(item['expression'], source['expression'])
+        self.assertEqual((rows, batch), before)
 
     def test_missing_or_duplicate_decisions_cannot_be_published(self):
         for duplicate in (False, True):

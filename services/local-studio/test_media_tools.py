@@ -27,7 +27,10 @@ class MediaTools(unittest.TestCase):
         self.assertEqual([x['fps'] for x in ladder(1920, 1080, 20)], [20])
 
     def test_commands_do_not_open_windows(self):
-        with patch('media_tools.require_tools'), patch('media_tools.subprocess.run') as execute:
+        with patch('media_tools.require_tools'), patch('media_tools.subprocess.Popen') as execute:
+            process = execute.return_value.__enter__.return_value
+            process.communicate.return_value = (b'ok', b'')
+            process.returncode = 0
             run(['ffprobe', 'sample.mp4'])
             self.assertEqual(execute.call_args.kwargs['creationflags'],
                              subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)

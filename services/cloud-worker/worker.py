@@ -1,5 +1,6 @@
 import argparse
 import json
+import math
 import os
 import platform
 import re
@@ -20,14 +21,18 @@ sys.path.insert(0, str(LOCAL_STUDIO))
 
 from pipeline import process_job  # noqa: E402
 from ai_tools import prepare_asr_model, repair_learning  # noqa: E402
-from checkpoint import atomic_json  # noqa: E402
+from ai_usage import job_usage_config, summarize_usage  # noqa: E402
+from checkpoint import atomic_json, file_sha256  # noqa: E402
 from media_tools import ladder  # noqa: E402
 from teaching_prompts import TEACHING_PROMPT_VERSION  # noqa: E402
 from teaching_completion import complete_teaching  # noqa: E402
 from voice_runtime import generate_worker_voice, voice_assets, voice_capability  # noqa: E402
+from media_cancellation import cancellation_scope  # noqa: E402
+from local_source import SourceCache, start_intake  # noqa: E402
+from processing_metrics import stage_metrics  # noqa: E402
 
 
-VERSION = '2.3.2'
+VERSION = '2.4.0'
 DEFAULT_ENDPOINT = 'https://ehxqtgakjgqgmghhdmjg.supabase.co/functions/v1/video-processing'
 STAGE_MAP = {'probe': 'PROBE', 'transcode': 'TRANSCODE', 'asr': 'ASR', 'enrich': 'ENRICH'}
 
@@ -181,6 +186,7 @@ def sequence(lease):
 def report_progress(client, lease, stage, progress, message, metrics=None):
     current_run = run_id(lease)
     if current_run:
+        metrics = stage_metrics(lease, stage, metrics)
         try:
             return client.call('worker-telemetry-v2', jobId=lease['job']['id'], token=lease['token'],
                                runId=current_run, sequence=sequence(lease), stage=stage,
@@ -324,7 +330,7 @@ def worker_root():
     return base.resolve()
 
 
-def download(url, target, progress=None):
+def download(url, target, progress=None, source_key=None):
     target = Path(target)
     partial = target.with_suffix(target.suffix + '.part')
     sidecar = target.with_suffix(target.suffix + '.source.json')
@@ -337,14 +343,26 @@ def download(url, target, progress=None):
         raise ApiError('SOURCE_METADATA_INCOMPLETE')
     expected = {'version': 1, 'etag': etag, 'totalBytes': total}
     try:
-        saved = json.loads(sidecar.read_text(encoding='utf-8')) if sidecar.is_file() else None
+        local_hit = bool(source_key) and SourceCache(worker_root() / 'source-intake').restore(source_key, total, etag, target)
     except (OSError, ValueError):
-        saved = None
-    if target.is_file() and target.stat().st_size == total and saved == expected:
+        local_hit = False
+    if local_hit:
         if progress:
             progress(total, total)
         return
-    if partial.exists() and (saved != expected or partial.stat().st_size > total):
+    try:
+        saved = json.loads(sidecar.read_text(encoding='utf-8')) if sidecar.is_file() else None
+    except (OSError, ValueError):
+        saved = None
+    metadata_matches = isinstance(saved, dict) and all(saved.get(k) == v for k, v in expected.items())
+    digest = saved.get('contentHash', '') if metadata_matches else ''
+    if (target.is_file() and target.stat().st_size == total
+            and isinstance(digest, str) and re.fullmatch(r'[a-f0-9]{64}', digest)
+            and file_sha256(target) == digest):
+        if progress:
+            progress(total, total)
+        return
+    if partial.exists() and (not metadata_matches or partial.stat().st_size >= total):
         partial.write_bytes(b'')
     atomic_json(sidecar, expected)
     offset = partial.stat().st_size if partial.is_file() else 0
@@ -375,6 +393,7 @@ def download(url, target, progress=None):
     os.replace(partial, target)
     if not target.is_file() or target.stat().st_size == 0:
         raise ApiError('SOURCE_DOWNLOAD_EMPTY')
+    atomic_json(sidecar, {**expected, 'contentHash': file_sha256(target)})
 
 
 def selected_assets(output, result):
@@ -415,8 +434,18 @@ def prepare_voice(client, lease, rows, output, cancelled):
         if current < total and now - last_reported[0] < 5:
             return
         last_reported[0] = now
-        report_progress(client, lease, 'ENRICH', 95, f'正在生成发音 {current}/{total}',
-                        {'substage': 'teaching-voice', 'current': current, 'total': total, 'unit': 'items'})
+        metrics = {'substage': 'teaching-voice', 'current': current, 'total': total, 'unit': 'items'}
+        for key in ('uniqueTotal', 'uniqueReady', 'generated', 'reused', 'failed',
+                    'elapsedSeconds', 'cacheWriteFailures'):
+            value = event.get(key)
+            if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and value >= 0:
+                metrics[key] = value
+        message = f'已处理发音位置 {current}/{total}'
+        if 'generated' in metrics and 'reused' in metrics:
+            message += f"；新生成 {metrics['generated']}，复用 {metrics['reused']}"
+        if metrics.get('failed'):
+            message += f"，失败 {metrics['failed']}"
+        report_progress(client, lease, 'ENRICH', 95, message, metrics)
     return generate_worker_voice(video_id, run_id(lease), rows, output, cancelled, progress)
 
 
@@ -438,7 +467,7 @@ def rewrite_result(result, job_id, source_key):
 
 
 def heartbeat_loop(client, lease, stop, cancelled):
-    while not stop.wait(30):
+    while not stop.wait(5):
         try:
             current_run = run_id(lease)
             client.call('worker-job-heartbeat-v2' if current_run else 'worker-job-heartbeat',
@@ -464,6 +493,7 @@ def process_lease(client, lease):
         work.mkdir(parents=True, exist_ok=True)
         if not work.resolve().is_relative_to(worker_root()):
             raise ApiError('WORK_PATH_INVALID')
+        ai_config = job_usage_config({'cancelled': cancelled}, job_id, work, run_id(lease))
         job_input = lease['job'].get('input') or {}
         if job_input.get('kind') == 'MEDIA_REENCODE':
             # A generic admin retry must never send a media-only job through AI.
@@ -483,10 +513,10 @@ def process_lease(client, lease):
                     raise ApiError('JOB_LEASE_LOST_OR_CANCELLED')
                 report_progress(client, lease, 'ENRICH', min(99, int(progress)), message, metrics)
             repair_mode = str(job_input.get('mode') or 'fill_missing')
-            repaired, provenance = repair_learning(rows, {}, repair_progress,
+            repaired, provenance = repair_learning(rows, ai_config, repair_progress,
                                                    work / 'learning-repair-cache', repair_mode)
             repaired, completion_provenance = complete_teaching(
-                repaired, {}, repair_progress, work / 'teaching-completion-cache')
+                repaired, ai_config, repair_progress, work / 'teaching-completion-cache')
             provenance.extend(completion_provenance)
             if cancelled.is_set():
                 raise ApiError('JOB_LEASE_LOST_OR_CANCELLED')
@@ -498,11 +528,13 @@ def process_lease(client, lease):
             client.call('worker-complete-learning-v5', jobId=job_id, token=lease['token'],
                         runId=run_id(lease), result={'teachingSchemaVersion': 3, 'sentences': repaired,
                         'voiceManifest': voice,
-                        'evidence': {'kind': 'learning-repair-v5', 'teachingSchemaVersion': 3, 'provenance': provenance}})
+                        'evidence': {'kind': 'learning-repair-v5', 'teachingSchemaVersion': 3,
+                            'aiUsage': summarize_usage(ai_config['usageLogPath'], ai_config['runId']),
+                            'provenance': provenance}})
             print(f'[complete-learning-repair] {job_id}', flush=True)
             return
         source = work / Path(lease['job']['source_key']).name
-        report_progress(client, lease, 'LOCAL_DOWNLOAD', 2, '正在从 R2 下载原片')
+        report_progress(client, lease, 'LOCAL_DOWNLOAD', 2, '正在校验并读取原片')
         last_reported = [0.0]
         def report_download(current, total):
             if cancelled.is_set():
@@ -515,11 +547,12 @@ def process_lease(client, lease):
             report_progress(client, lease, 'LOCAL_DOWNLOAD', percent,
                             f'正在下载原片 {current}/{total} 字节',
                             {'substage': 'source', 'current': current, 'total': total, 'unit': 'bytes'})
-        download(lease['downloadUrl'], source, report_download)
+        download(lease['downloadUrl'], source, report_download, lease['job']['source_key'])
         if cancelled.is_set():
             raise ApiError('JOB_LEASE_LOST_OR_CANCELLED')
         store = RemoteProgressStore(client, lease)
-        result_job = process_job(store, job_id, source, None, {}, work / 'output', base_url='')
+        with cancellation_scope(cancelled):
+            result_job = process_job(store, job_id, source, None, ai_config, work / 'output', base_url='')
         if cancelled.is_set():
             raise ApiError('JOB_LEASE_LOST_OR_CANCELLED')
         if result_job.get('status') != 'REVIEW':
@@ -555,6 +588,9 @@ def process_lease(client, lease):
     finally:
         stop.set()
         thread.join(timeout=2)
+        if 'ai_config' in locals():
+            print('[ai-usage] ' + json.dumps(summarize_usage(
+                ai_config['usageLogPath'], ai_config['runId']), ensure_ascii=False), flush=True)
 
 
 def main():
@@ -573,6 +609,11 @@ def main():
         return 2
     worker_id = os.getenv('EASTUDY_WORKER_ID', '').strip() or default_worker_id()
     client = EdgeClient(os.getenv('EASTUDY_PROCESSING_ENDPOINT', DEFAULT_ENDPOINT).strip(), secret, worker_id, caps)
+    try:
+        start_intake(SourceCache(worker_root() / 'source-intake'))
+        print('[source-intake] loopback ready', flush=True)
+    except OSError:
+        print('[source-intake] unavailable; cloud download remains active', flush=True)
     print(f'Eastudy Worker {VERSION} started: {worker_id} {caps}', flush=True)
     try:
         client.call('worker-heartbeat')

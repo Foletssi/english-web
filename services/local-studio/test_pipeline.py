@@ -41,8 +41,16 @@ class PipelineTests(unittest.TestCase):
                                for tag in ('vlog', 'daily-life', 'spoken-english')],
             'goalMappings': [{'goalId': 'daily', 'sentenceIds': ['one'], 'reason': '日常表达'}]},
             [{'model': 'fixture'}])
+        config = {}
         result = process_job(self.store, self.job['id'], self.root / 'source.mp4', None,
-                             {}, self.root / 'media')
+                             config, self.root / 'media')
+        self.assertEqual(config, {})
+        self.assertEqual(enrich.call_args.args[2], completion.call_args.args[1])
+        bound = completion.call_args.args[1]
+        self.assertEqual(bound['jobId'], self.job['id'])
+        self.assertTrue(bound['runId'])
+        self.assertEqual(result['result']['evidence']['aiUsage']['requests'], 0)
+        self.assertTrue(result['result']['evidence']['aiUsage']['complete'])
         self.assertEqual(result['status'], 'REVIEW')
         self.assertEqual(result['result']['video']['playback']['policy'], 'single-standard-v2')
         self.assertNotIn('original', result['result']['video']['playback'])

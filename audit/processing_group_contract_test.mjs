@@ -33,3 +33,13 @@ for(const [summary,accepted] of [[valid,true],[undefined,false],[{...valid,total
   if(accepted)assert.equal(result.summary.total,6,'global counts survive an empty page');
 }
 console.log('Global processing summary response validation passed.');
+const selector=window.EastudyCloudContent.selectCurrentProcessingJob;
+const source={id:'source',status:'REVIEW',updatedAt:'2026-09-17T01:00:00Z'};
+const repair={id:'repair',status:'RUNNING',updatedAt:'2026-09-17T02:00:00Z'};
+const video={processingJobId:'source',learningRepairJobId:'repair'};
+assert.equal(selector([source,repair],video).id,'repair','current repair must not be hidden by original job');
+assert.equal(selector([source,{...repair,status:'ERROR'}],video).id,'repair');
+assert.equal(selector([source,{...repair,status:'CANCELLED'}],video).id,'repair');
+assert.equal(selector([{id:'old-active',status:'RUNNING'},source],video).id,'source','historical active job must not replace current pointer');
+assert.equal(selector([],video),null);
+console.log('Source and learning-repair representative selection passed.');
