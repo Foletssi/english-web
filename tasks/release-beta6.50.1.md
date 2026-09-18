@@ -39,3 +39,18 @@ Use the previously authorized Git/Pages and HTTPS verification lane. Restart the
 idle local Worker to expose the new route. The current saved configuration stays
 unchanged. Restore code by reverting this release and restarting an idle Worker;
 preserve encrypted settings and paid processing caches.
+
+## Production verification (2026-09-18)
+
+- Implementation commit 4a304f8 was pushed to main through the authorized lane.
+- Production admin HTML and both AI settings assets returned HTTP 200 and matched
+  the local release after line-ending normalization. Student homepage returned 200.
+- The idle Worker was restarted with its existing scheduled task; cloud heartbeat
+  now reports 2.5.2, zero active jobs and teaching voice ready. Startup confirmed
+  local CUDA ASR inference ready with the existing model cache.
+- The running models route accepted the production-origin private-network
+  preflight and rejected an unauthenticated POST with HTTP 403 ADMIN_REQUIRED.
+- Browser interaction checks used real admin assets with mocked authentication
+  and service responses. Logged-in production browser interaction could not be
+  checked because the Chrome bridge was unavailable; production assets and the
+  live loopback service were verified separately over HTTP(S).
