@@ -9,7 +9,9 @@
    const voice=job.currentStep==='enrich'&&String(job.telemetry?.substage||job.substage||'').startsWith('teaching-voice');
    const current=['QUEUED','WAITING'].includes(raw)?'claim':raw==='REVIEW'?'review':voice?'voice':job.currentStep;
    const index=order.indexOf(current);
-   return order.map((name,i)=>({name,label:names[name],current:i===index,state:i<index?'SUCCESS':i===index?(['ERROR','CANCELLED'].includes(raw)?raw:['QUEUED','WAITING','REVIEW'].includes(raw)?'WAITING':'RUNNING'):'WAITING'}));
+   const validating=!learning&&!media&&job.resumePosition&&job.resumePosition.verified!==true&&raw!=='REVIEW';
+   const completed=name=>job.telemetry?.stepHistory?.[({transcode:'media',enrich:'teaching'})[name]||name]?.state==='DONE';
+   return order.map((name,i)=>({name,label:names[name],current:i===index,state:(validating?completed(name):i<index)?'SUCCESS':i===index?(['ERROR','CANCELLED'].includes(raw)?raw:['QUEUED','WAITING','REVIEW'].includes(raw)?'WAITING':'RUNNING'):'WAITING'}));
  }
  const date=value=>value&&Number.isFinite(Date.parse(value))?new Date(value).toLocaleString('zh-CN',{hour12:false}):'尚未上报';
  function measured(job){

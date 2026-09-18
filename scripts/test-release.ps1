@@ -9,7 +9,7 @@ function Invoke-Checked {
     if ($LASTEXITCODE -ne 0) { throw "Release check failed: $Program (exit $LASTEXITCODE)" }
 }
 
-foreach ($suite in @('audit','contract-test','deletion-test','auth-test','learning-test')) {
+foreach ($suite in @('audit','contract-test','deletion-test','auth-test','learning-test','test:m08')) {
     Invoke-Checked -Program 'npm.cmd' -Argv @('run',$suite)
 }
 foreach ($file in @(

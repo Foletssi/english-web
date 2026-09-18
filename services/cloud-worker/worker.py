@@ -38,7 +38,7 @@ from ai_settings import SettingsStore, start_ai_settings  # noqa: E402
 from final_output import restore_final_output, save_final_output  # noqa: E402
 
 
-VERSION = '2.5.4'
+VERSION = '2.5.5'
 DEFAULT_ENDPOINT = 'https://ehxqtgakjgqgmghhdmjg.supabase.co/functions/v1/video-processing'
 STAGE_MAP = {'probe': 'PROBE', 'transcode': 'TRANSCODE', 'asr': 'ASR', 'enrich': 'ENRICH'}
 
@@ -60,6 +60,8 @@ def api_error_from_http(error, prefix='EDGE'):
         detail = json.loads(raw)
     except ValueError:
         detail = {'message': raw}
+    if not isinstance(detail, dict):
+        detail = {'message': raw}
     code = str(detail.get('error') or detail.get('code') or f'{prefix}_HTTP_{error.code}')
     message = str(detail.get('message') or code)
     return ApiError(code, message, error.code, detail)
@@ -74,7 +76,7 @@ def lease_cancelled(error):
 def transient_request_error(error):
     if not isinstance(error, ApiError) or lease_cancelled(error):
         return False
-    if error.status is not None and error.status not in {429, 500, 502, 503, 504}:
+    if error.status is not None and error.status not in {429, 500, 502, 503, 504, 520, 521, 522, 523, 524}:
         return False
     # Named business errors, including unknown ones, must not inherit HTTP retries.
     return error.code in {'EDGE_UNAVAILABLE', 'OUTPUT_UNAVAILABLE', 'OUTPUT_STATUS_UNAVAILABLE'} or (
@@ -137,14 +139,14 @@ class EdgeClient:
         expected_hash = hashlib.sha256(data).hexdigest()
         has_run = bool(urllib.parse.parse_qs(urllib.parse.urlsplit(url).query).get('run'))
         for attempt in range(3):
-            if has_run:
-                status = request_json(urllib.request.Request(url, method='GET', headers={
-                    'User-Agent': f'EastudyCloudWorker/{VERSION}'}), 30, 'OUTPUT', retryable=True)
-                if status.get('found'):
-                    if status.get('sha256') != expected_hash or status.get('size') != len(data):
-                        raise ApiError('OUTPUT_RECEIPT_CONFLICT')
-                    return status
             try:
+                if has_run:
+                    status = request_json(urllib.request.Request(url, method='GET', headers={
+                        'User-Agent': f'EastudyCloudWorker/{VERSION}'}), 30, 'OUTPUT')
+                    if status.get('found'):
+                        if status.get('sha256') != expected_hash or status.get('size') != len(data):
+                            raise ApiError('OUTPUT_RECEIPT_CONFLICT')
+                        return status
                 return request_json(request, 300, 'OUTPUT')
             except ApiError as error:
                 recoverable = transient_request_error(error) or error.code in {
@@ -163,7 +165,8 @@ class RemoteProgressStore:
         self._rate = None
         self._samples = 0
         self._lock = threading.RLock()
-        self.job = {'id': job['id'], 'status': 'PROCESSING', 'currentStep': 'upload', 'progress': 1,
+        self.job = {'id': job['id'], 'status': 'PROCESSING', 'currentStep': 'upload',
+                    'progress': min(99, max(1, int(job.get('progress') or 0))),
                     'message': '正在读取并校验原片', 'error': None, 'result': None,
                     'sourceName': Path(job['source_key']).name, 'metadata': job.get('input') or {}}
 
@@ -221,7 +224,8 @@ def report_progress(client, lease, stage, progress, message, metrics=None):
     # One reducer and ordered sender for every branch; heartbeat never takes this lock.
     lock = lease.setdefault('_progress_lock', threading.RLock())
     with lock:
-        progress = max(int(lease.get('_progress', 0)), parallel_progress(lease, progress))
+        progress = min(99, max(int(lease['job'].get('progress') or 0),
+                               int(lease.get('_progress', 0)), parallel_progress(lease, progress)))
         lease['_progress'] = progress
         return _report_progress(client, lease, stage, progress, message, metrics)
 
@@ -230,6 +234,8 @@ def _report_progress(client, lease, stage, progress, message, metrics=None):
     current_run = run_id(lease)
     if current_run:
         metrics = stage_metrics(lease, stage, metrics)
+        if lease.get('_resume'):
+            metrics['resumePosition'] = dict(lease['_resume'])
         try:
             return client.call('worker-telemetry-v2', jobId=lease['job']['id'], token=lease['token'],
                                runId=current_run, sequence=sequence(lease), stage=stage,
@@ -626,7 +632,15 @@ def process_lease(client, lease, local_inputs=None, ai_settings=None):
             print(f'[complete-learning-repair] {job_id}', flush=True)
             return
         source = work / Path(lease['job']['source_key']).name
-        report_progress(client, lease, 'LOCAL_DOWNLOAD', 2, '正在校验并读取原片')
+        has_checkpoint = (job_root / 'final-output.json').is_file()
+        previous_progress = int(lease['job'].get('progress') or 0)
+        if has_checkpoint or previous_progress > 0 or (lease['job'].get('work') or {}).get('resumePosition'):
+            lease['_resume'] = {'verified': False, 'phase': 'validating',
+                                'progress': min(99, max(0, previous_progress))}
+        if has_checkpoint:
+            report_progress(client, lease, 'LOCAL_UPLOAD', 96, '发现成品断点，正在校验原片与成品；不会重新调用 AI')
+        else:
+            report_progress(client, lease, 'LOCAL_DOWNLOAD', 2, '正在检查原片与阶段断点')
         last_reported = [0.0]
         def report_download(current, total):
             if cancelled.is_set():
@@ -635,9 +649,9 @@ def process_lease(client, lease, local_inputs=None, ai_settings=None):
             if current < total and now - last_reported[0] < 5:
                 return
             last_reported[0] = now
-            percent = min(8, 2 + int(6 * current / max(total, 1)))
-            report_progress(client, lease, 'LOCAL_DOWNLOAD', percent,
-                            f'正在下载原片 {current}/{total} 字节',
+            percent = 96 if has_checkpoint else min(8, 2 + int(6 * current / max(total, 1)))
+            report_progress(client, lease, 'LOCAL_UPLOAD' if has_checkpoint else 'LOCAL_DOWNLOAD', percent,
+                            f'正在读取原片以校验断点 {current}/{total} 字节',
                             {'substage': 'source', 'current': current, 'total': total, 'unit': 'bytes'})
         source, cover = resolve_input_source(lease, local_inputs, download, source, report_download)
         if cancelled.is_set():
@@ -645,6 +659,7 @@ def process_lease(client, lease, local_inputs=None, ai_settings=None):
         restored = restore_final_output(job_root, lease['job'], source, cover, current_run, selected_assets)
         if restored is not None:
             output, final = restored
+            lease['_resume'] = {**lease['_resume'], 'verified': True, 'phase': 'final'}
             report_progress(client, lease, 'LOCAL_UPLOAD', 96, '正在续传已完成的成品，无需重新生成')
             manifest = upload_assets(client, lease, output, selected_assets(output, final), cancelled)
             if cancelled.is_set():
@@ -654,6 +669,8 @@ def process_lease(client, lease, local_inputs=None, ai_settings=None):
                         result=final, manifest=manifest)
             print(f'[complete-restored] {job_id}', flush=True)
             return
+        if lease.get('_resume'):
+            lease['_resume'] = {**lease['_resume'], 'phase': 'stages'}
         store = RemoteProgressStore(client, lease)
         def upload_media(value, output):
             partial = {'video': {'coverImages': value['coverImages'], 'playback': {'variants': value['variants']}}}
@@ -664,7 +681,8 @@ def process_lease(client, lease, local_inputs=None, ai_settings=None):
                 record_stage(lease, stage, state)
                 wire_stage = {'media': 'TRANSCODE', 'asr': 'ASR', 'teaching': 'ENRICH',
                               'voice': 'ENRICH', 'upload_media': 'LOCAL_UPLOAD', 'upload_voice': 'LOCAL_UPLOAD'}[stage]
-                report_progress(client, lease, wire_stage, 15, '正在自动制作视频', {'stageName': stage})
+                message = '正在复用有效阶段断点并处理剩余内容' if lease.get('_resume') else '正在自动制作视频'
+                report_progress(client, lease, wire_stage, 15, message, {'stageName': stage})
             if local_inputs:
                 local_inputs.stage(job_id, current_run, stage, state)
 

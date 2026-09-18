@@ -15,6 +15,50 @@ SPEC.loader.exec_module(worker)
 
 
 class WorkerTests(unittest.TestCase):
+    def test_gateway_errors_retry_only_idempotent_actions(self):
+        for action in ('worker-complete-v2', 'worker-output-receipt-v2'):
+            for body in (b'error code: 520', b'[]', b'null', b'"unavailable"'):
+                with self.subTest(action=action, body=body):
+                    client = worker.EdgeClient('https://example.test', 'secret', 'worker', {})
+                    error = worker.urllib.error.HTTPError(client.endpoint, 520, 'failed', {}, io.BytesIO(body))
+                    self.addCleanup(error.close)
+                    response = MagicMock()
+                    response.__enter__.return_value.read.return_value = b'{"ok":true}'
+                    with patch.object(worker.urllib.request, 'urlopen', side_effect=[error, response]) as request, \
+                         patch.object(worker.time, 'sleep'):
+                        self.assertTrue(client.call(action)['ok'])
+                    self.assertEqual(request.call_count, 2)
+                    self.assertEqual(request.call_args_list[0].args[0].data, request.call_args_list[1].args[0].data)
+
+    def test_reconciliation_failure_uses_one_bounded_retry_loop(self):
+        client = worker.EdgeClient('https://example.test', 'secret', 'worker', {})
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / 'a.ts'
+            source.write_bytes(b'abc')
+            for error in (worker.ApiError('OUTPUT_HTTP_520', status=520),
+                          worker.ApiError('OUTPUT_INVALID_RESPONSE')):
+                with self.subTest(error=error.code), \
+                     patch.object(worker, 'request_json', side_effect=error) as request, \
+                     patch.object(worker.time, 'sleep') as sleep:
+                    with self.assertRaises(worker.ApiError):
+                        client.upload('https://example.test?run=run', '', '', 'a.ts', source)
+                    self.assertEqual(request.call_count, 3)
+                    self.assertTrue(all(c.args[0].method == 'GET' for c in request.call_args_list))
+                    self.assertTrue(all(not c.kwargs.get('retryable') for c in request.call_args_list))
+                    self.assertEqual([c.args[0] for c in sleep.call_args_list], [1, 2])
+
+    def test_put_520_reconciles_before_resending(self):
+        client = worker.EdgeClient('https://example.test', 'secret', 'worker', {})
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / 'a.ts'
+            source.write_bytes(b'abc')
+            receipt = {'ok': True, 'found': True, 'size': 3, 'sha256': worker.file_sha256(source)}
+            with patch.object(worker, 'request_json', side_effect=[{'ok': True, 'found': False},
+                    worker.ApiError('OUTPUT_HTTP_520', status=520), receipt]) as request, \
+                 patch.object(worker.time, 'sleep'):
+                self.assertEqual(client.upload('https://example.test?run=run', '', '', 'a.ts', source), receipt)
+            self.assertEqual([c.args[0].method for c in request.call_args_list], ['GET', 'PUT', 'GET'])
+
     def test_output_lost_response_reconciles_without_second_put(self):
         client = worker.EdgeClient('https://example.test', 'secret', 'worker', {})
         with tempfile.TemporaryDirectory() as directory:
@@ -202,7 +246,7 @@ class WorkerTests(unittest.TestCase):
             pipeline.assert_not_called()
 
     def test_worker_reports_v5_protocol_version(self):
-        self.assertEqual(worker.VERSION, '2.5.4')
+        self.assertEqual(worker.VERSION, '2.5.5')
         source = MODULE.read_text(encoding='utf-8')
         self.assertIn("'learningRepairV5': True", source)
         self.assertIn("'teachingSchemaVersion': 3", source)
@@ -246,6 +290,18 @@ class WorkerTests(unittest.TestCase):
             path.write_bytes(b'x')
             with self.assertRaises(worker.ApiError):
                 worker.upload_assets(client, lease, Path(folder), [path])
+
+    def test_resume_progress_and_metadata_survive_every_sample(self):
+        client = MagicMock()
+        resume = {'verified': False, 'phase': 'validating', 'progress': 97}
+        lease = {'job': {'id': 'job', 'run_id': 'run', 'progress': 97,
+                         'source_key': 'source.mp4'}, 'token': 'token', '_resume': resume}
+        worker.report_progress(client, lease, 'LOCAL_DOWNLOAD', 2, 'validate')
+        worker.report_progress(client, lease, 'LOCAL_UPLOAD', 96, 'upload', {'current': 1})
+        for call in client.call.call_args_list:
+            self.assertEqual(call.kwargs['progress'], 97)
+            self.assertEqual(call.kwargs['metrics']['resumePosition'], resume)
+        self.assertEqual(worker.RemoteProgressStore(client, lease).job['progress'], 97)
 
     def test_v2_progress_carries_run_and_monotonic_sequence(self):
         calls = []

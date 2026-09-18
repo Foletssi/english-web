@@ -23,6 +23,9 @@ async function handle({ request, env, params, waitUntil }, headOnly) {
   const job = slash < 0 ? '' : raw.slice(0, slash);
   const path = slash < 0 ? '' : raw.slice(slash + 1);
   if (!/^[0-9a-f-]{36}$/i.test(job) || !path) return json({ error: 'MEDIA_PATH_INVALID' }, 400);
+  const query=new URL(request.url).searchParams;
+  const preview=query.has('previewRun'),previewRun=query.get('previewRun');
+  if(preview&&(query.getAll('previewRun').length!==1||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(previewRun||'')||!/^cover(?:-(?:320|640|960))?\.webp$/.test(path)))return json({error:'MEDIA_PATH_INVALID'},400);
   const playbackAsset=/^(?:540|720)p\/(?:index\.m3u8|segment_[0-9]{5}\.ts)$/.test(path);
   let key='';
   if(playbackAsset){
@@ -53,8 +56,10 @@ async function handle({ request, env, params, waitUntil }, headOnly) {
     }
     if(typeof ticket.sub!=='string'||!ticket.sub)return json({error:'PLAYBACK_FORBIDDEN'},403);
     try {
-      const access=await serviceRpc(env,'service_resolve_playback_access_v2',{p_user_id:ticket.sub,p_job_id:job,p_path:path});
-      if(access?.canPlay!==true)return json({error:access?.reason||'PLAYBACK_FORBIDDEN'},403);
+      const access=preview
+        ? await serviceRpc(env,'service_resolve_admin_cover_preview_v1',{p_user_id:ticket.sub,p_job_id:job,p_run_id:previewRun,p_path:path})
+        : await serviceRpc(env,'service_resolve_playback_access_v2',{p_user_id:ticket.sub,p_job_id:job,p_path:path});
+      if((preview?access?.canPreview:access?.canPlay)!==true)return json({error:access?.reason||'PLAYBACK_FORBIDDEN'},403);
       key=String(access.objectKey||'');
     } catch (error) {
       console.error('catalog media authorization unavailable',error?.message||error);

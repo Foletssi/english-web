@@ -292,15 +292,19 @@
       createdAt:job.createdAt||job.created_at,updatedAt:job.updatedAt||job.updated_at,completedAt:job.completedAt||job.completed_at,
       lastHeartbeatAt:job.lastHeartbeatAt||job.last_heartbeat_at,lastProgressAt:job.lastProgressAt||job.last_progress_at,
       stageStartedAt:job.stageStartedAt||job.stage_started_at,attemptStartedAt:job.attemptStartedAt||job.attempt_started_at,
-      leaseUntil:job.leaseUntil||job.lease_until,nextRunAt:job.nextRunAt||job.next_run_at,telemetry:job.telemetry||job.work?.telemetry};
+      leaseUntil:job.leaseUntil||job.lease_until,nextRunAt:job.nextRunAt||job.next_run_at,telemetry:job.telemetry||job.work?.telemetry,
+      message:job.message||job.work?.message,resumePosition:job.resumePosition||job.work?.resumePosition};
     const stageStep = { LOCAL_DOWNLOAD: 'download', PROBE: 'probe', TRANSCODE: 'transcode', ASR: 'asr', ENRICH: 'enrich', LOCAL_UPLOAD: 'output', REVIEW: 'review' };
     const learningRepair=job.type==='LEARNING_REPAIR',mediaOnly=job.type==='MEDIA_REENCODE',order=learningRepair?['enrich','review']:mediaOnly?['download','probe','transcode','output']:['download','probe','transcode','asr','enrich','output','review'];
     const currentStep = mediaOnly&&job.stage==='REVIEW'?'output':stageStep[job.stage] || (learningRepair?'enrich':'download');
     const current = order.indexOf(currentStep);
     const status = String(job.status || 'WAITING').toUpperCase();
     const telemetry = job.telemetry && typeof job.telemetry === 'object' ? job.telemetry : {};
-    return { ...job, ...telemetry, telemetry, videoId: Number(job.videoId), rawStatus: status, status, currentStep,
-      steps: order.map((step, index) => [step, mediaOnly&&status==='REVIEW'||index < current ? 'SUCCESS' : index === current ? (status === 'ERROR' ? 'ERROR' : status === 'REVIEW' || status === 'QUEUED' || status === 'WAITING' ? 'WAITING' : 'RUNNING') : 'WAITING']) };
+    const resumePosition=telemetry.resumePosition||job.resumePosition;
+    const validating=job.type==='CLOUD_PIPELINE'&&resumePosition&&resumePosition.verified!==true&&status!=='REVIEW';
+    const completed=step=>telemetry.stepHistory?.[({transcode:'media',enrich:'teaching'})[step]||step]?.state==='DONE';
+    return { ...job, ...telemetry, telemetry, resumePosition, videoId: Number(job.videoId), rawStatus: status, status, currentStep,
+      steps: order.map((step, index) => [step, mediaOnly&&status==='REVIEW'||(validating?completed(step):index < current) ? 'SUCCESS' : index === current ? (status === 'ERROR' ? 'ERROR' : status === 'CANCELLED' ? 'CANCELLED' : status === 'REVIEW' || status === 'QUEUED' || status === 'WAITING' ? 'WAITING' : 'RUNNING') : 'WAITING']) };
   }
 
   async function listProcessingJobs(page = 1, pageSize = 50) {
