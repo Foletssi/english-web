@@ -1,0 +1,22 @@
+.worker-ai-settings{margin:0 0 24px;border-block:1px solid var(--line);min-width:0}
+.worker-ai-settings .panel-head{gap:16px;flex-wrap:wrap}
+.worker-ai-settings h2{font-size:20px;letter-spacing:0}
+.worker-ai-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.worker-ai-form .wide{grid-column:1/-1}
+.worker-ai-form label{display:flex;flex-direction:column;gap:8px;min-width:0}
+.worker-ai-form input,.worker-ai-form select{width:100%;min-width:0;box-sizing:border-box;font:inherit;padding:11px 12px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--text)}
+.worker-ai-form input:focus-visible,.worker-ai-form select:focus-visible{outline:2px solid #16715e;outline-offset:2px}
+.worker-ai-form small{font-weight:400;opacity:.7;margin-left:8px}
+.worker-ai-form p{margin:0;line-height:1.65;overflow-wrap:anywhere}
+.ai-quality-status{color:var(--text2);font-size:13px}
+.ai-settings-message{min-height:26px}
+.worker-ai-form .form-actions{display:flex;gap:12px;justify-content:flex-start;flex-wrap:wrap}
+.worker-ai-form button{min-height:42px;white-space:normal}
+.ai-test-results{border-top:1px solid var(--line);padding-top:18px}
+.ai-test-results h3{font-size:16px;margin:0 0 10px}
+.ai-test-sample{padding:14px 0;border-bottom:1px solid var(--line)}
+.ai-test-sample p+p{margin-top:6px}
+.worker-ai-form .ai-sample-confirm{flex-direction:row;align-items:flex-start;margin-top:18px}
+.ai-sample-confirm input{width:18px;height:18px;flex:0 0 18px;margin-top:3px}
+.worker-ai-settings button:disabled{opacity:.5;cursor:not-allowed}
+@media(max-width:640px){.worker-ai-form{grid-template-columns:minmax(0,1fr)}.worker-ai-settings .panel-body{padding:16px}.worker-ai-form .form-actions>*{flex:1 1 150px}}

@@ -6,6 +6,10 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 from ai_tools import LEARNING_PROMPT, LEARNING_REPAIR_PROMPT, LEARNING_REEXTRACT_PROMPT, TEACHING_PROMPT_VERSION, ai_concurrency, asr_profile, call_json, endpoint, enrich, prepare_asr_model, repair_learning, retry_ai
 from contracts import StudioError
+from ai_tools import _cached_ai
+from checkpoint import canonical_hash, save_json_checkpoint
+import http.client
+import ssl
 
 
 class FakeResponse:
@@ -32,6 +36,89 @@ def v5_payload(payload):
 
 
 class AiTools(unittest.TestCase):
+    def test_cache_retains_multiple_keys_for_same_stage(self):
+        request = Mock(side_effect=[({'answer': 1}, {}), ({'answer': 2}, {})])
+        with tempfile.TemporaryDirectory() as folder:
+            first = _cached_ai(folder, 'coverage-0', 'first', request, dict)
+            second = _cached_ai(folder, 'coverage-0', 'second', request, dict)
+            again = _cached_ai(folder, 'coverage-0', 'first', request, dict)
+        self.assertEqual(request.call_count, 2)
+        self.assertEqual(first[0], again[0])
+        self.assertNotEqual(first[0], second[0])
+        self.assertTrue(again[2])
+
+    def test_legacy_cache_migrates_and_is_revalidated(self):
+        request = Mock(return_value=({'answer': 2}, {}))
+        with tempfile.TemporaryDirectory() as folder:
+            legacy = Path(folder) / 'stage.json'
+            save_json_checkpoint(legacy, 'key', {'payload': {'answer': 1}, 'meta': {}})
+            result = _cached_ai(folder, 'stage', 'key', request, dict)
+            self.assertTrue(result[2])
+            self.assertTrue((Path(folder) / 'stage' / (canonical_hash('key') + '.json')).is_file())
+            request.assert_not_called()
+            def validate(value):
+                if value['answer'] != 2:
+                    raise StudioError('INVALID', 'bad cache', True)
+                return value
+            result = _cached_ai(folder, 'stage', 'key', request, validate)
+            self.assertFalse(result[2])
+            self.assertEqual(request.call_count, 1)
+
+    def test_thinking_is_disabled_only_for_deepseek_and_can_be_overridden(self):
+        for base, override, expected in [
+                ('https://api.deepseek.com', None, {'type': 'disabled'}),
+                ('https://api.deepseek.com/v1', 'enabled', {'type': 'enabled'}),
+                ('https://api.example.com', None, None),
+                ('https://api.deepseek.com', 'auto', None),
+                ('https://api.example.com', 'auto', None),
+                ('https://api.example.com', 'enabled', {'type': 'enabled'}),
+                ('https://api.example.com', 'disabled', {'type': 'disabled'})]:
+            config = {'baseUrl': base, 'model': 'fixture', 'apiKey': 'fixture'}
+            if override:
+                config['thinkingMode'] = override
+            def open_fake(request, **_):
+                body = json.loads(request.data)
+                self.assertEqual(body.get('thinking'), expected)
+                self.assertEqual(body['messages'][1]['content'], '{"x":1}')
+                return FakeResponse({'choices': [{'message': {'content': '{"ok":true}'}}]})
+            with self.subTest(base=base, override=override), patch.dict('os.environ', {'EASTUDY_AI_THINKING': 'disabled'}):
+                call_json(config, 'json', {'x': 1}, opener=open_fake)
+
+    def test_dropped_ssl_and_partial_response_are_retryable(self):
+        for error in (ssl.SSLEOFError('unexpected EOF'), http.client.IncompleteRead(b'partial')):
+            with self.subTest(error=type(error).__name__):
+                with self.assertRaises(StudioError) as raised:
+                    call_json({'baseUrl': 'https://api.example.com', 'model': 'fixture', 'apiKey': 'fixture'},
+                              'json', {}, opener=Mock(side_effect=error))
+                self.assertEqual(raised.exception.code, 'AI_NETWORK_ERROR')
+                self.assertTrue(raised.exception.retryable)
+
+    def test_api_redirect_does_not_forward_key(self):
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        import threading
+        requests = []
+        class Redirect(BaseHTTPRequestHandler):
+            def do_POST(self):
+                requests.append(self.path)
+                self.send_response(302)
+                self.send_header('Location', '/unexpected-target')
+                self.end_headers()
+            def do_GET(self):
+                requests.append(self.path)
+                self.send_response(200)
+                self.end_headers()
+            def log_message(self, *_):
+                pass
+        server = ThreadingHTTPServer(('127.0.0.1', 0), Redirect)
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        with self.assertRaises(StudioError) as raised:
+            call_json({'baseUrl': f'http://127.0.0.1:{server.server_port}', 'model': 'test', 'apiKey': 'secret'}, 'json', {})
+        self.assertEqual(raised.exception.code, 'AI_HTTP_ERROR')
+        self.assertFalse(raised.exception.retryable)
+        self.assertEqual(requests, ['/chat/completions'])
+
     def test_locked_empty_analysis_and_cache_keep_real_provenance(self):
         rows = [{'id': 's1', 'english': 'We love you.', 'keyWords': [],
                  'selectionLocked': True, 'textRevision': 7, 'startTime': 0, 'endTime': 2}]

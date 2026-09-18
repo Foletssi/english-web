@@ -1,5 +1,6 @@
 import argparse
 import hashlib
+import http.client
 import json
 import math
 import os
@@ -33,9 +34,10 @@ from local_source import SourceCache, start_intake  # noqa: E402
 from processing_metrics import stage_metrics, parallel_progress, record_stage  # noqa: E402
 from local_intake_store import LocalInputs  # noqa: E402
 from local_intake_v2 import start_local_intake  # noqa: E402
+from ai_settings import SettingsStore, start_ai_settings  # noqa: E402
 
 
-VERSION = '2.5.0'
+VERSION = '2.5.1'
 DEFAULT_ENDPOINT = 'https://ehxqtgakjgqgmghhdmjg.supabase.co/functions/v1/video-processing'
 STAGE_MAP = {'probe': 'PROBE', 'transcode': 'TRANSCODE', 'asr': 'ASR', 'enrich': 'ENRICH'}
 
@@ -93,7 +95,7 @@ def request_json(request, timeout, prefix='EDGE', retryable=False):
             return result
         except urllib.error.HTTPError as error:
             failure = api_error_from_http(error, prefix)
-        except (urllib.error.URLError, OSError) as error:
+        except (urllib.error.URLError, OSError, http.client.HTTPException) as error:
             failure = ApiError(f'{prefix}_UNAVAILABLE', str(error))
         except ValueError as error:
             failure = ApiError(f'{prefix}_INVALID_RESPONSE', str(error))
@@ -135,7 +137,8 @@ class EdgeClient:
         has_run = bool(urllib.parse.parse_qs(urllib.parse.urlsplit(url).query).get('run'))
         for attempt in range(3):
             if has_run:
-                status = request_json(urllib.request.Request(url, method='GET'), 30, 'OUTPUT', retryable=True)
+                status = request_json(urllib.request.Request(url, method='GET', headers={
+                    'User-Agent': f'EastudyCloudWorker/{VERSION}'}), 30, 'OUTPUT', retryable=True)
                 if status.get('found'):
                     if status.get('sha256') != expected_hash or status.get('size') != len(data):
                         raise ApiError('OUTPUT_RECEIPT_CONFLICT')
@@ -560,7 +563,7 @@ def resolve_input_source(lease, local_inputs, cloud_download, target, progress=N
     return target, None
 
 
-def process_lease(client, lease, local_inputs=None):
+def process_lease(client, lease, local_inputs=None, ai_settings=None):
     job_id = lease['job']['id']
     stop = threading.Event()
     cancelled = threading.Event()
@@ -577,7 +580,9 @@ def process_lease(client, lease, local_inputs=None):
         work.mkdir(parents=True, exist_ok=True)
         if not work.resolve().is_relative_to(worker_root()):
             raise ApiError('WORK_PATH_INVALID')
-        ai_config = job_usage_config({'cancelled': cancelled}, job_id, work, run_id(lease))
+        configured = ai_settings.snapshot() if ai_settings is not None else {}
+        ai_config = job_usage_config({**configured, 'detailReviewMode': 'full', 'cancelled': cancelled},
+                                    job_id, work, run_id(lease))
         job_input = lease['job'].get('input') or {}
         if job_input.get('kind') == 'MEDIA_REENCODE':
             # A generic admin retry must never send a media-only job through AI.
@@ -658,6 +663,7 @@ def process_lease(client, lease, local_inputs=None):
             raise ApiError('JOB_LEASE_LOST_OR_CANCELLED')
         if result_job.get('status') != 'REVIEW':
             error = result_job.get('error') or {'code': 'PIPELINE_FAILED', 'message': result_job.get('message', '处理失败')}
+            print(f'[pipeline-error] {job_id}: {error.get("code")}: {error.get("message")}', flush=True)
             report_failure(client, lease, error, bool(error.get('retryable', True)))
             return
         output = work / 'output' / job_id
@@ -701,7 +707,9 @@ def main():
     parser.add_argument('--check', action='store_true', help='report local readiness and exit')
     args = parser.parse_args()
     configure_ai_environment()
+    ai_settings = SettingsStore(worker_root() / 'settings' / 'ai.json')
     caps = capabilities()
+    caps['deepseek'] = all(ai_settings.snapshot().get(k) for k in ('baseUrl', 'model', 'apiKey'))
     if args.check:
         print(json.dumps({'ready': all(caps.get(x) for x in ('ffmpeg', 'whisper', 'deepseek', 'teachingVoiceV1')), 'capabilities': caps}, ensure_ascii=False))
         return 0 if all(caps.get(x) for x in ('ffmpeg', 'whisper', 'deepseek', 'teachingVoiceV1')) else 2
@@ -711,6 +719,11 @@ def main():
         return 2
     worker_id = os.getenv('EASTUDY_WORKER_ID', '').strip() or default_worker_id()
     client = EdgeClient(os.getenv('EASTUDY_PROCESSING_ENDPOINT', DEFAULT_ENDPOINT).strip(), secret, worker_id, caps)
+    try:
+        start_ai_settings(ai_settings)
+        print('[ai-settings] loopback ready', flush=True)
+    except OSError:
+        print('[ai-settings] unavailable: port 8791 is occupied', flush=True)
     local_inputs = None
     try:
         local_inputs = LocalInputs(worker_root() / 'local-inputs-v1')
@@ -734,6 +747,8 @@ def main():
         print(f'[startup-heartbeat] {error}', flush=True)
     while True:
         try:
+            configured = ai_settings.snapshot()
+            caps['deepseek'] = all(configured.get(k) for k in ('baseUrl', 'model', 'apiKey'))
             if not all(caps.get(name) for name in ('ffmpeg', 'whisper', 'deepseek', 'teachingVoiceV1')):
                 client.call('worker-heartbeat')
                 if args.once:
@@ -747,7 +762,7 @@ def main():
             if not lease.get('job'):
                 lease = client.call('worker-claim')
             if lease.get('job'):
-                process_lease(client, lease, local_inputs)
+                process_lease(client, lease, local_inputs, ai_settings)
             elif args.once:
                 return 0
             else:

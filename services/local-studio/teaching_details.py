@@ -206,8 +206,10 @@ def complete_details(rows, config=None, progress=None, cache_dir=None, request=N
             records.append({**meta, 'stage': 'context-' + phase, 'cacheReused': reused,
                             'reviewMode': review_mode if phase == 'review' else None})
             payload = {**payload, 'candidate': {'sentences': [{'id': r['id'], 'chinese': r['chinese'],
-                'tokens': r['wordLookup']['tokens'],
-                'expressions': [{**e, 'pronunciationHint': r['expressions'][i].get('pronunciationHint', '')}
+                'tokens': ([{k: t[k] for k in ('tokenId', 'coreMeaningZh', 'pronunciationHint')}
+                           for t in r['wordLookup']['tokens']] if review_mode == 'delta' else r['wordLookup']['tokens']),
+                'expressions': [{**({'expressionId': e['expressionId']} if review_mode == 'delta' else e),
+                                 'pronunciationHint': r['expressions'][i].get('pronunciationHint', '')}
                                 for i, e in enumerate(expression_voice_sources(r))],
                 'sourceConcerns': r['translationAnalysis']['sourceConcerns']}
                 for r in checked]}}

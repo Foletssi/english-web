@@ -87,7 +87,7 @@ def run_stages(stages, cancelled=None, observe=None, workers=None):
                     results[stage.name] = future.result()
                 except Exception as error:
                     failures[stage.name] = error
-                    event(stage.name, 'ERROR', errorCode=type(error).__name__)
+                    event(stage.name, 'ERROR', errorCode=str(getattr(error, 'code', type(error).__name__))[:120])
                 else:
                     event(stage.name, 'DONE')
     if failures:

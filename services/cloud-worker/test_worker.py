@@ -25,6 +25,18 @@ class WorkerTests(unittest.TestCase):
                     worker.ApiError('OUTPUT_UNAVAILABLE'), receipt]) as request, patch.object(worker.time, 'sleep'):
                 self.assertEqual(client.upload('https://example.test?run=run', '', '', 'segment.ts', source), receipt)
             self.assertEqual([call.args[0].method for call in request.call_args_list], ['GET', 'PUT', 'GET'])
+            self.assertTrue(all(call.args[0].get_header('User-agent') == f'EastudyCloudWorker/{worker.VERSION}'
+                                for call in request.call_args_list))
+
+    def test_partial_commit_response_retries_without_reprocessing(self):
+        client = worker.EdgeClient('https://example.test', 'secret', 'worker', {})
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = b'{"ok":true}'
+        with patch.object(worker.urllib.request, 'urlopen', side_effect=[
+                worker.http.client.IncompleteRead(b'partial'), response]) as request, patch.object(worker.time, 'sleep'):
+            self.assertTrue(client.call('worker-complete-v2', result={'video': {}})['ok'])
+        self.assertEqual(request.call_count, 2)
+        self.assertEqual(request.call_args_list[0].args[0].data, request.call_args_list[1].args[0].data)
 
     def test_output_reconcile_conflict_does_not_overwrite(self):
         client = worker.EdgeClient('https://example.test', 'secret', 'worker', {})
@@ -190,7 +202,7 @@ class WorkerTests(unittest.TestCase):
             pipeline.assert_not_called()
 
     def test_worker_reports_v5_protocol_version(self):
-        self.assertEqual(worker.VERSION, '2.5.0')
+        self.assertEqual(worker.VERSION, '2.5.1')
         source = MODULE.read_text(encoding='utf-8')
         self.assertIn("'learningRepairV5': True", source)
         self.assertIn("'teachingSchemaVersion': 3", source)
@@ -344,10 +356,21 @@ class WorkerTests(unittest.TestCase):
                         'video_id': 'video', 'run_id': '00000000-0000-0000-0000-000000000002', 'source_key': 'source.mp4'},
                  'downloadUrl': 'https://example.test/source', 'token': 'secret'}
         client = MagicMock()
+        settings = MagicMock()
+        settings.snapshot.return_value = {'baseUrl': 'https://new.example/v1', 'model': 'new-model',
+                                          'apiKey': 'fixture-key', 'thinkingMode': 'auto', 'revision': 3,
+                                          'detailReviewMode': 'delta'}
         def process(store, job_id, source, subtitles, config, output, base_url, execution):
             self.assertEqual(config['jobId'], job_id)
             self.assertEqual(config['runId'], lease['job']['run_id'])
             self.assertFalse(config['cancelled'].is_set())
+            self.assertEqual(config['baseUrl'], 'https://new.example/v1')
+            self.assertEqual(config['model'], 'new-model')
+            self.assertEqual(config['apiKey'], 'fixture-key')
+            self.assertEqual(config['thinkingMode'], 'auto')
+            self.assertEqual(config['detailReviewMode'], 'full')
+            settings.snapshot.return_value['model'] = 'later-model'
+            self.assertEqual(config['model'], 'new-model')
             self.assertEqual(set(execution), {'cache_root', 'observe', 'voice', 'upload_media', 'upload_voice'})
             return {'status': 'REVIEW', 'result': {'video': {}, 'sentences': [], '_uploadedManifest': [],
                 'evidence': {'aiUsage': worker.summarize_usage(config['usageLogPath'], config['runId'])}}}
@@ -359,7 +382,8 @@ class WorkerTests(unittest.TestCase):
                 patch.object(worker, 'selected_assets', return_value=[]), \
                 patch.object(worker, 'upload_assets', return_value=[]), \
                 patch.object(worker, 'rewrite_result', side_effect=lambda result, *args: result):
-            worker.process_lease(client, lease)
+            worker.process_lease(client, lease, ai_settings=settings)
+        settings.snapshot.assert_called_once_with()
         completed = [c for c in client.call.call_args_list if c.args[0] == 'worker-complete-v2']
         self.assertEqual(len(completed), 1)
         self.assertTrue(completed[0].kwargs['result']['evidence']['aiUsage']['complete'])
@@ -427,6 +451,9 @@ class WorkerTests(unittest.TestCase):
         with patch('sys.argv', ['worker.py', '--once']), \
              patch.dict('os.environ', {'EASTUDY_WORKER_SECRET': 'test-secret'}), \
              patch.object(worker, 'configure_ai_environment'), \
+             patch.object(worker, 'start_ai_settings'), \
+             patch.object(worker, 'start_local_intake'), \
+             patch.object(worker, 'start_intake'), \
              patch.object(worker, 'capabilities', return_value={'teachingVoiceV1': False}), \
              patch.object(worker, 'EdgeClient', return_value=client):
             self.assertEqual(worker.main(), 2)

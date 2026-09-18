@@ -96,8 +96,10 @@ def process_job(store, job_id, source_path, cover_path, ai_config, media_root,
             learning, completion = complete_teaching(learning, ai_config, progress, checkpoints / 'teaching-completion')
             return learning, metadata, [*provenance, *completion]
 
+        # Reject an unavailable output channel before starting paid teaching work.
+        teaching_needs = ('asr', 'upload_media') if execution.get('upload_media') else ('asr',)
         stages = [Stage('media', (), 'cpu_media', media), Stage('asr', (), 'gpu', asr),
-                  Stage('teaching', ('asr',), 'ai', teaching)]
+                  Stage('teaching', teaching_needs, 'ai', teaching)]
         if execution.get('voice'):
             stages.append(Stage('voice', ('teaching',), 'gpu', lambda deps: execution['voice'](deps['teaching'][0], output)))
         if execution.get('upload_media'):

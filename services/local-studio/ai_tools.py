@@ -1,4 +1,5 @@
 import json
+import http.client
 import os
 import ssl
 import sys
@@ -168,6 +169,17 @@ def check_ai_cancelled(config):
         raise StudioError('JOB_LEASE_LOST_OR_CANCELLED', '本次处理已停止，不再发起 AI 请求。', False)
 
 
+class _NoApiRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        # API credentials belong only to the endpoint explicitly configured by the user.
+        return None
+
+
+def _open_api(request, timeout, context):
+    return urllib.request.build_opener(
+        urllib.request.HTTPSHandler(context=context), _NoApiRedirect()).open(request, timeout=timeout)
+
+
 def _call_json(config, system_prompt, payload, timeout, opener, receipt):
     check_ai_cancelled(config)
     api_key = str(config.get('apiKey') or os.getenv('ZOSPEAK_AI_API_KEY', '')).strip()
@@ -178,23 +190,33 @@ def _call_json(config, system_prompt, payload, timeout, opener, receipt):
         raise StudioError('AI_NOT_CONFIGURED', '请在管理端系统设置中填写 AI 地址、模型和 API Key。')
     if 'json' not in system_prompt.lower():
         system_prompt += '\n只输出一个合法的 JSON 对象。'
-    body = json.dumps({'model': model, 'messages': [
+    options = {'model': model, 'messages': [
         {'role': 'system', 'content': system_prompt},
-        {'role': 'user', 'content': json.dumps(payload, ensure_ascii=False)}],
-        'response_format': {'type': 'json_object'}, 'temperature': .2}, ensure_ascii=False).encode()
+        {'role': 'user', 'content': json.dumps(payload, ensure_ascii=False, separators=(',', ':'))}],
+        'response_format': {'type': 'json_object'}, 'temperature': .2}
+    # Explicit choices also support DeepSeek-compatible proxies; auto sends no extension.
+    thinking = config.get('thinkingMode')
+    if not thinking and urlparse(base).hostname == 'api.deepseek.com':
+        thinking = os.getenv('EASTUDY_AI_THINKING', 'disabled')
+    if thinking and thinking != 'auto':
+        if thinking not in ('enabled', 'disabled'):
+            raise StudioError('AI_THINKING_MODE_INVALID', 'AI thinking mode must be enabled or disabled.')
+        options['thinking'] = {'type': thinking}
+    body = json.dumps(options, ensure_ascii=False, separators=(',', ':')).encode()
     request = urllib.request.Request(endpoint(base), data=body, method='POST', headers={
-        'Authorization': 'Bearer ' + api_key, 'Content-Type': 'application/json'})
+        'Authorization': 'Bearer ' + api_key, 'Content-Type': 'application/json',
+        'User-Agent': 'EastudyLocalStudio/2.5'})
     context = ssl.create_default_context()
     try:
         check_ai_cancelled(config)
         receipt['requestAttempted'] = True
-        response = (opener or urllib.request.urlopen)(request, timeout=timeout, context=context)
+        response = (opener or _open_api)(request, timeout=timeout, context=context)
         with response:
             raw = json.loads(response.read())
     except urllib.error.HTTPError as error:
         retryable = error.code == 429 or error.code >= 500
         raise StudioError('AI_HTTP_ERROR', f'AI 服务返回 {error.code}。', retryable) from error
-    except (urllib.error.URLError, TimeoutError, ValueError) as error:
+    except (urllib.error.URLError, OSError, http.client.HTTPException, ValueError) as error:
         raise StudioError('AI_NETWORK_ERROR', 'AI 服务连接或返回格式异常。', True) from error
     if isinstance(raw, dict):
         receipt.update(model=raw.get('model') or model, requestId=raw.get('id'), usage=raw.get('usage', {}))
@@ -238,16 +260,22 @@ def _cached_ai(cache_dir, name, key, request, validator, usage_config=None):
 
 def _cached_ai_scoped(cache_dir, name, key, request, validator, usage_config):
     check_ai_cancelled(usage_config)
-    path = Path(cache_dir) / f'{name}.json' if cache_dir else None
+    path = Path(cache_dir) / name / f'{canonical_hash(key)}.json' if cache_dir else None
     if path:
-        try:
-            cached = read_valid_json(path, key, lambda saved: {
-                'value': validator(saved['payload']), 'meta': saved['meta']})
-        except StudioError:
-            cached = None
-        if cached is not None:
-            record_usage('cache_hit', usage_config)
-            return cached['value'], cached['meta'], True
+        # Different passes can share a stage name. Keep every validated key,
+        # and continue reading legacy checkpoints without invalidating paid work.
+        for candidate in (path, Path(cache_dir) / f'{name}.json'):
+            try:
+                cached = read_valid_json(candidate, key, lambda saved: {
+                    'value': validator(saved['payload']), 'meta': saved['meta'],
+                    'payload': saved['payload']})
+            except StudioError:
+                cached = None
+            if cached is not None:
+                if candidate != path:
+                    save_json_checkpoint(path, key, {'payload': cached['payload'], 'meta': cached['meta']})
+                record_usage('cache_hit', usage_config)
+                return cached['value'], cached['meta'], True
     payload, meta = request()
     try:
         value = validator(payload)

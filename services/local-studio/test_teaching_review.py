@@ -40,11 +40,9 @@ class DeltaReviewTests(unittest.TestCase):
             with self.subTest(field=field, value=value), self.assertRaises(StudioError):
                 apply_review(self.rows, self.candidate, {**self.response, field: value})
 
-    def test_rejects_unauthorized_noop_invalid_or_duplicate_patches(self):
+    def test_rejects_unauthorized_invalid_or_duplicate_patches(self):
         cases = [[{'id': 's1'}], [{'id': 's1', 'english': 'changed'}],
             [{'id': [], 'chinese': '变更'}], [{'id': 'missing', 'chinese': '变更'}],
-            [{'id': 's1', 'chinese': '我读了它。'}],
-            [{'id': 's1', 'tokens': []}],
             [{'id': 's1', 'tokens': [{'tokenId': 't8', 'coreMeaningZh': '错'}]}],
             [{'id': 's1', 'tokens': [{'tokenId': 't1', 'start': 30}]}],
             [{'id': 's1', 'tokens': [{'tokenId': 't1', 'pronunciationHint': ''}]}],
@@ -62,6 +60,19 @@ class DeltaReviewTests(unittest.TestCase):
         self.candidate['sentences'][0]['tokens'].pop()
         with self.assertRaises(StudioError):
             apply_review(self.rows, self.candidate, self.response)
+
+    def test_empty_collection_with_real_translation_fix_is_valid(self):
+        response = {**self.response, 'patches': [
+            {'id': 's1', 'chinese': '我已经读过它了。', 'tokens': [], 'expressions': []}]}
+        result = apply_review(self.rows, self.candidate, response)
+        self.assertEqual(result[0]['chinese'], '我已经读过它了。')
+        self.assertEqual(len(result[0]['wordLookup']['tokens']), 3)
+
+    def test_redundant_known_fields_do_not_trigger_another_paid_request(self):
+        response = {**self.response, 'patches': [{'id': 's1', 'chinese': '我读了它。',
+            'tokens': [{'tokenId': 't1', 'coreMeaningZh': '原义'}], 'expressions': []}]}
+        self.assertEqual(apply_review(self.rows, self.candidate, response),
+                         apply_review(self.rows, self.candidate, self.response))
 
     def test_locked_translation_and_source_concerns(self):
         self.rows[0]['translationLocked'] = True

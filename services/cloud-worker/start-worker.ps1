@@ -25,10 +25,12 @@ if (-not $env:EASTUDY_ASR_COMPUTE) { $env:EASTUDY_ASR_COMPUTE = 'float16' }
 if (-not $env:EASTUDY_AI_CONCURRENCY) { $env:EASTUDY_AI_CONCURRENCY = '3' }
 if (-not $env:EASTUDY_AI_ATTEMPTS) { $env:EASTUDY_AI_ATTEMPTS = '3' }
 if (-not $env:EASTUDY_UPLOAD_CONCURRENCY) { $env:EASTUDY_UPLOAD_CONCURRENCY = '6' }
-# Scheduled tasks can retain an older environment snapshot. Read the operator's
-# persisted data-directory override each launch without changing other secrets.
-$configuredWorkRoot = [Environment]::GetEnvironmentVariable('EASTUDY_WORK_ROOT', 'User')
-if ($configuredWorkRoot) { $env:EASTUDY_WORK_ROOT = $configuredWorkRoot }
+# Scheduled tasks can retain an older environment snapshot. Refresh only the
+# persisted data and ASR overrides; leave credentials in their existing channel.
+foreach ($settingName in @('EASTUDY_WORK_ROOT', 'EASTUDY_ASR_MODEL_DIR', 'EASTUDY_ASR_MODEL', 'EASTUDY_ASR_DEVICE', 'EASTUDY_ASR_COMPUTE')) {
+    $configuredValue = [Environment]::GetEnvironmentVariable($settingName, 'User')
+    if ($configuredValue) { [Environment]::SetEnvironmentVariable($settingName, $configuredValue, 'Process') }
+}
 if ($env:EASTUDY_WORK_ROOT) {
     $workerTemp = Join-Path $env:EASTUDY_WORK_ROOT 'temporary'
     New-Item -ItemType Directory -Force -Path $workerTemp | Out-Null

@@ -22,6 +22,7 @@ def main():
     parser.add_argument('--run', action='store_true', help='Allow at most five real AI requests')
     parser.add_argument('--eligibility-only', action='store_true',
                         help='Compare only full/table eligibility (at most two requests)')
+    parser.add_argument('--details-only', action='store_true', help='Only run the three detail requests')
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
     if not args.run:
@@ -92,7 +93,7 @@ def main():
                     for source, row in zip(rows, checked))
         expressions = [{'itemId': f'{i}:0', 'sentenceIndex': i, 'expression': row['expressions'][0]}
                        for i, row in enumerate(rows) if row['expressions']]
-        for mode, prompt in [('full', ELIGIBILITY_PROMPT), ('table', CONTEXT_TABLE_PROMPT)]:
+        for mode, prompt in ([] if args.details_only else [('full', ELIGIBILITY_PROMPT), ('table', CONTEXT_TABLE_PROMPT)]):
             response = request('eligibility-' + mode, prompt, eligibility_payload(rows, expressions, mode))
             report['runs']['eligibility-' + mode]['validated'] = _validate(expressions, response)
     except Exception as error:

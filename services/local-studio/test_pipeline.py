@@ -1,7 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from contracts import StudioError
 from job_store import JobStore
@@ -72,6 +72,20 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(result['status'], 'ERROR')
         self.assertLess(result['progress'], 100)
         self.assertEqual(result['error']['code'], 'NO_AUDIO_TRACK')
+
+    def test_upload_failure_prevents_paid_teaching_and_voice(self):
+        upload = Mock(side_effect=StudioError('OUTPUT_HTTP_403', 'Upload rejected', False))
+        voice = Mock()
+        with patch('pipeline.probe', return_value={'duration': 10, 'width': 1920, 'height': 1080}), \
+                patch('pipeline.extract_audio'), patch('pipeline.transcode', return_value=[]), \
+                patch('pipeline.make_cover'), patch('pipeline.make_cover_variants', return_value=[]), \
+                patch('pipeline.transcribe', return_value=[]), patch('pipeline.enrich') as paid:
+            result = process_job(self.store, self.job['id'], 'source.mp4', None, {}, self.root / 'media',
+                                 execution={'upload_media': upload, 'voice': voice})
+        self.assertEqual(result['error']['code'], 'OUTPUT_HTTP_403')
+        upload.assert_called_once()
+        paid.assert_not_called()
+        voice.assert_not_called()
 
 
 if __name__ == '__main__':
