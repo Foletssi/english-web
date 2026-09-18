@@ -36,5 +36,16 @@ Chrome bridge again failed with nodeRepl.fetch request failed; use the existing
 authorized Git/Pages lane and HTTPS verification. Restart only an idle Worker.
 Do not change the user's saved provider or restart canceled jobs.
 
+Production verification completed on 2026-09-18 after pushing 3845e2e:
+- HTTPS administrator HTML and AI settings JavaScript return 200 and match the
+  local release content; student homepage returns 200.
+- Restarted the verified local Worker only after confirming zero active jobs.
+  Fresh cloud heartbeat reports 2.5.3 and voice_ready=true, with zero active jobs.
+- Loopback model-route preflight accepts the production origin and private
+  network access; an unauthenticated test request remains blocked with 403.
+- Logged-in production browser interaction was not verified because the Chrome
+  connector was unavailable. Local browser coverage and live provider tests are
+  recorded above. Saved provider settings were not changed.
+
 Restore by reverting this release and restarting an idle Worker. Preserve the
 encrypted settings file, processing caches, and unrelated working-tree changes.
