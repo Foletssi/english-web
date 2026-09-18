@@ -10,6 +10,12 @@
     AI_MODEL_INVALID: '请填写服务商提供的准确模型名称。',
     AI_APIKEY_INVALID: '请填写有效的 API Key。',
     AI_HTTP_ERROR: '接口拒绝请求，请检查密钥、模型名称、余额及思考参数支持情况。',
+    AI_MODELS_AUTH: '模型列表鉴权失败，请检查接口地址与 API Key 是否属于同一服务商，以及密钥权限。',
+    AI_MODELS_UNSUPPORTED: '此地址不支持读取模型列表，请检查是否需要 /v1，或手动填写模型名称。',
+    AI_MODELS_RATE_LIMIT: '读取模型列表过于频繁，请稍后重试。',
+    AI_MODELS_HTTP_ERROR: '服务商未能返回模型列表，请稍后重试或手动填写模型名称。',
+    AI_MODELS_INVALID: '接口返回的模型列表格式不兼容，可手动填写模型名称。',
+    AI_MODELS_EMPTY: '此密钥没有返回可用模型，请检查权限或手动填写模型名称。',
     AI_NETWORK_ERROR: '无法连接 AI 接口，或接口没有返回有效的 JSON。',
     AI_SAMPLE_INVALID: '样例缺少中文翻译或词义，当前接口未通过完整性检查。',
     AI_OUTPUT_INCOMPLETE: '接口返回内容被截断，当前配置未通过测试。',
@@ -21,7 +27,7 @@
     const {data, error} = await window.EastudyAuth.client('admin').auth.getSession();
     if (error || !data?.session?.access_token) throw new Error(messages.ADMIN_REQUIRED);
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), suffix ? 200000 : 25000);
+    const timer = setTimeout(() => controller.abort(), suffix === '/test' ? 200000 : 35000);
     try {
       const response = await fetch(endpoint + suffix, {
         method, headers: {'Authorization': 'Bearer ' + data.session.access_token, 'Content-Type': 'application/json'},
@@ -31,7 +37,7 @@
       if (!response.ok) throw new Error(messages[value.error] || '设置服务暂时不可用，请检查本机处理服务后重试。');
       return value;
     } catch (error) {
-      if (error.name === 'AbortError') throw new Error('请求超时。测试会进行两次模型调用，请稍后重试。');
+      if (error.name === 'AbortError') throw new Error(suffix === '/test' ? '请求超时。测试会进行两次模型调用，请稍后重试。' : '请求超时，请稍后重试。');
       if (error instanceof TypeError) throw new Error('未连接到本机处理服务。请在处理视频的电脑打开此页、启动新版 Worker，并允许浏览器访问本地网络。');
       throw error;
     } finally { clearTimeout(timer); }
@@ -48,6 +54,7 @@
         <label><span>模型名称</span><input name="model" required maxlength="200" placeholder="服务商提供的模型 ID" spellcheck="false"></label>
         <label><span>思考参数</span><select name="thinkingMode"><option value="auto">服务商默认（通用兼容）</option><option value="disabled">关闭思考（DeepSeek 兼容）</option><option value="enabled">开启思考（DeepSeek 兼容）</option></select></label>
         <label class="wide"><span>API Key <small data-key-state></small></span><input name="apiKey" type="password" maxlength="4096" autocomplete="new-password" placeholder="填写 API Key" spellcheck="false"></label>
+        <div class="wide ai-model-picker"><label><span>可用模型</span><select data-model-list aria-label="可用模型" disabled><option value="">尚未读取模型列表</option></select></label><button type="button" class="secondary" data-models>读取可用模型</button></div>
         <p class="wide ai-quality-status">中文翻译与逐词语境释义：生成后独立复核，保留逐词音标和完整覆盖检查。</p>
         <p class="wide ai-quality-status">测试会产生两次模型调用费用。</p>
         <p class="wide ai-settings-message" role="status" aria-live="polite" data-message>正在读取当前配置…</p>
@@ -63,17 +70,28 @@
     const reload = section.querySelector('[data-reload]');
     const results = section.querySelector('[data-results]');
     const confirm = section.querySelector('[data-confirm]');
+    const readModels = section.querySelector('[data-models]');
+    const modelList = section.querySelector('[data-model-list]');
     let revision = null, testId = null, busy = false;
     const values = () => ({...Object.fromEntries(new FormData(form)), revision});
     function update() {
       form.querySelectorAll('input:not([data-confirm]), select').forEach(el => { el.disabled = busy || revision === null; });
       test.disabled = busy || revision === null;
       reload.disabled = busy;
+      readModels.disabled = busy || revision === null;
+      modelList.disabled = busy || revision === null || modelList.options.length <= 1;
       confirm.disabled = busy || !testId;
       save.disabled = busy || !testId || !confirm.checked;
     }
     function invalidate() {
       testId = null; confirm.checked = false; results.hidden = true; update();
+    }
+    function clearModels() {
+      modelList.replaceChildren(new Option('尚未读取模型列表', ''));
+    }
+    function syncModel() {
+      modelList.value = [...modelList.options].some(option => option.value === form.elements.model.value)
+        ? form.elements.model.value : '';
     }
     function applyConfig(config) {
       revision = config.revision;
@@ -81,12 +99,35 @@
       form.elements.apiKey.value = '';
       form.elements.apiKey.placeholder = config.hasApiKey ? '留空保留当前密钥；更换地址需填写新密钥' : '填写 API Key';
       section.querySelector('[data-key-state]').textContent = config.hasApiKey ? '已配置，不回显' : '未配置';
+      clearModels();
       invalidate();
     }
     form.addEventListener('input', event => {
       if (event.target === confirm) { update(); return; }
+      if (event.target === modelList) return;
+      if (event.target === form.elements.baseUrl || event.target === form.elements.apiKey) clearModels();
+      if (event.target === form.elements.model) syncModel();
       invalidate(); message.textContent = '配置已修改，尚未保存。请测试并核对样例。';
     });
+    modelList.onchange = () => {
+      if (!modelList.value) return;
+      form.elements.model.value = modelList.value;
+      invalidate(); message.textContent = '模型已选择，尚未保存。请测试并核对样例。';
+    };
+    readModels.onclick = async () => {
+      if (!form.elements.baseUrl.reportValidity() || !form.elements.apiKey.reportValidity()) return;
+      const candidate = values(); busy = true; clearModels(); update();
+      message.textContent = '正在读取可用模型…';
+      try {
+        const response = await request('POST', '/models', candidate);
+        if (!section.isConnected) return;
+        modelList.replaceChildren(new Option('请选择模型', ''));
+        for (const id of response.models) modelList.add(new Option(id, id));
+        syncModel();
+        message.textContent = `已读取 ${response.models.length} 个模型。`;
+      } catch (error) { message.textContent = error.message; }
+      finally { busy = false; update(); }
+    };
     async function load() {
       busy = true; invalidate(); message.textContent = '正在读取当前配置…';
       try {

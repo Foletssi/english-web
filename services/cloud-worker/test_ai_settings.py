@@ -1,4 +1,5 @@
 import json
+import io
 import os
 import sys
 import tempfile
@@ -37,6 +38,71 @@ class SettingsTests(unittest.TestCase):
     def test_endpoint_change_needs_new_key(self):
         with self.assertRaisesRegex(SettingsError, 'NEW_ENDPOINT_REQUIRES_KEY'):
             self.store.candidate({**self.value, 'baseUrl': 'https://new.example/v1'})
+
+    def test_models_without_selected_model_and_no_save_authorization(self):
+        calls = []
+        def opener(request, **kwargs):
+            calls.append(request)
+            return io.BytesIO(json.dumps({'data': [{'id': 'z-model'}, {'id': 'a-model'},
+                {'id': 'a-model'}, {'id': 'bad\nmodel'}, {'id': 'old-secret'}, {'id': 3}, None]}).encode())
+        result = self.store.models({**self.value, 'model': ''}, opener)
+        self.assertEqual(result, {'models': ['a-model', 'z-model']})
+        self.assertEqual(calls[0].full_url, 'https://old.example/v1/models')
+        self.assertEqual(calls[0].get_method(), 'GET')
+        self.assertEqual(calls[0].get_header('Authorization'), 'Bearer old-secret')
+        self.assertEqual(self.store.verified, {})
+        self.assertFalse(self.store.path.exists())
+        with self.assertRaisesRegex(SettingsError, 'AI_MODEL_INVALID'):
+            self.store.candidate({**self.value, 'model': ''})
+
+    def test_models_paths_and_endpoint_key_binding(self):
+        for base, expected in [('https://new.example', 'https://new.example/models'),
+                               ('https://new.example/v1/', 'https://new.example/v1/models'),
+                               ('https://new.example/v1/chat/completions', 'https://new.example/v1/models')]:
+            def opener(request, **kwargs):
+                self.assertEqual(request.full_url, expected)
+                self.assertEqual(request.get_header('Authorization'), 'Bearer new-secret')
+                return io.BytesIO(b'{"data":[{"id":"test"}]}')
+            self.store.models({**self.value, 'baseUrl': base, 'apiKey': 'new-secret'}, opener)
+        with self.assertRaisesRegex(SettingsError, 'NEW_ENDPOINT_REQUIRES_KEY'):
+            self.store.models({**self.value, 'baseUrl': 'https://new.example'})
+        with self.assertRaisesRegex(SettingsError, 'SETTINGS_CHANGED'):
+            self.store.models({**self.value, 'revision': 99})
+
+    def test_models_provider_errors_are_safe_and_actionable(self):
+        for status, code in [(401, 'AI_MODELS_AUTH'), (403, 'AI_MODELS_AUTH'),
+                             (404, 'AI_MODELS_UNSUPPORTED'), (429, 'AI_MODELS_RATE_LIMIT'),
+                             (500, 'AI_MODELS_HTTP_ERROR'), (302, 'AI_MODELS_HTTP_ERROR')]:
+            def opener(request, **kwargs):
+                raise urllib.error.HTTPError(request.full_url, status, 'old-secret', {}, io.BytesIO(b'old-secret'))
+            with self.subTest(status=status), self.assertRaisesRegex(SettingsError, '^' + code + '$'):
+                self.store.models(self.value, opener)
+
+    def test_models_reject_invalid_empty_and_oversized_responses(self):
+        for body, code in [(b'<html>error</html>', 'AI_MODELS_INVALID'), (b'[]', 'AI_MODELS_INVALID'),
+                           (b'{"data":[]}', 'AI_MODELS_EMPTY'), (b'x' * (2 * 1024 * 1024 + 1), 'AI_MODELS_INVALID')]:
+            with self.subTest(code=code), self.assertRaisesRegex(SettingsError, code):
+                self.store.models(self.value, lambda *a, **k: io.BytesIO(body))
+
+    def test_models_does_not_forward_credentials_on_redirect(self):
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        import threading
+        paths = []
+        class RedirectHandler(BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+            def do_GET(self):
+                paths.append(self.path)
+                self.send_response(302)
+                self.send_header('Location', '/credential-sink')
+                self.end_headers()
+        server = ThreadingHTTPServer(('127.0.0.1', 0), RedirectHandler)
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        with self.assertRaisesRegex(SettingsError, 'AI_MODELS_HTTP_ERROR'):
+            self.store.models({**self.value, 'baseUrl': f'http://127.0.0.1:{server.server_port}', 'apiKey': 'new-secret'})
+        self.assertEqual(paths, ['/models'])
 
     def test_invalid_urls_rejected(self):
         for url in ['http://remote.test', 'https://user:secret@remote.test', 'https://x.test?key=s',
@@ -116,6 +182,15 @@ class SettingsTests(unittest.TestCase):
             with self.assertRaises(urllib.error.HTTPError) as error:
                 urllib.request.urlopen(urllib.request.Request(url, headers={**headers, **changed}))
             self.assertEqual(error.exception.code, 403)
+        with patch.object(self.store, 'models', return_value={'models': ['test-model']}) as models:
+            for changed in ({'Origin': 'https://evil.example'}, {'Authorization': 'Bearer invalid'}, {'Host': 'evil.example'}):
+                with self.assertRaises(urllib.error.HTTPError) as error:
+                    urllib.request.urlopen(urllib.request.Request(url + '/models', data=b'{}', headers={**headers, **changed}))
+                self.assertEqual(error.exception.code, 403)
+            models.assert_not_called()
+            with urllib.request.urlopen(urllib.request.Request(url + '/models', data=json.dumps(self.value).encode(), headers=headers)) as response:
+                self.assertEqual(json.load(response), {'models': ['test-model']})
+            models.assert_called_once_with(self.value)
 
 
 if __name__ == '__main__':

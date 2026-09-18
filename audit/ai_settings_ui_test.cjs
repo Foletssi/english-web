@@ -12,7 +12,7 @@ const types = {'.js':'text/javascript', '.css':'text/css', '.html':'text/html', 
   try {
     const context = await browser.newContext();
     const errors = [], calls = [];
-    let offline = false, conflict = false;
+    let offline = false, conflict = false, modelsError = false;
     let config = {baseUrl:'https://old.example/v1', model:'old-model', thinkingMode:'disabled', hasApiKey:true, revision:0};
     await context.route('**/*', async route => {
       const request = route.request(), url = new URL(request.url());
@@ -22,7 +22,12 @@ const types = {'.js':'text/javascript', '.css':'text/css', '.html':'text/html', 
         const body = request.postDataJSON();
         calls.push({method:request.method(), path:url.pathname, body});
         let result = config, status = 200;
-        if (url.pathname.endsWith('/test')) {
+        if (url.pathname.endsWith('/models')) {
+          if (modelsError) {result = {error:'AI_MODELS_UNSUPPORTED'}; status = 400;}
+          else if (body.baseUrl !== config.baseUrl && !body.apiKey) {
+            result = {error:'NEW_ENDPOINT_REQUIRES_KEY'}; status = 400;
+          } else {result = {models:['new-model', 'updated-model', 'long-model-' + 'x'.repeat(175), '<img/src=x/onerror=alert(1)>']};}
+        } else if (url.pathname.endsWith('/test')) {
           if (body.baseUrl !== config.baseUrl && !body.apiKey) {
             result = {error:'NEW_ENDPOINT_REQUIRES_KEY'}; status = 400;
           } else {
@@ -53,6 +58,7 @@ const types = {'.js':'text/javascript', '.css':'text/css', '.html':'text/html', 
     const panel = page.locator('#workerAiSettings');
     const base = panel.locator('[name=baseUrl]'), model = panel.locator('[name=model]'), key = panel.locator('[name=apiKey]');
     const save = panel.locator('[data-save]'), test = panel.locator('[data-test]'), confirm = panel.locator('[data-confirm]');
+    const readModels = panel.locator('[data-models]'), modelList = panel.locator('[data-model-list]');
     try {
       await page.waitForFunction(() => document.querySelector('#workerAiSettings [name=baseUrl]')?.value === 'https://old.example/v1');
     } catch (error) {
@@ -66,14 +72,36 @@ const types = {'.js':'text/javascript', '.css':'text/css', '.html':'text/html', 
     await panel.getByText('更换接口地址后，请填写新接口的 API Key。').waitFor();
     assert.ok(await save.isDisabled());
     await key.fill('synthetic-private-key');
-    await model.fill('new-model');
+    await model.fill('');
+    await readModels.click();
+    await panel.getByText('已读取 4 个模型。').waitFor();
+    assert.equal(calls.at(-1).path, '/v1/ai-settings/models');
+    assert.equal(calls.at(-1).body.model, '', 'listing does not require an existing model');
+    assert.ok(await save.isDisabled());
+    assert.equal(await panel.locator('img').count(), 0, 'model IDs are rendered as text');
+    await modelList.selectOption('new-model');
+    assert.equal(await model.inputValue(), 'new-model');
+    await key.fill('synthetic-private-key-2');
+    assert.ok(await modelList.isDisabled(), 'changing key discards old models');
+    await readModels.click();
+    await panel.getByText('已读取 4 个模型。').waitFor();
+    await base.fill('https://other.example/v1');
+    assert.ok(await modelList.isDisabled(), 'changing endpoint discards old models');
+    modelsError = true;
+    await readModels.click();
+    await panel.getByText(/此地址不支持读取模型列表/).waitFor();
+    assert.ok(await model.isEnabled(), 'manual entry remains available after failure');
+    modelsError = false;
+    await readModels.click();
+    await panel.getByText('已读取 4 个模型。').waitFor();
     await panel.locator('[name=thinkingMode]').selectOption('auto');
     await test.click();
     await panel.locator('[data-results]').waitFor({state:'visible'});
     assert.ok(await save.isDisabled());
     await confirm.check();
     assert.ok(await save.isEnabled());
-    await model.fill('updated-model');
+    await modelList.selectOption('updated-model');
+    assert.equal(await model.inputValue(), 'updated-model');
     assert.ok(await save.isDisabled());
     assert.ok(await panel.locator('[data-results]').isHidden());
     await test.click();
@@ -92,6 +120,10 @@ const types = {'.js':'text/javascript', '.css':'text/css', '.html':'text/html', 
     await test.click();
     await panel.locator('[data-results]').waitFor({state:'visible'});
     assert.equal(calls.at(-1).body.apiKey, '', 'saved key is not returned to browser');
+    await readModels.click();
+    await panel.getByText('已读取 4 个模型。').waitFor();
+    assert.equal(calls.at(-1).body.apiKey, '', 'model discovery can reuse the saved key');
+    await modelList.selectOption('long-model-' + 'x'.repeat(175));
     const evidence = path.join(root, 'tmp', 'ai-settings-ui');
     fs.mkdirSync(evidence, {recursive:true});
     for (const theme of ['dark', 'light']) for (const width of [375, 768, 1440]) {
@@ -118,6 +150,6 @@ const types = {'.js':'text/javascript', '.css':'text/css', '.html':'text/html', 
     assert.equal(await page.locator('#workerAiSettings').count(), 1);
     assert.deepEqual(errors, []);
     await context.close();
-    console.log('AI settings UI PASS: admin integration, test/confirm/save, edit invalidation, conflict, reconnect, no browser key storage, 3 widths x 2 themes.');
+    console.log('AI settings UI PASS: model discovery/selection, key and endpoint invalidation, manual fallback, safe text, test/confirm/save, conflict, reconnect, no browser key storage, 3 widths x 2 themes.');
   } finally {await browser.close();}
 })().catch(error => {console.error(error); process.exitCode = 1;});

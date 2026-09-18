@@ -2,16 +2,19 @@
 import base64
 import ctypes
 import hashlib
+import http.client
 import json
 import os
 import secrets
+import ssl
 import threading
 import time
+import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 
-from ai_tools import call_json
+from ai_tools import call_json, _open_api
 from checkpoint import atomic_json
 from local_intake_v2 import ORIGINS
 
@@ -54,7 +57,7 @@ def dpapi(data, decrypt=False):
         kernel.LocalFree(output.data)
 
 
-def validate_config(value):
+def validate_config(value, require_model=True):
     result = {k: str(value.get(k) or '').strip() for k in ('baseUrl', 'model', 'apiKey', 'thinkingMode')}
     result['baseUrl'] = result['baseUrl'].rstrip('/')
     try:
@@ -67,6 +70,8 @@ def validate_config(value):
             or (url.scheme != 'https' and not (url.scheme == 'http' and url.hostname in {'localhost', '127.0.0.1'}))):
         raise SettingsError('AI_URL_INVALID')
     for key, limit in [('model', 200), ('apiKey', 4096)]:
+        if key == 'model' and not require_model:
+            continue
         if not result[key] or len(result[key]) > limit or any(ord(c) < 32 or ord(c) == 127 for c in result[key]):
             raise SettingsError('AI_' + key.upper() + '_INVALID')
     if result['thinkingMode'] not in {'auto', 'enabled', 'disabled'}:
@@ -96,7 +101,7 @@ class SettingsStore:
         return {**{k: value[k] for k in ('baseUrl', 'model', 'thinkingMode', 'revision')},
                 'hasApiKey': bool(value['apiKey']), 'detailReviewMode': 'full'}
 
-    def candidate(self, value):
+    def candidate(self, value, require_model=True):
         current = self.snapshot()
         if value.get('revision') != current['revision']:
             raise SettingsError('SETTINGS_CHANGED')
@@ -105,7 +110,41 @@ class SettingsStore:
             if str(candidate.get('baseUrl', '')).strip().rstrip('/') != current['baseUrl'].rstrip('/'):
                 raise SettingsError('NEW_ENDPOINT_REQUIRES_KEY')
             candidate['apiKey'] = current['apiKey']
-        return validate_config(candidate)
+        return validate_config(candidate, require_model=require_model)
+
+    def models(self, value, opener=None):
+        with self.lock:
+            candidate = self.candidate(value, require_model=False)
+        base = candidate['baseUrl'].removesuffix('/chat/completions')
+        request = urllib.request.Request(base + '/models', headers={
+            'Authorization': 'Bearer ' + candidate['apiKey'], 'Accept': 'application/json',
+            'User-Agent': 'EastudyLocalStudio/2.5'})
+        try:
+            with (opener or _open_api)(request, timeout=20, context=ssl.create_default_context()) as response:
+                body = response.read(2 * 1024 * 1024 + 1)
+            if len(body) > 2 * 1024 * 1024:
+                raise SettingsError('AI_MODELS_INVALID')
+            raw = json.loads(body)
+        except urllib.error.HTTPError as error:
+            code = {401: 'AI_MODELS_AUTH', 403: 'AI_MODELS_AUTH', 404: 'AI_MODELS_UNSUPPORTED',
+                    405: 'AI_MODELS_UNSUPPORTED', 429: 'AI_MODELS_RATE_LIMIT'}.get(error.code, 'AI_MODELS_HTTP_ERROR')
+            raise SettingsError(code) from None
+        except (urllib.error.URLError, OSError, http.client.HTTPException):
+            raise SettingsError('AI_NETWORK_ERROR') from None
+        except ValueError:
+            raise SettingsError('AI_MODELS_INVALID') from None
+        rows = raw.get('data') if isinstance(raw, dict) else None
+        if not isinstance(rows, list) or len(rows) > 10000:
+            raise SettingsError('AI_MODELS_INVALID')
+        models = sorted({row['id'] for row in rows if isinstance(row, dict)
+                         and isinstance(row.get('id'), str) and 0 < len(row['id']) <= 200
+                         and not any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in row['id'])
+                         and candidate['apiKey'] not in row['id']}, key=str.casefold)
+        if not models:
+            raise SettingsError('AI_MODELS_EMPTY')
+        with self.lock:
+            self.candidate(value, require_model=False)
+        return {'models': models}
 
     @staticmethod
     def digest(value):
@@ -209,7 +248,7 @@ def start_ai_settings(store, port=8791, authorize=authorize_admin):
                 if self.command == 'GET' and self.path == '/v1/ai-settings':
                     self.reply(200, store.public())
                     return
-                if self.command != 'POST' or self.path not in {'/v1/ai-settings', '/v1/ai-settings/test'}:
+                if self.command != 'POST' or self.path not in {'/v1/ai-settings', '/v1/ai-settings/test', '/v1/ai-settings/models'}:
                     self.reply(404, {'error': 'NOT_FOUND'})
                     return
                 length = self.headers.get('Content-Length', '')
@@ -220,7 +259,10 @@ def start_ai_settings(store, port=8791, authorize=authorize_admin):
                 value = json.loads(body)
                 if not isinstance(value, dict):
                     raise SettingsError('BODY_INVALID')
-                result = store.test(value) if self.path.endswith('/test') else store.save(value)
+                if self.path.endswith('/models'):
+                    result = store.models(value)
+                else:
+                    result = store.test(value) if self.path.endswith('/test') else store.save(value)
                 self.reply(200, result)
             except SettingsError as error:
                 self.reply(403 if str(error) == 'ADMIN_REQUIRED' else 400, {'error': str(error)})
