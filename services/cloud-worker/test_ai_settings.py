@@ -46,7 +46,7 @@ class SettingsTests(unittest.TestCase):
             return io.BytesIO(json.dumps({'data': [{'id': 'z-model'}, {'id': 'a-model'},
                 {'id': 'a-model'}, {'id': 'bad\nmodel'}, {'id': 'old-secret'}, {'id': 3}, None]}).encode())
         result = self.store.models({**self.value, 'model': ''}, opener)
-        self.assertEqual(result, {'models': ['a-model', 'z-model']})
+        self.assertEqual(result, {'models': ['a-model', 'z-model'], 'baseUrl': 'https://old.example/v1'})
         self.assertEqual(calls[0].full_url, 'https://old.example/v1/models')
         self.assertEqual(calls[0].get_method(), 'GET')
         self.assertEqual(calls[0].get_header('Authorization'), 'Bearer old-secret')
@@ -77,6 +77,27 @@ class SettingsTests(unittest.TestCase):
                 raise urllib.error.HTTPError(request.full_url, status, 'old-secret', {}, io.BytesIO(b'old-secret'))
             with self.subTest(status=status), self.assertRaisesRegex(SettingsError, '^' + code + '$'):
                 self.store.models(self.value, opener)
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows user encryption')
+    def test_provider_root_discovery_test_and_save_share_normalized_address(self):
+        value = {**self.value, 'baseUrl': 'https://api.x5m5x.com', 'apiKey': 'new-secret'}
+        def opener(request, **kwargs):
+            self.assertEqual(request.full_url, 'https://api.x5m5x.com/v1/models')
+            return io.BytesIO(b'{"data":[{"id":"test"}]}')
+        listed = self.store.models(value, opener)
+        self.assertEqual(listed['baseUrl'], 'https://api.x5m5x.com/v1')
+        configs = []
+        def request(config, *args, **kwargs):
+            configs.append(config)
+            return self.request()
+        tested = self.store.test(value, request)
+        self.assertEqual(len(configs), 2)
+        self.assertTrue(all(c['baseUrl'] == listed['baseUrl'] for c in configs))
+        saved = self.store.save({**value, 'baseUrl': tested['baseUrl'], 'testId': tested['testId']})
+        self.assertEqual(saved['baseUrl'], listed['baseUrl'])
+        self.assertEqual(self.store.candidate({**saved, 'baseUrl': value['baseUrl'], 'apiKey': ''})['apiKey'], 'new-secret')
+        with self.assertRaisesRegex(SettingsError, 'NEW_ENDPOINT_REQUIRES_KEY'):
+            self.store.candidate({**saved, 'baseUrl': 'https://other.example/v1', 'apiKey': ''})
 
     def test_models_reject_invalid_empty_and_oversized_responses(self):
         for body, code in [(b'<html>error</html>', 'AI_MODELS_INVALID'), (b'[]', 'AI_MODELS_INVALID'),
@@ -191,6 +212,13 @@ class SettingsTests(unittest.TestCase):
             with urllib.request.urlopen(urllib.request.Request(url + '/models', data=json.dumps(self.value).encode(), headers=headers)) as response:
                 self.assertEqual(json.load(response), {'models': ['test-model']})
             models.assert_called_once_with(self.value)
+        from contracts import StudioError
+        for code in ['AI_ENDPOINT_HTML', 'AI_RESPONSE_INVALID', 'AI_NETWORK_ERROR']:
+            with patch.object(self.store, 'test', side_effect=StudioError(code, 'private-provider-body')):
+                with self.assertRaises(urllib.error.HTTPError) as error:
+                    urllib.request.urlopen(urllib.request.Request(url + '/test', data=b'{}', headers=headers))
+                self.assertEqual(error.exception.code, 502)
+                self.assertEqual(json.load(error.exception), {'error': code})
 
 
 if __name__ == '__main__':

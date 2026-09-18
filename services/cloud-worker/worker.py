@@ -37,7 +37,7 @@ from local_intake_v2 import start_local_intake  # noqa: E402
 from ai_settings import SettingsStore, start_ai_settings  # noqa: E402
 
 
-VERSION = '2.5.2'
+VERSION = '2.5.3'
 DEFAULT_ENDPOINT = 'https://ehxqtgakjgqgmghhdmjg.supabase.co/functions/v1/video-processing'
 STAGE_MAP = {'probe': 'PROBE', 'transcode': 'TRANSCODE', 'asr': 'ASR', 'enrich': 'ENRICH'}
 

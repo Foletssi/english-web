@@ -142,8 +142,18 @@ def transcribe(audio_path, video_id, duration, model_name=None, progress=None, m
     return validate_transcript(rows, duration)
 
 
+def normalize_api_base(base_url):
+    base = str(base_url or '').strip().rstrip('/')
+    parsed = urlparse(base)
+    # This provider serves its website at /chat/completions but its API at /v1.
+    if (parsed.scheme == 'https' and parsed.netloc == 'api.x5m5x.com'
+            and not parsed.path and not parsed.query and not parsed.fragment):
+        return base + '/v1'
+    return base
+
+
 def endpoint(base_url):
-    base = str(base_url or '').rstrip('/')
+    base = normalize_api_base(base_url)
     parsed = urlparse(base)
     if parsed.scheme != 'https' and parsed.hostname not in {'127.0.0.1', 'localhost'}:
         raise StudioError('AI_URL_INVALID', 'AI 服务地址必须使用 HTTPS。')
@@ -212,12 +222,18 @@ def _call_json(config, system_prompt, payload, timeout, opener, receipt):
         receipt['requestAttempted'] = True
         response = (opener or _open_api)(request, timeout=timeout, context=context)
         with response:
-            raw = json.loads(response.read())
+            response_body = response.read()
     except urllib.error.HTTPError as error:
         retryable = error.code == 429 or error.code >= 500
         raise StudioError('AI_HTTP_ERROR', f'AI 服务返回 {error.code}。', retryable) from error
-    except (urllib.error.URLError, OSError, http.client.HTTPException, ValueError) as error:
-        raise StudioError('AI_NETWORK_ERROR', 'AI 服务连接或返回格式异常。', True) from error
+    except (urllib.error.URLError, OSError, http.client.HTTPException) as error:
+        raise StudioError('AI_NETWORK_ERROR', 'AI 服务连接中断或超时。', True) from error
+    try:
+        raw = json.loads(response_body)
+    except (ValueError, UnicodeError) as error:
+        html = response_body.lstrip().lower().startswith((b'<!doctype html', b'<html'))
+        code = 'AI_ENDPOINT_HTML' if html else 'AI_RESPONSE_INVALID'
+        raise StudioError(code, 'AI 接口未返回有效的 JSON，请检查接口路径。', False) from error
     if isinstance(raw, dict):
         receipt.update(model=raw.get('model') or model, requestId=raw.get('id'), usage=raw.get('usage', {}))
     try:

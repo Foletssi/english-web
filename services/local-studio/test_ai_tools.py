@@ -168,6 +168,33 @@ class AiTools(unittest.TestCase):
 
     def test_endpoint(self):
         self.assertEqual(endpoint('https://api.deepseek.com'), 'https://api.deepseek.com/chat/completions')
+        for base in ['https://api.x5m5x.com', 'https://api.x5m5x.com/',
+                     'https://api.x5m5x.com/v1', 'https://api.x5m5x.com/v1/chat/completions']:
+            self.assertEqual(endpoint(base), 'https://api.x5m5x.com/v1/chat/completions')
+        self.assertEqual(endpoint('https://other.example/custom'), 'https://other.example/custom/chat/completions')
+
+    def test_provider_root_uses_generation_api_without_retry(self):
+        def open_fake(request, **_):
+            self.assertEqual(request.full_url, 'https://api.x5m5x.com/v1/chat/completions')
+            return FakeResponse({'choices': [{'message': {'content': '{"ok":true}'}}]})
+        opener = Mock(side_effect=open_fake)
+        result, _ = call_json({'baseUrl': 'https://api.x5m5x.com', 'model': 'test', 'apiKey': 'secret'},
+                              'json', {}, opener=opener)
+        self.assertTrue(result['ok'])
+        opener.assert_called_once()
+
+    def test_non_json_response_is_not_misreported_as_network_failure(self):
+        for body, code in [(b'<!DOCTYPE html><html>secret</html>', 'AI_ENDPOINT_HTML'),
+                           (b'  <html>secret</html>', 'AI_ENDPOINT_HTML'),
+                           (b'not json secret', 'AI_RESPONSE_INVALID')]:
+            opener = Mock(side_effect=lambda *a, **k: io.BytesIO(body))
+            with self.subTest(code=code), self.assertRaises(StudioError) as raised:
+                retry_ai(lambda: call_json({'baseUrl': 'https://other.example/v1', 'model': 'test', 'apiKey': 'secret'},
+                                          'json', {}, opener=opener))
+            self.assertEqual(raised.exception.code, code)
+            self.assertNotIn('secret', str(raised.exception))
+            self.assertFalse(raised.exception.retryable)
+            opener.assert_called_once()
 
     def test_json_response(self):
         def open_fake(request, **_):

@@ -16,7 +16,11 @@
     AI_MODELS_HTTP_ERROR: '服务商未能返回模型列表，请稍后重试或手动填写模型名称。',
     AI_MODELS_INVALID: '接口返回的模型列表格式不兼容，可手动填写模型名称。',
     AI_MODELS_EMPTY: '此密钥没有返回可用模型，请检查权限或手动填写模型名称。',
-    AI_NETWORK_ERROR: '无法连接 AI 接口，或接口没有返回有效的 JSON。',
+    AI_NETWORK_ERROR: 'AI 接口连接中断或超时，请稍后重试。',
+    AI_ENDPOINT_HTML: '地址返回了网页，未到达模型生成接口。请检查 API 路径，通常需要在地址末尾加 /v1。',
+    AI_RESPONSE_INVALID: '接口已连接，但返回的不是有效 JSON，请检查服务商的接口兼容性。',
+    AI_RESPONSE_SCHEMA: '接口已连接，但返回结构不兼容 OpenAI Chat Completions，请检查模型和 API 路径。',
+    AI_JSON_INVALID: '模型未返回有效的结构化内容，本次翻译与释义测试未通过。',
     AI_SAMPLE_INVALID: '样例缺少中文翻译或词义，当前接口未通过完整性检查。',
     AI_OUTPUT_INCOMPLETE: '接口返回内容被截断，当前配置未通过测试。',
     SETTINGS_BUSY: '另一项设置操作正在进行，请稍后重试。',
@@ -121,6 +125,7 @@
       try {
         const response = await request('POST', '/models', candidate);
         if (!section.isConnected) return;
+        if (response.baseUrl) form.elements.baseUrl.value = response.baseUrl;
         modelList.replaceChildren(new Option('请选择模型', ''));
         for (const id of response.models) modelList.add(new Option(id, id));
         syncModel();
@@ -146,6 +151,7 @@
       try {
         const response = await request('POST', '/test', candidate);
         if (!section.isConnected) return;
+        if (response.baseUrl) form.elements.baseUrl.value = response.baseUrl;
         testId = response.testId;
         const samples = section.querySelector('[data-samples]'); samples.replaceChildren();
         for (const row of response.sentences) {

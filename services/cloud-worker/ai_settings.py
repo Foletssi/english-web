@@ -14,7 +14,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 
-from ai_tools import call_json, _open_api
+from ai_tools import call_json, _open_api, normalize_api_base
 from checkpoint import atomic_json
 from local_intake_v2 import ORIGINS
 
@@ -76,6 +76,7 @@ def validate_config(value, require_model=True):
             raise SettingsError('AI_' + key.upper() + '_INVALID')
     if result['thinkingMode'] not in {'auto', 'enabled', 'disabled'}:
         raise SettingsError('AI_THINKING_MODE_INVALID')
+    result['baseUrl'] = normalize_api_base(result['baseUrl'])
     return result
 
 
@@ -107,7 +108,7 @@ class SettingsStore:
             raise SettingsError('SETTINGS_CHANGED')
         candidate = dict(value)
         if not str(candidate.get('apiKey') or '').strip():
-            if str(candidate.get('baseUrl', '')).strip().rstrip('/') != current['baseUrl'].rstrip('/'):
+            if normalize_api_base(candidate.get('baseUrl', '')) != normalize_api_base(current['baseUrl']):
                 raise SettingsError('NEW_ENDPOINT_REQUIRES_KEY')
             candidate['apiKey'] = current['apiKey']
         return validate_config(candidate, require_model=require_model)
@@ -144,7 +145,7 @@ class SettingsStore:
             raise SettingsError('AI_MODELS_EMPTY')
         with self.lock:
             self.candidate(value, require_model=False)
-        return {'models': models}
+        return {'models': models, 'baseUrl': candidate['baseUrl']}
 
     @staticmethod
     def digest(value):
@@ -176,7 +177,7 @@ class SettingsStore:
             self.verified = {k: v for k, v in self.verified.items() if v[1] > now}
             ticket = secrets.token_urlsafe(24)
             self.verified[ticket] = (self.digest(candidate), now + 600)
-        return {'testId': ticket, 'model': str(meta.get('model', candidate['model']))[:200],
+        return {'testId': ticket, 'baseUrl': candidate['baseUrl'], 'model': str(meta.get('model', candidate['model']))[:200],
                 'sentences': [{**next(row for row in rows if row['id'] == source['id']), **source}
                               for source in SAMPLES]}
 
@@ -270,7 +271,8 @@ def start_ai_settings(store, port=8791, authorize=authorize_admin):
                 # Provider bodies and local exceptions may contain credentials.
                 code = getattr(error, 'code', '')
                 self.reply(502, {'error': code if code in {'AI_HTTP_ERROR', 'AI_NETWORK_ERROR',
-                    'AI_OUTPUT_INCOMPLETE', 'AI_RESPONSE_SCHEMA', 'AI_JSON_INVALID'} else 'SETTINGS_UNAVAILABLE'})
+                    'AI_ENDPOINT_HTML', 'AI_RESPONSE_INVALID', 'AI_OUTPUT_INCOMPLETE',
+                    'AI_RESPONSE_SCHEMA', 'AI_JSON_INVALID'} else 'SETTINGS_UNAVAILABLE'})
             finally:
                 if acquired:
                     slots.release()

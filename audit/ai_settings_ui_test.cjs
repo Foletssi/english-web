@@ -12,7 +12,7 @@ const types = {'.js':'text/javascript', '.css':'text/css', '.html':'text/html', 
   try {
     const context = await browser.newContext();
     const errors = [], calls = [];
-    let offline = false, conflict = false, modelsError = false;
+    let offline = false, conflict = false, modelsError = false, generationError = null;
     let config = {baseUrl:'https://old.example/v1', model:'old-model', thinkingMode:'disabled', hasApiKey:true, revision:0};
     await context.route('**/*', async route => {
       const request = route.request(), url = new URL(request.url());
@@ -26,12 +26,13 @@ const types = {'.js':'text/javascript', '.css':'text/css', '.html':'text/html', 
           if (modelsError) {result = {error:'AI_MODELS_UNSUPPORTED'}; status = 400;}
           else if (body.baseUrl !== config.baseUrl && !body.apiKey) {
             result = {error:'NEW_ENDPOINT_REQUIRES_KEY'}; status = 400;
-          } else {result = {models:['new-model', 'updated-model', 'long-model-' + 'x'.repeat(175), '<img/src=x/onerror=alert(1)>']};}
+          } else {result = {baseUrl:body.baseUrl === 'https://api.x5m5x.com' ? body.baseUrl + '/v1' : body.baseUrl, models:['new-model', 'updated-model', 'long-model-' + 'x'.repeat(175), '<img/src=x/onerror=alert(1)>']};}
         } else if (url.pathname.endsWith('/test')) {
-          if (body.baseUrl !== config.baseUrl && !body.apiKey) {
+          if (generationError) {result = {error:generationError}; status = 502;}
+          else if (body.baseUrl !== config.baseUrl && !body.apiKey) {
             result = {error:'NEW_ENDPOINT_REQUIRES_KEY'}; status = 400;
           } else {
-            result = {testId:'tested-config', sentences:[
+            result = {testId:'tested-config', baseUrl:body.baseUrl === 'https://api.x5m5x.com' ? body.baseUrl + '/v1' : body.baseUrl, sentences:[
               {english:"The bag's gold hardware matches its leather strap.", chinese:'包上的金色金属配件与皮革肩带很相配。', word:'hardware', meaningZh:'包上的金属配件'},
               {english:"I won't spill the beans.", chinese:'我不会泄露秘密。', word:'spill the beans', meaningZh:'泄露秘密'}]};
           }
@@ -136,6 +137,26 @@ const types = {'.js':'text/javascript', '.css':'text/css', '.html':'text/html', 
       assert.ok(dimensions.inputs.every(x => x.width > 100 && x.right <= width), 'inputs fit');
       if (width !== 768) await page.screenshot({path:path.join(evidence, `${theme}-${width}.png`)});
     }
+    await base.fill('https://api.x5m5x.com');
+    await key.fill('synthetic-private-key');
+    await readModels.click();
+    await panel.getByText('已读取 4 个模型。').waitFor();
+    assert.equal(await base.inputValue(), 'https://api.x5m5x.com/v1');
+    await base.fill('https://api.x5m5x.com');
+    await test.click();
+    await panel.locator('[data-results]').waitFor({state:'visible'});
+    assert.equal(await base.inputValue(), 'https://api.x5m5x.com/v1');
+    await confirm.check();
+    await save.click();
+    await panel.getByText('已保存，下一个视频任务使用新配置。中文翻译和词义独立复核保持开启。').waitFor();
+    assert.equal(config.baseUrl, 'https://api.x5m5x.com/v1');
+    for (const [code, message] of [['AI_ENDPOINT_HTML', /地址返回了网页/], ['AI_RESPONSE_INVALID', /接口已连接，但返回的不是有效 JSON/], ['AI_NETWORK_ERROR', /AI 接口连接中断或超时/]]) {
+      generationError = code;
+      await test.click();
+      await panel.getByText(message).waitFor();
+      assert.ok(await save.isDisabled());
+    }
+    generationError = null;
     offline = true;
     await panel.locator('[data-reload]').click();
     await panel.getByText(/未连接到本机处理服务/).waitFor();
