@@ -67,6 +67,7 @@
     const key = 'eastudy:local-intake:v1:' + adminId + ':' + (recoveryJobId || video.id || 'new') + ':' + sha256;
     let pending;
     try { pending = JSON.parse(localStorage.getItem(key) || 'null'); } catch { /* invalid metadata is replaced */ }
+    const resuming = Boolean(pending);
     if (pending && JSON.stringify(pending.source) !== JSON.stringify(source)) throw new Error('请保留原任务所选的封面和文件后继续。');
     pending ||= {requestId: crypto.randomUUID(), source, video};
     // Metadata only: no binary data, API keys or intake tickets are persisted.
@@ -78,19 +79,31 @@
         video: pending.video, source, requestId: pending.requestId,
         workerId: ready.workerId, challenge: ready.challenge, origin: location.origin
       };
-      const result = recoveryJobId
-        ? await global.EastudyCloudContent.recoverLocalProcessingInput({...input,jobId:recoveryJobId})
-        : await global.EastudyAdminCloudBridge.reserveLocal(input);
-      if (result.error) {
-        const code=String(result.error.message||result.error.code||'');
-        if(MESSAGES[code])throw Object.assign(new Error(MESSAGES[code]),{code});
-        throw result.error;
+      let result;
+      try {
+        result = recoveryJobId
+          ? await global.EastudyCloudContent.recoverLocalProcessingInput({...input,jobId:recoveryJobId})
+          : await global.EastudyAdminCloudBridge.reserveLocal(input);
+        if (result.error) throw result.error;
+      } catch (error) {
+        const code = [error?.code, error?.message].find(value => Object.hasOwn(MESSAGES, value));
+        if (code) throw Object.assign(new Error(MESSAGES[code]), {code});
+        throw error;
       }
       reservation = result.data;
       ticket = reservation.intakeTicket;
       renewedAt = Date.now();
     }
-    await reserve();
+    try {
+      await reserve();
+    } catch (error) {
+      // Only a new upload may replace a confirmed cancelled receipt. Recovery and
+      // ticket renewal must never restart a task the administrator has cancelled.
+      if (!resuming || recoveryJobId || error.code !== 'LOCAL_INPUT_CANCELLED') throw error;
+      pending = {requestId: crypto.randomUUID(), source, video};
+      localStorage.setItem(key, JSON.stringify(pending));
+      await reserve();
+    }
     const path = '/intakes/' + reservation.inputSource.sourceId;
     async function call(suffix, options = {}) {
       if (Date.now() - renewedAt > 10 * 60 * 1000) await reserve();
