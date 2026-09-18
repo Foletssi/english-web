@@ -24,7 +24,13 @@ explicit recovery, or mid-transfer ticket renewal. Never reactivate the old job.
 - No database migration, Edge Function change, Worker restart, or AI call needed.
 - Chrome connector failed with nodeRepl.fetch request failed. Use the existing
   authorized Git/Pages and HTTPS verification fallback.
-- Production deployment verification: pending.
+- Pushed c8f18b5 to main using the existing local system proxy via a per-command
+  Git override after direct GitHub connections failed. No global settings changed.
+- Production HTTPS verification passed: administrator HTML and the local intake
+  client both return 200 and match the local release; the HTML loads beta6.50.3.
+  The student homepage also returns 200.
+- A signed-in browser upload was not repeated because the Chrome connector was
+  unavailable. No production upload, AI task, or cancelled-job retry was created.
 
 Restore by reverting this release's client and cache version. Keep original
 media, local receipts, encrypted AI settings, and unrelated work intact.
