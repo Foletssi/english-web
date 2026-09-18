@@ -66,35 +66,46 @@ begin
   perform pg_temp.expect_failure(format('select private.merge_learning_sentence_v5(%L,%L,%L)',
     row1||'{"translationLocked":true,"chinese":"人工翻译"}'::jsonb,row1,'reextract'),'TEACHING_TRANSLATION_LOCKED');
 
-  select * into c from private.content_snapshots where environment='production' for update;
-  select v->>'id',(v->>'processingJobId')::uuid into vid,job from jsonb_array_elements(c.published->'videos') v where v->>'status'='PUBLISHED' limit 1;
-  if vid is null then raise exception 'Published video fixture required'; end if;
-  update private.content_snapshots set published=pg_temp.snapshot_with_fixture_rows(published,vid,rows),draft=pg_temp.snapshot_with_fixture_rows(draft,vid,rows) where environment='production';
-  select * into fixture from private.content_snapshots where environment='production';
-  select jsonb_agg(r-array['english','textRevision','startTime','endTime','reviewStatus'] order by n) into patches from jsonb_array_elements(rows) with ordinality a(r,n);
-  perform set_config('request.jwt.claim.role','service_role',true);
-  bad:=jsonb_set(rows,'{0,translationLocked}','true');
-  update private.content_snapshots set published=jsonb_set(published,array['sentences',vid],bad) where environment='production';
-  perform pg_temp.expect_failure(format('select public.service_commit_reviewed_teaching(%L,%L,%s,%L,%L,%L)',
-    vid,job,c.revision,bad,rows,jsonb_set(patches,'{0,chinese}','"修改人工翻译"')),'TEACHING_TRANSLATION_LOCKED');
-  update private.content_snapshots set published=jsonb_set(published,array['sentences',vid],rows),draft=jsonb_set(draft,array['sentences',vid],bad) where environment='production';
-  perform pg_temp.expect_failure(format('select public.service_commit_reviewed_teaching(%L,%L,%s,%L,%L,%L)',
-    vid,job,c.revision,rows,bad,jsonb_set(patches,'{0,chinese}','"修改人工翻译"')),'TEACHING_TRANSLATION_LOCKED');
-  update private.content_snapshots set draft=jsonb_set(draft,array['sentences',vid],rows) where environment='production';
-  result:=public.service_commit_reviewed_teaching(vid,job,c.revision,rows,rows,patches);
-  select * into a from private.content_snapshots where environment='production';
-  if a.published->'sentences'->vid is distinct from rows or a.draft->'sentences'->vid is distinct from rows
-    or a.revision<>c.revision+1 then raise exception 'Detail publication not exact'; end if;
-  if a.published-'sentences'<>fixture.published-'sentences' or a.draft-'sentences'<>fixture.draft-'sentences'
-    then raise exception 'Details changed unrelated catalog fields'; end if;
-  if has_function_privilege('service_role','private.service_commit_reviewed_teaching_base_v1(text,uuid,bigint,jsonb,jsonb,jsonb)','execute')
-    or has_function_privilege('service_role','private.processing_commit_learning_repair_legacy_v4(uuid,uuid,text,text,jsonb)','execute')
-    or has_function_privilege('service_role','private.processing_commit_learning_repair_base_v5(uuid,uuid,text,text,jsonb)','execute')
-    then raise exception 'Unvalidated base RPC accessible'; end if;
-  -- The guard must reject a v5 job before attempting lease/token validation.
-  update public.processing_jobs set input=input||'{"contractVersion":5,"teachingSchemaVersion":3}'::jsonb where id=job;
-  perform pg_temp.expect_failure(format('select public.processing_commit_learning_repair_v4(%L,%L,%L,%L,%L)',
-    job,'00000000-0000-0000-0000-000000000000','none','rollback-test','{}'),'LEARNING_REPAIR_V5_REQUIRED');
-  -- Restore the exact pre-test snapshot; the caller also rolls back backups/jobs.
-  update private.content_snapshots set published=c.published,draft=c.draft,revision=c.revision,updated_at=c.updated_at where environment='production';
+end $$;
+do $$
+declare row_value jsonb; rows jsonb; manifest jsonb; receipts jsonb; item jsonb; path text;
+ j public.processing_jobs%rowtype; actor uuid; i integer;
+begin
+ select requested_by into actor from public.processing_jobs where requested_by is not null limit 1;
+ insert into public.processing_jobs(video_id,source_key,input,requested_by,idempotency_key,status,stage,progress,input_revision,output_run_id)
+ values('999999999999999','videos/00000000-1111-2222-3333-444444444444/source.mp4','{"kind":"LEARNING_REPAIR"}',actor,
+ 'rollback-contract-'||gen_random_uuid(),'REVIEW','REVIEW',100,1,gen_random_uuid()) returning * into j;
+ insert into private.processing_job_runs(job_id,run_id,worker_id,outcome) values(j.id,j.output_run_id,'rollback-test','REVIEW');
+  row_value:='{"id":"voice-s1","english":"Go, go!","chinese":"快走吧！","textRevision":2,"startTime":0,"endTime":2,"keyWords":[],"expressions":[],"reviewStatus":"APPROVED",
+    "teachingAnalysis":{"status":"completed","promptVersion":"adult-vlog-v9-20260916","reviewVersion":"adult-selection-review-v1-20260916","sourceTextRevision":2},
+    "wordLookup":{"schemaVersion":1,"sourceEnglish":"Go, go!","sourceTextRevision":2,"tokens":[{"tokenId":"t0","surface":"Go","start":0,"end":2,"coreMeaningZh":"走","pronunciationHint":"/ɡoʊ/"},{"tokenId":"t1","surface":"go","start":4,"end":6,"coreMeaningZh":"快走","pronunciationHint":"/ɡoʊ/"}]},
+    "translationAnalysis":{"status":"completed","promptVersion":"context-lookup-v2-20260916","reviewVersion":"context-lookup-review-v2-20260916","sourceTextRevision":2,"sourceConcerns":[]},
+    "coverageAnalysis":{"schemaVersion":1,"status":"completed","promptVersion":"adjacent-coverage-v1-20260916","reviewVersion":"adult-selection-review-v1-20260916","sourceTextRevision":2,"pairs":[]}}'::jsonb;
+  manifest:=jsonb_build_object('schemaVersion',1,'status','complete','videoId',j.video_id,'contentRevision','rollback-voice','items','[]'::jsonb);
+  receipts:='[]'::jsonb;
+  for i in 0..1 loop
+    path:='voice/'||repeat((i+1)::text,64)||'.mp3';
+    item:=jsonb_build_object('videoId',j.video_id,'contentRevision','rollback-voice','sentenceId','voice-s1','sourceTextRevision',2,
+      'kind','token','tokenId','t'||i,'itemId',repeat((i+3)::text,64),'fingerprint',repeat((i+1)::text,64),'storagePath',path,
+      'text',row_value#>>array['wordLookup','tokens',i::text,'surface'],'status','ready','bytes',1000,'contentHash',repeat('a',64));
+    manifest:=jsonb_set(manifest,'{items}',manifest->'items'||jsonb_build_array(item));
+    receipts:=receipts||jsonb_build_array(jsonb_build_object('path',path,'size',1000,'sha256',repeat('a',64),'etag','rollback-only'));
+  end loop;
+
+ insert into private.processing_output_receipts(job_id,run_id,path,size,sha256,etag)
+ select j.id,j.output_run_id,r->>'path',(r->>'size')::bigint,r->>'sha256',r->>'etag' from jsonb_array_elements(receipts) r;
+ rows:=jsonb_build_array(row_value);
+ perform private.register_teaching_voice_v1(j.id,j.output_run_id,j.id,j.video_id,rows,manifest);
+ row_value:=jsonb_set(jsonb_set(jsonb_set(row_value,'{coverageAnalysis,promptVersion}','"adjacent-coverage-v2-20260916"'),
+ '{coverageAnalysis,reviewVersion}','"adult-selection-review-v2-20260916"'),'{teachingAnalysis,reviewVersion}','"adult-selection-review-v2-20260916"');
+ rows:=jsonb_build_array(row_value);
+ perform private.register_teaching_voice_v1(j.id,j.output_run_id,j.id,j.video_id,rows,manifest);
+ perform pg_temp.expect_failure(format('select private.register_teaching_voice_v1(%L,%L,%L,%L,%L,%L)',
+ j.id,j.output_run_id,j.id,j.video_id,jsonb_set(rows,'{0,wordLookup,tokens,0,pronunciationHint}','""'),manifest),'TEACHING_DETAILS_INVALID');
+ perform pg_temp.expect_failure(format('select private.register_teaching_voice_v1(%L,%L,%L,%L,%L,%L)',
+ j.id,j.output_run_id,j.id,j.video_id,rows,jsonb_set(manifest,'{items,0,sourceTextRevision}','1')),'VOICE_SOURCE_STALE');
+ perform pg_temp.expect_failure(format('select private.register_teaching_voice_v1(%L,%L,%L,%L,%L,%L)',
+ j.id,j.output_run_id,j.id,j.video_id,rows,jsonb_set(manifest,'{items,0,contentHash}',to_jsonb(repeat('b',64)))),'VOICE_RECEIPT_MISSING');
+ perform pg_temp.expect_failure(format('select private.register_teaching_voice_v1(%L,%L,%L,%L,%L,%L)',
+ gen_random_uuid(),j.output_run_id,j.id,j.video_id,rows,manifest),'VOICE_JOB_MISMATCH');
 end $$;

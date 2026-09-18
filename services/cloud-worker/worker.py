@@ -35,9 +35,10 @@ from processing_metrics import stage_metrics, parallel_progress, record_stage  #
 from local_intake_store import LocalInputs  # noqa: E402
 from local_intake_v2 import start_local_intake  # noqa: E402
 from ai_settings import SettingsStore, start_ai_settings  # noqa: E402
+from final_output import restore_final_output, save_final_output  # noqa: E402
 
 
-VERSION = '2.5.3'
+VERSION = '2.5.4'
 DEFAULT_ENDPOINT = 'https://ehxqtgakjgqgmghhdmjg.supabase.co/functions/v1/video-processing'
 STAGE_MAP = {'probe': 'PROBE', 'transcode': 'TRANSCODE', 'asr': 'ASR', 'enrich': 'ENRICH'}
 
@@ -479,6 +480,8 @@ def selected_assets(output, result):
     if voice is not None:
         paths.extend(voice_assets(output, voice))
     assets = sorted(set(paths))
+    if any(path.is_symlink() or not path.resolve().is_relative_to(output.resolve()) for path in assets):
+        raise ApiError('OUTPUT_PATH_INVALID')
     if any(not path.is_file() or path.stat().st_size <= 0 for path in assets):
         raise ApiError('OUTPUT_ASSETS_EMPTY')
     return assets
@@ -639,6 +642,18 @@ def process_lease(client, lease, local_inputs=None, ai_settings=None):
         source, cover = resolve_input_source(lease, local_inputs, download, source, report_download)
         if cancelled.is_set():
             raise ApiError('JOB_LEASE_LOST_OR_CANCELLED')
+        restored = restore_final_output(job_root, lease['job'], source, cover, current_run, selected_assets)
+        if restored is not None:
+            output, final = restored
+            report_progress(client, lease, 'LOCAL_UPLOAD', 96, '正在续传已完成的成品，无需重新生成')
+            manifest = upload_assets(client, lease, output, selected_assets(output, final), cancelled)
+            if cancelled.is_set():
+                raise ApiError('JOB_LEASE_LOST_OR_CANCELLED')
+            final = rewrite_result(final, job_id, lease['job']['source_key'])
+            client.call('worker-complete-v2', jobId=job_id, token=lease['token'], runId=current_run,
+                        result=final, manifest=manifest)
+            print(f'[complete-restored] {job_id}', flush=True)
+            return
         store = RemoteProgressStore(client, lease)
         def upload_media(value, output):
             partial = {'video': {'coverImages': value['coverImages'], 'playback': {'variants': value['variants']}}}
@@ -673,6 +688,7 @@ def process_lease(client, lease, local_inputs=None, ai_settings=None):
         actual = sorted((item['path'], item['size'], item['sha256']) for item in manifest)
         if actual != expected:
             raise ApiError('OUTPUT_MANIFEST_MISMATCH')
+        save_final_output(job_root, lease['job'], source, cover, output, result_job['result'], manifest)
         if cancelled.is_set():
             raise ApiError('JOB_LEASE_LOST_OR_CANCELLED')
         final = rewrite_result(result_job['result'], job_id, lease['job']['source_key'])

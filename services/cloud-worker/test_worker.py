@@ -202,7 +202,7 @@ class WorkerTests(unittest.TestCase):
             pipeline.assert_not_called()
 
     def test_worker_reports_v5_protocol_version(self):
-        self.assertEqual(worker.VERSION, '2.5.3')
+        self.assertEqual(worker.VERSION, '2.5.4')
         source = MODULE.read_text(encoding='utf-8')
         self.assertIn("'learningRepairV5': True", source)
         self.assertIn("'teachingSchemaVersion': 3", source)
@@ -376,7 +376,8 @@ class WorkerTests(unittest.TestCase):
                 'evidence': {'aiUsage': worker.summarize_usage(config['usageLogPath'], config['runId'])}}}
         with tempfile.TemporaryDirectory() as folder, \
                 patch.object(worker, 'worker_root', return_value=Path(folder)), \
-                patch.object(worker, 'heartbeat_loop'), patch.object(worker, 'download'), \
+                patch.object(worker, 'heartbeat_loop'), patch.object(worker, 'download',
+                    side_effect=lambda url, path, *args: path.write_bytes(b'source')), \
                 patch.object(worker, 'process_job', side_effect=process), \
                 patch.object(worker, 'prepare_voice', return_value={'status': 'complete'}), \
                 patch.object(worker, 'selected_assets', return_value=[]), \
