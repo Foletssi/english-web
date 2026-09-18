@@ -55,6 +55,19 @@ identified its authentication limitation. Use Git/Pages and HTTPS verification
 within the user's requested production control-panel update. Browser local-network
 permission and an authenticated production save remain separate live checks.
 
+Released implementation commit `4dd0d82` to main through the connected Git lane.
+Production HTTPS returned 200 and exact normalized content matches for the admin
+HTML, admin script, new settings script and stylesheet. Student homepage returned
+200. Worker 2.5.1 reports fresh cloud heartbeat with ASR, AI and teaching voice
+ready. The running loopback service accepts the production-origin preflight and
+rejects unauthenticated settings reads with 403. No active video jobs were present
+before either restart. No paid video was restarted or regenerated.
+
+The real logged-in browser-to-local save and the user's replacement provider have
+not been exercised; the browser bridge remains unavailable, and the replacement
+endpoint/key have not been supplied. Automated browser flow uses a mocked service;
+the Python settings suite separately verifies authenticated service behavior.
+
 Restore configuration by stopping an idle Worker, renaming its settings/ai.json
 to preserve it, and restarting to use the existing environment settings. To revert
 code, revert this release commit and restart the idle Worker; preserve paid caches.
