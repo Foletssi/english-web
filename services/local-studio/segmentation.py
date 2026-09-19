@@ -1,7 +1,7 @@
 """Semantic boundaries over immutable ASR words. No generated text or timestamps."""
 from contracts import StudioError, finite, validate_transcript
 
-SEGMENTATION_VERSION = 'semantic-boundaries-v1-20260915'
+SEGMENTATION_VERSION = 'semantic-boundaries-v2-20260919'
 SEGMENTATION_PROMPT = '''你是为中国成年英语学习者制作Vlog字幕的英语字幕编辑。只输出JSON。
 输入words含连续整数id、原始text、start、end。contextBefore/contextAfter只读，不能进入输出。
 只能选择词间边界，不得新增、删除、替换、重排英文，不得输出英文改写或自编时间。
@@ -12,6 +12,12 @@ SEGMENTATION_PROMPT = '''你是为中国成年英语学习者制作Vlog字幕的
 speakerChangeBefore=true是可靠说话人变化，必须分开；没有可靠标记不能猜测说话人。
 约0.5秒停顿是候选，不机械切割。通常5至16词、2至7秒；超过20词或8秒优先寻找自然切点，
 这些是软目标，不是配额。无法自然拆开允许超出，不制造孤立功能词行。
+不要把动词、宾语与结果/补足语拆开；可分短语动词即使中间有宾语，也必须保留完整动作。
+逐个检查相邻意群：左边的谓语是否尚未完成、右边是否仍是它的补语，不能只看单行是否像一句话。
+ASR 的大写、标点和停顿不是独立句的充分依据，不能为满足长度目标截断完整语义结构。
+task=review_boundaries 时，candidate 是另一次生成的候选，必须独立复核每一个边界（不只窗口交界），
+结合两侧上下文合并错误切点或移动边界，再输出完整范围；不得盲目接受 candidate。
+复核仍只能选择输入 words 的边界，不能越过可靠说话人变化；无法确认时保留 needsReview=true。
 窗口首尾截断语义单元时标记edgeReview；转录错误、时间矛盾或语义不明时标记needsReview，不修原文。
 严格输出：{"segmentationVersion":1,"segments":[{"firstWordId":0,"lastWordId":7,
 "boundaryReason":"sentence_end","needsReview":false}],"edgeReview":{"start":false,"end":false}}。
@@ -101,7 +107,9 @@ def build_rows(words, payload, video_id, duration):
                      'segmentationNeedsReview': segment['needsReview'] or (order == 0 and payload['edgeReview']['start']) or
                          (order == len(payload['segments']) - 1 and payload['edgeReview']['end']),
                      'wordTimings': [{'text': w['text'].strip(), 'word': w['text'].strip().lower(),
-                                      'rawText': w['text'], 'start': w['start'], 'end': w['end']} for w in selected]})
+                                      'rawText': w['text'], 'start': w['start'], 'end': w['end'],
+                                      **({'speakerChangeBefore': True} if w.get('speakerChangeBefore') is True else {})}
+                                     for w in selected]})
     if ''.join(fragments) != ''.join(w['text'] for w in words):
         raise StudioError('SEGMENTATION_TEXT_CHANGED', '分句重建与原始转录不一致。')
     return validate_transcript(rows, duration)
@@ -118,11 +126,17 @@ def segment_transcript(rows, video_id, duration, request, progress, window_size=
     batches = [words[i:i + window_size] for i in range(0, len(words), window_size)]
     total = len(batches) * 2 - 1
     completed = 0
+    def generate_and_review(name, payload, batch):
+        validator = lambda value: validate_ranges(batch, value)
+        candidate = request(name, payload, validator)
+        return request(f'review-{name}', {**payload, 'task': 'review_boundaries',
+                                        'candidate': candidate}, validator)
+
     for index, batch in enumerate(batches):
         first, last = batch[0]['id'], batch[-1]['id']
         payload = {'words': batch, 'contextBefore': ''.join(w['text'] for w in words[max(0, first-24):first]),
                    'contextAfter': ''.join(w['text'] for w in words[last+1:last+25])}
-        result = request(f'segments-{index:04d}', payload, lambda value: validate_ranges(batch, value))
+        result = generate_and_review(f'segments-{index:04d}', payload, batch)
         current = result['segments']
         if index == 0:
             edges['start'] = result['edgeReview']['start']
@@ -133,7 +147,7 @@ def segment_transcript(rows, video_id, duration, request, progress, window_size=
             seam_payload = {'words': seam,
                 'contextBefore': ''.join(w['text'] for w in words[max(0, seam[0]['id']-24):seam[0]['id']]),
                 'contextAfter': ''.join(w['text'] for w in words[seam[-1]['id']+1:seam[-1]['id']+25])}
-            reviewed = request(f'seam-{index:04d}', seam_payload, lambda value: validate_ranges(seam, value))
+            reviewed = generate_and_review(f'seam-{index:04d}', seam_payload, seam)
             seam_ranges = [dict(s) for s in reviewed['segments']]
             if reviewed['edgeReview']['start']:
                 seam_ranges[0]['needsReview'] = True

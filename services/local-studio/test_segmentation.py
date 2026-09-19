@@ -58,9 +58,62 @@ class SegmentationTests(unittest.TestCase):
             words = payload['words']
             return validator(self.payload(words[0]['id'], words[-1]['id']))
         result = segment_transcript(rows, 'v', 6, request, lambda *a, **kw: None, window_size=2)
-        self.assertEqual(calls, ['segments-0000', 'segments-0001', 'seam-0001', 'segments-0002', 'seam-0002'])
+        self.assertEqual(calls, ['segments-0000', 'review-segments-0000',
+            'segments-0001', 'review-segments-0001', 'seam-0001', 'review-seam-0001',
+            'segments-0002', 'review-segments-0002', 'seam-0002', 'review-seam-0002'])
         self.assertEqual(result[0]['english'], rows[0]['english'])
         self.assertEqual(raw_words(result, 6), self.words())
+
+    def test_internal_boundaries_get_independent_review_before_building_rows(self):
+        for text, split in [('They finally got the laundry set up and fixed.', 4),
+                            ('We had the broken window repaired yesterday.', 4),
+                            ('She put the heavy box down carefully.', 4)]:
+            with self.subTest(text=text):
+                words = [{'id': i, 'text': (' ' if i else '') + word,
+                          'start': i, 'end': i + .8}
+                         for i, word in enumerate(text.split())]
+                rows = build_rows(words, self.payload(0, len(words)-1), 'v', len(words))
+                before = copy.deepcopy(rows)
+                candidate = self.payload(0, split)
+                candidate['segments'].extend(self.payload(split+1, len(words)-1)['segments'])
+                seen = []
+                def request(name, payload, validator):
+                    seen.append(name)
+                    if name == 'segments-0000':
+                        return validator(copy.deepcopy(candidate))
+                    self.assertEqual(payload['task'], 'review_boundaries')
+                    self.assertEqual(payload['candidate'], candidate)
+                    self.assertEqual(payload['words'], words)
+                    return validator(self.payload(0, len(words)-1))
+                result = segment_transcript(rows, 'v', len(words), request, lambda *a, **kw: None)
+                self.assertEqual(seen, ['segments-0000', 'review-segments-0000'])
+                self.assertEqual([r['english'] for r in result], [text])
+                self.assertEqual(raw_words(result, len(words)), words)
+                self.assertEqual(rows, before)
+
+    def test_boundary_review_cannot_drop_words_or_merge_speakers(self):
+        for invalid in ('omitted_word', 'speaker_merge'):
+            with self.subTest(invalid=invalid):
+                words = self.words()
+                words[3]['speakerChangeBefore'] = True
+                candidate = self.payload(0, 2)
+                candidate['segments'].extend(self.payload(3, 5)['segments'])
+                rows = build_rows(words, candidate, 'v', 6)
+                def request(name, payload, validator):
+                    return validator(candidate if name == 'segments-0000' else
+                                     self.payload(0, 4 if invalid == 'omitted_word' else 5))
+                with self.assertRaises(StudioError):
+                    segment_transcript(rows, 'v', 6, request, lambda *a, **kw: None)
+
+    def test_unresolved_review_is_not_reported_as_clean(self):
+        rows = build_rows(self.words(), self.payload(), 'v', 6)
+        def request(name, payload, validator):
+            result = self.payload()
+            if name.startswith('review-'):
+                result['segments'][0]['needsReview'] = True
+            return validator(result)
+        result = segment_transcript(rows, 'v', 6, request, lambda *a, **kw: None)
+        self.assertTrue(result[0]['segmentationNeedsReview'])
 
     def test_completed_empty_selection_is_locked_only_for_fill(self):
         row = {'id': 'v-1', 'english': 'We love you.', 'keyWords': [],
