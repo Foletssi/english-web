@@ -128,6 +128,10 @@ await page.locator('#speakOriginal').click();
 assert.ok(Math.abs(await page.evaluate(() => window.__originalPlayAt) - 1.01) < .001,
   'original pronunciation must seek to the clicked sentence normalized start before playing');
 assert.equal(await page.locator('#dict').evaluate(el => el.classList.contains('show')), false);
+await page.locator('#insightVocab .insight-word').first().click();
+await page.locator('#dict').waitFor({state:'visible', timeout:500});
+assert.equal(await page.locator('#dictWord').innerText(), 'taking', 'current-sentence insight word opens its matching card');
+await page.locator('#dictClose').click();
 await page.evaluate(() => { State.mediaPlayer.play = window.__fixturePlayerPlay; delete window.__fixturePlayerPlay; });
 
 await page.locator('#video').evaluate(video => {
@@ -150,6 +154,11 @@ await page.locator('#transcript [data-i="0"] .teaching-keyword').click();
 await page.locator('#dict.mobile-dict').waitFor({state:'visible', timeout:500});
 assert.equal(await page.locator('#dictWord').innerText(), 'taking', 'mobile subtitle word opens its matching card');
 assert.ok(Math.abs(await page.locator('#video').evaluate(video => video.currentTime) - 4.75) < .05, 'mobile subtitle word click must not jump sentence time');
+await page.locator('#dictClose').click();
+await page.locator('#transcript [data-i="0"] .teaching-keyword').dispatchEvent('pointerup', { pointerType: 'touch', bubbles: true, clientX: 24, clientY: 24 });
+await page.locator('#dict.mobile-dict').waitFor({state:'visible', timeout:500});
+assert.equal(await page.locator('#dictWord').innerText(), 'taking', 'touch pointerup opens subtitle word card');
+assert.ok(Math.abs(await page.locator('#video').evaluate(video => video.currentTime) - 4.75) < .05, 'touch word tap must not jump sentence time');
 await page.locator('#dictClose').click();
 await page.screenshot({ path: 'tmp/local-player-loop-mobile.png', fullPage: true });
 await page.locator('[data-mobile-practice="watch"]').click();
@@ -304,6 +313,11 @@ for(const theme of ['light','dark']){
  await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
  await page.screenshot({path:`tmp/study-word-card-${theme}.png`});
 }
+await page.locator('#dictClose').click();
+await page.locator('#openTeachingWords').click();
+await page.locator('#playerWordList button').first().dispatchEvent('pointerup', { pointerType: 'touch', bubbles: true, clientX: 24, clientY: 24 });
+await page.locator('#dictMeaning').waitFor({state:'visible', timeout:500});
+assert.equal(await page.locator('#dictMeaning').innerText(),'测试核心含义','touching a mobile teaching row opens its actual definition');
 await page.locator('#dictClose').click();
 await page.locator('#openLessonMore').click();
 await page.locator('#autoplayNext').uncheck();

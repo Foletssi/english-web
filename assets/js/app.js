@@ -432,7 +432,10 @@ function renderPlayerWordList(){
   if(meaning){const detail=document.createElement('span');detail.className='learning-word-meaning';detail.textContent=meaning;copy.append(detail)}
   const arrow=document.createElement('span');arrow.className='learning-word-arrow';arrow.textContent='›';arrow.setAttribute('aria-hidden','true');
   button.append(copy,arrow);
-  button.onclick=event=>{event.stopPropagation();$('#playerWordPanel').close();void openDict(button,event,kind==='saved'?entry.source:null);requestAnimationFrame(()=>{$('#dict.show #dictClose')?.focus()})};list.append(button);
+  const openRow=event=>{if(event.type==='click'&&button.__touchAt&&performance.now()-button.__touchAt<700){event.preventDefault();event.stopPropagation();return}event.preventDefault();event.stopPropagation();$('#playerWordPanel').close();void openDict(button,event,kind==='saved'?entry.source:null);requestAnimationFrame(()=>{$('#dict.show #dictClose')?.focus()})};
+  button.addEventListener('pointerup',event=>{if(!['touch','pen'].includes(event.pointerType))return;button.__touchAt=performance.now();openRow(event)},true);
+  button.addEventListener('click',openRow);
+  list.append(button);
  }
 }
 function syncMobilePlayer(){
@@ -641,17 +644,30 @@ async function bootVideo({recovery=null}={}){
    if(video&&src){video.addEventListener('loadeddata',commitQueue);video.addEventListener('playing',commitQueue);State.cancelQueueCommit=()=>{video.removeEventListener('loadeddata',commitQueue);video.removeEventListener('playing',commitQueue)};commitQueue()}
    if(!recovery&&String(State.pendingAutoplayVideoId||'')===String(id)){State.pendingAutoplayVideoId=null;State.playRequested=true;try{await (player?.play?.()||video?.play())}catch(error){if(generation!==State.mediaGeneration)return;State.playRequested=false;setMediaState(error?.name==='NotAllowedError'?'interaction':'video',{code:error?.message})}}
 }
+const DICTIONARY_TRIGGER_SELECTOR='.word-token,.teaching-expression,.insight-word';
 function bindDictionaryClicks(root){
  if(!root||root.__dictionaryClicksBound)return;
  root.__dictionaryClicksBound=true;
- root.addEventListener('click',event=>{const target=event.target.closest?.('.word-token,.teaching-expression');if(!target||!root.contains(target))return;event.preventDefault();event.stopPropagation();void openDict(target,event)},true);
+ let touchTarget=null,touchAt=0;
+ const handle=event=>{const target=event.target.closest?.(DICTIONARY_TRIGGER_SELECTOR);if(!target||!root.contains(target))return;if(event.type==='click'&&touchTarget===target&&performance.now()-touchAt<700){event.preventDefault();event.stopPropagation();return}event.preventDefault();event.stopPropagation();void openDict(target,event)};
+ root.addEventListener('pointerup',event=>{if(!['touch','pen'].includes(event.pointerType))return;const target=event.target.closest?.(DICTIONARY_TRIGGER_SELECTOR);if(!target||!root.contains(target))return;touchTarget=target;touchAt=performance.now();handle(event)},true);
+ root.addEventListener('click',handle,true);
 }
-function renderTranscript(){refreshPlayerCounts();const root=$('#transcript'),favs=new Set(favoriteSentenceIds()),showZh=['bilingual','chinese'].includes(State.captionMode),hidden=State.captionMode==='hidden',cloze=State.practiceMode==='cloze';bindDictionaryClicks(root);if(!DATA.sentences.length){const loading=State.captionsStatus==='loading';root.innerHTML=`<div class="transcript-empty" role="status"><b>${loading?'学习字幕正在加载中':'此视频暂未提供学习字幕'}</b><span>${loading?'':'你仍然可以正常观看视频。'}</span></div>`;return}root.innerHTML=DATA.sentences.map((d,i)=>{const active=i===State.currentSentence,enHTML=cloze?clozeSentenceHTML(d,i,active):tokenHTML(d.en,i,d.wordTimings);return `<div class="line ${active?'active':''} ${cloze?'cloze-line':''} ${hidden?'caption-hidden-line':''}" data-i="${i}"><div class="line-time">${fmt(d.s)}</div><div class="line-en">${hidden?'点击显示这一句':enHTML}</div><div class="line-zh" style="display:${showZh?'block':'none'}">${escapeHtml(d.zh||'')}</div></div>`}).join('');$$('.line').forEach(el=>el.onclick=e=>{if(e.target.closest('.word-token,.teaching-expression')||e.target.closest('.line-actions')||e.target.closest('.cloze-entry'))return;const selection=window.getSelection();if(selection?.toString()&&el.contains(selection.anchorNode)&&el.contains(selection.focusNode))return;const i=+el.dataset.i;if(State.captionMode==='hidden'){const text=el.querySelector('.line-en');text.innerHTML=tokenHTML(DATA.sentences[i].en,i,DATA.sentences[i].wordTimings);return}if(State.practiceMode==='loop'){SentenceLoop?.select(i);return}if(State.practiceMode==='intensive'){State.practiceSelectedIndex=i;State.practiceBoundaryReached=false}$('#video').currentTime=DATA.sentences[i].s+.01;applyCurrent(true)});bindClozeInputs(root)}
+function renderTranscript(){refreshPlayerCounts();const root=$('#transcript'),favs=new Set(favoriteSentenceIds()),showZh=['bilingual','chinese'].includes(State.captionMode),hidden=State.captionMode==='hidden',cloze=State.practiceMode==='cloze';bindDictionaryClicks(root);if(!DATA.sentences.length){const loading=State.captionsStatus==='loading';root.innerHTML=`<div class="transcript-empty" role="status"><b>${loading?'学习字幕正在加载中':'此视频暂未提供学习字幕'}</b><span>${loading?'':'你仍然可以正常观看视频。'}</span></div>`;return}root.innerHTML=DATA.sentences.map((d,i)=>{const active=i===State.currentSentence,enHTML=cloze?clozeSentenceHTML(d,i,active):tokenHTML(d.en,i,d.wordTimings);return `<div class="line ${active?'active':''} ${cloze?'cloze-line':''} ${hidden?'caption-hidden-line':''}" data-i="${i}"><div class="line-time">${fmt(d.s)}</div><div class="line-en">${hidden?'点击显示这一句':enHTML}</div><div class="line-zh" style="display:${showZh?'block':'none'}">${escapeHtml(d.zh||'')}</div></div>`}).join('');$$('.line').forEach(el=>el.onclick=e=>{if(e.target.closest(DICTIONARY_TRIGGER_SELECTOR)||e.target.closest('.line-actions')||e.target.closest('.cloze-entry'))return;const selection=window.getSelection();if(selection?.toString()&&el.contains(selection.anchorNode)&&el.contains(selection.focusNode))return;const i=+el.dataset.i;if(State.captionMode==='hidden'){const text=el.querySelector('.line-en');text.innerHTML=tokenHTML(DATA.sentences[i].en,i,DATA.sentences[i].wordTimings);return}if(State.practiceMode==='loop'){SentenceLoop?.select(i);return}if(State.practiceMode==='intensive'){State.practiceSelectedIndex=i;State.practiceBoundaryReached=false}$('#video').currentTime=DATA.sentences[i].s+.01;applyCurrent(true)});bindClozeInputs(root)}
 function updateSentenceInsight(d){
   const keys=sentenceKeywords(d);
   const vocab=$('#insightVocab');
   const grammar=$('#insightGrammar');
-  if(vocab)vocab.textContent=keys.length?keys.map(key=>{const info=wordInfo(key,d);return `${key}${info?.meaning?`：${info.meaning}`:''}`}).join('；'):'本句暂无重点表达';
+  if(vocab){
+    vocab.replaceChildren();
+    if(!keys.length)vocab.textContent='本句暂无重点表达';
+    else keys.forEach((key,index)=>{
+      const info=wordInfo(key,d),button=document.createElement('button');
+      button.type='button';button.className='insight-word teaching-expression';button.dataset.word=key;button.dataset.idx=String(State.currentSentence);button.textContent=`${key}${info?.meaning?`：${info.meaning}`:''}`;
+      vocab.append(button);if(index<keys.length-1)vocab.append(document.createTextNode('；'));
+    });
+    bindDictionaryClicks(vocab);
+  }
   if(grammar){
     const text=d?.grammar||d?.grammarNote||'';
     grammar.textContent=text||(/\b(have got|used to|going to|would|could|should|there is|there are)\b/i.test(d?.en||'')?'结合上下文理解句型，再进行跟读。':'先理解句子结构，再注意语气和连读。');
@@ -768,8 +784,8 @@ function renderDictionaryCard(target,savedSource=null,{capturePlayback=true}={})
   return true;
 }
 async function openDict(el,e,savedSource=null){
-  const w=el?.dataset?.word;if(!w)return false;
-  const index=Number(el.dataset.idx),target={word:w,index,tokenId:el.dataset.tokenId||'',sentenceId:DATA.sentences[index]?.id||null,clientX:Number(e?.clientX)||0,clientY:Number(e?.clientY)||0};
+  const trigger=el?.closest?.(DICTIONARY_TRIGGER_SELECTOR)||el,w=trigger?.dataset?.word?.trim();if(!w)return false;
+  const index=Number(trigger.dataset.idx),target={word:w,index,tokenId:trigger.dataset.tokenId||'',sentenceId:DATA.sentences[index]?.id||null,clientX:Number(e?.clientX)||0,clientY:Number(e?.clientY)||0};
   const request=State.dictRequestSequence=(State.dictRequestSequence||0)+1,generation=State.mediaGeneration,owner=currentStudentStorageId();
   if(!renderDictionaryCard(target,savedSource))return false;
   if(!savedSource&&State.route.startsWith('/video/')&&!State.teachingReady){
@@ -981,7 +997,7 @@ $$('[data-outline-color]').forEach(x=>x.onclick=()=>{State.settings.outlineColor
 if($('#outlineColorInput'))$('#outlineColorInput').addEventListener('input',e=>{State.settings.outlineColor=e.target.value;applySettings();renderTranscript();if(State.route.startsWith('/video/'))applyCurrent(false)});
 $$('.level-toggle').forEach(x=>x.onclick=()=>{const l=x.dataset.level,a=new Set(State.settings.levels);a.has(l)?a.delete(l):a.add(l);State.settings.levels=[...a];applySettings();renderTranscript();if(State.route.startsWith('/video/'))applyCurrent(false)});
 if($('#dictClose'))$('#dictClose').onclick=closeDict;
-document.addEventListener('click',e=>{if(!e.target.closest('.dict')&&!e.target.closest('.word-token,.teaching-expression'))closeDict()});
+document.addEventListener('click',e=>{if(!e.target.closest('.dict')&&!e.target.closest(DICTIONARY_TRIGGER_SELECTOR))closeDict()});
 if($('#saveWord'))$('#saveWord').onclick=()=>{
  const word=State.word,source=State.dictSource,generation=State.mediaGeneration;if(!word)return;
  void runLearningSave($('#saveWord'),()=>MockAPI.toggleWord(word,source),({active:on})=>{$('#saveWord').classList.toggle('saved',on);$('#saveWord').textContent=on?'✓ 已加入生词本':'＋ 加入生词本';toast(on?`“${word}” 已加入生词本`:`“${word}” 已移出生词本`);renderTranscript();if(State.route.startsWith('/video/'))applyCurrent(false);refreshStats();renderLogic()},()=>State.word===word&&State.dictSource===source&&State.mediaGeneration===generation)
