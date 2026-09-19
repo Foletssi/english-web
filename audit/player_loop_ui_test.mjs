@@ -45,7 +45,7 @@ for (const rows of Object.values(snapshot.sentences)) for (const row of rows) {
     coreMeaningZh:'测试核心含义',contextMeaningZh:'当前句子的具体含义',selectionReasonZh:'词汇语境教学',needsReview:false,reviewStatus:'APPROVED',sourceTextRevision:1}));
 }
 const browser = await chromium.launch({ headless: true, executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
-const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, hasTouch: true });
 await context.route('**/assets/vendor/*.js', route => {
   const body = route.request().url().includes('/hls-') ? 'window.Hls=undefined;' : 'window.supabase={createClient(){return {auth:{getSession:async()=>({data:{session:null},error:null})}}}};';
   return route.fulfill({ status: 200, contentType: 'application/javascript', body });
@@ -134,6 +134,42 @@ assert.equal(await page.locator('#dictWord').innerText(), 'taking', 'current-sen
 await page.locator('#dictClose').click();
 await page.evaluate(() => { State.mediaPlayer.play = window.__fixturePlayerPlay; delete window.__fixturePlayerPlay; });
 
+// Previously uploaded videos can have recorded pronunciation. Exercise the real
+// manifest selector and card binding, not only the speech-synthesis fallback.
+await page.evaluate(() => {
+  const content=ZoContent.snapshot(), row=content.sentences[9001][0];
+  row.wordLookup={schemaVersion:1,sourceEnglish:row.english,sourceTextRevision:1,tokens:[]};
+  const fingerprint='a'.repeat(64);
+  content.videos.find(video=>video.id===9001).voiceManifest={status:'complete',videoId:9001,contentRevision:'r1',items:[{
+    status:'ready',kind:'expression',expressionId:'e0',videoId:9001,sentenceId:row.id,
+    contentRevision:'r1',sourceTextRevision:1,text:'taking',fingerprint,
+    url:'/api/processing/media/11111111-1111-1111-1111-111111111111/voice/'+fingerprint+'.mp3'
+  }]};
+  ZoContent.importSnapshot(content,{type:'fixture.voice'});
+  window.Audio=function(){return {pause(){},removeAttribute(){},load(){},async play(){window.__recordedVoiceUrl=this.src;this.onplaying?.();}}};
+});
+await page.locator('#transcript [data-i="0"] .teaching-keyword').click();
+await page.locator('#dict').waitFor({state:'visible',timeout:1000}).catch(error=>{throw new Error(`${error.message}; recorded-voice card errors: ${pageErrors.join('; ')}`)});
+await page.locator('#dictVoice').click();
+await page.waitForFunction(()=>window.__recordedVoiceUrl?.includes('/voice/'));
+await page.locator('#dictClose').click();
+
+// A synchronous authorization failure must leave the card readable; playback
+// reports a retryable error and recovers after authorization becomes available.
+await page.evaluate(()=>{
+  window.__voiceAuthorize=EastudyCloudContent.syncMediaSession;
+  EastudyCloudContent.syncMediaSession=()=>{throw new Error('fixture authorization unavailable')};
+});
+await page.locator('#transcript [data-i="0"] .teaching-keyword').click();
+await page.locator('#dict').waitFor({state:'visible',timeout:1000});
+await page.locator('#dictVoice').click();
+await page.waitForFunction(()=>document.querySelector('#dictVoice').dataset.state==='error');
+assert.equal(await page.locator('#dict').isVisible(),true,'audio authorization errors cannot hide word details');
+await page.evaluate(()=>{EastudyCloudContent.syncMediaSession=window.__voiceAuthorize;delete window.__recordedVoiceUrl});
+await page.locator('#dictVoice').click();
+await page.waitForFunction(()=>window.__recordedVoiceUrl?.includes('/voice/'));
+await page.locator('#dictClose').click();
+
 await page.locator('#video').evaluate(video => {
   video.pause();
   video.currentTime = 2.5;
@@ -161,6 +197,10 @@ assert.equal(await page.locator('#dictWord').innerText(), 'taking', 'touch point
 assert.ok(Math.abs(await page.locator('#video').evaluate(video => video.currentTime) - 4.75) < .05, 'touch word tap must not jump sentence time');
 await page.locator('#dictClose').click();
 await page.screenshot({ path: 'tmp/local-player-loop-mobile.png', fullPage: true });
+await page.locator('#transcript [data-i="0"] .teaching-keyword').tap();
+await page.waitForTimeout(350);
+assert.equal(await page.locator('#dict').isVisible(),true,'complete touch gesture keeps the subtitle card visible');
+await page.locator('#dictClose').click();
 await page.locator('[data-mobile-practice="watch"]').click();
 await page.setViewportSize({width:320,height:640});
 await page.locator('#video').evaluate(video=>{video.currentTime=6.5;video.dispatchEvent(new Event('timeupdate'))});
@@ -306,7 +346,7 @@ for(const theme of ['light','dark']){
  await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
  await page.screenshot({path:`tmp/study-highlights-${theme}.png`});
 }
-await page.locator('#playerWordList button').first().click();
+await page.locator('#playerWordList .learning-word-term').first().click();
 assert.equal(await page.locator('#dictMeaning').innerText(),'测试核心含义','redesigned teaching row still opens its actual definition');
 await page.locator('#dict').evaluate(async el=>{await Promise.all(el.getAnimations({subtree:true}).map(animation=>animation.finished.catch(()=>{})))});
 for(const theme of ['light','dark']){
@@ -315,7 +355,9 @@ for(const theme of ['light','dark']){
 }
 await page.locator('#dictClose').click();
 await page.locator('#openTeachingWords').click();
-await page.locator('#playerWordList button').first().dispatchEvent('pointerup', { pointerType: 'touch', bubbles: true, clientX: 24, clientY: 24 });
+await page.locator('#playerWordList .learning-word-term').first().tap();
+await page.waitForTimeout(350);
+assert.equal(await page.locator('#dict').isVisible(),true,'complete touch gesture on teaching text keeps the card visible');
 await page.locator('#dictMeaning').waitFor({state:'visible', timeout:500});
 assert.equal(await page.locator('#dictMeaning').innerText(),'测试核心含义','touching a mobile teaching row opens its actual definition');
 await page.locator('#dictClose').click();

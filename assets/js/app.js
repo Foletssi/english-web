@@ -61,7 +61,8 @@ function setDictionaryVoiceState(state){
  button.setAttribute('aria-label',state==='error'?'重试发音':state==='playing'?'正在播放发音':'播放发音');
  status.textContent=({loading:'正在加载发音…',error:'发音加载失败，点击重试'})[state]||'';
 }
-const dictionaryVoice=window.EastudyTeachingVoice.create({authorize:()=>window.EastudyCloud.syncMediaSession('student'),onState:setDictionaryVoiceState});
+async function authorizeDictionaryVoice(){return window.EastudyCloudContent.syncMediaSession('student')}
+const dictionaryVoice=window.EastudyTeachingVoice.create({authorize:authorizeDictionaryVoice,onState:setDictionaryVoiceState});
 function stopDictionaryVoice(){
  dictionaryVoice.stop();
  if(!dictionarySpeech)return;
@@ -86,7 +87,8 @@ function bindDictionaryVoice(text,source){
  if(!item&&!fallback)return;
  // Warm the catalog authorization while the reader sees the definition. This
  // does not prefetch audio or replace the current video's playback ticket.
- if(item)void window.EastudyCloud.syncMediaSession('student').catch(()=>{});
+ // Authorization failure must not prevent the definition card from rendering.
+ if(item)void authorizeDictionaryVoice().catch(()=>{});
  button.onclick=()=>{State.resumeAfterDict=false;SentenceLoop?.pause();$('#video')?.pause();if(item)void dictionaryVoice.play(item);else speakDictionaryText(text)};
 }
 let suspendedPlayback=null;
