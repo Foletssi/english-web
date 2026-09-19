@@ -40,7 +40,7 @@ from ai_settings import SettingsStore, start_ai_settings  # noqa: E402
 from final_output import restore_final_output, save_final_output  # noqa: E402
 
 
-VERSION = '2.5.6'
+VERSION = '2.5.7'
 DEFAULT_ENDPOINT = 'https://ehxqtgakjgqgmghhdmjg.supabase.co/functions/v1/video-processing'
 STAGE_MAP = {'probe': 'PROBE', 'transcode': 'TRANSCODE', 'asr': 'ASR', 'enrich': 'ENRICH'}
 
@@ -81,7 +81,7 @@ def transient_request_error(error):
     if error.status is not None and error.status not in {429, 500, 502, 503, 504, 520, 521, 522, 523, 524}:
         return False
     # Named business errors, including unknown ones, must not inherit HTTP retries.
-    return error.code in {'EDGE_UNAVAILABLE', 'OUTPUT_UNAVAILABLE', 'OUTPUT_STATUS_UNAVAILABLE',
+    return error.code in {'EDGE_UNAVAILABLE', 'EDGE_INVALID_RESPONSE', 'OUTPUT_UNAVAILABLE', 'OUTPUT_STATUS_UNAVAILABLE',
         'DB_STATEMENT_TIMEOUT', 'DB_LOCK_TIMEOUT', 'DB_SERIALIZATION_RETRY', 'DB_DEADLOCK_RETRY'} or (
         error.status is not None and error.code in {
             f'EDGE_HTTP_{error.status}', f'OUTPUT_HTTP_{error.status}', 'REQUEST_FAILED'})

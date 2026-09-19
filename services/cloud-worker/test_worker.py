@@ -31,6 +31,26 @@ class WorkerTests(unittest.TestCase):
                     self.assertEqual(request.call_args_list[0].args[0].data, request.call_args_list[1].args[0].data)
                     self.assertEqual(request.call_args.kwargs['timeout'], 75 if action == 'worker-complete-v2' else 45)
 
+    def test_lost_commit_response_replays_identical_request(self):
+        client = worker.EdgeClient('https://example.test', 'secret', 'worker', {})
+        for body in (b'', b'{"ok":', b'null', b'[]'):
+            with self.subTest(body=body):
+                uncertain, receipt = MagicMock(), MagicMock()
+                uncertain.__enter__.return_value.read.return_value = body
+                receipt.__enter__.return_value.read.return_value = b'{"ok":true,"result":{"status":"REVIEW","revision":9}}'
+                with patch.object(worker.urllib.request, 'urlopen', side_effect=[uncertain, receipt]) as request, patch.object(worker.time, 'sleep'):
+                    result = client.call('worker-complete-v2', runId='run', result={'sentences': ['unchanged']})
+                self.assertEqual(result['result']['revision'], 9)
+                self.assertEqual(request.call_count, 2)
+                self.assertEqual(request.call_args_list[0].args[0].data, request.call_args_list[1].args[0].data)
+        malformed = MagicMock()
+        malformed.__enter__.return_value.read.return_value = b''
+        for action, attempts in [('worker-complete-v2', 3), ('worker-claim', 1)]:
+            with self.subTest(action=action), patch.object(worker.urllib.request, 'urlopen', return_value=malformed) as request, patch.object(worker.time, 'sleep'):
+                with self.assertRaises(worker.ApiError):
+                    client.call(action)
+                self.assertEqual(request.call_count, attempts)
+
     def test_gateway_errors_retry_only_idempotent_actions(self):
         for action in ('worker-complete-v2', 'worker-output-receipt-v2'):
             for body in (b'error code: 520', b'[]', b'null', b'"unavailable"'):
@@ -262,7 +282,7 @@ class WorkerTests(unittest.TestCase):
             pipeline.assert_not_called()
 
     def test_worker_reports_v5_protocol_version(self):
-        self.assertEqual(worker.VERSION, '2.5.6')
+        self.assertEqual(worker.VERSION, '2.5.7')
         source = MODULE.read_text(encoding='utf-8')
         self.assertIn("'learningRepairV5': True", source)
         self.assertIn("'teachingSchemaVersion': 3", source)
