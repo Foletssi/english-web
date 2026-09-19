@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 
 const html=fs.readFileSync('index.html','utf8');
 const app=fs.readFileSync('assets/js/app.js','utf8');
+assert.ok(app.includes('function bindDictionaryClicks(root)'), 'subtitle word cards use stable delegated click handling');
+assert.ok(app.includes('window.speechSynthesis.speak(utterance)'), 'word cards provide browser speech fallback');
+assert.ok(app.indexOf('renderDictionaryCard(target,savedSource)') < app.indexOf("toast('正在加载词卡详情…')"), 'word card renders before remote teaching details finish');
 const css=fs.readFileSync('assets/css/app.css','utf8');
 
 const checks=[

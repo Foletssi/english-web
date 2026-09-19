@@ -53,6 +53,11 @@ await context.route('**/assets/vendor/*.js', route => {
 await context.addInitScript(snapshotValue => {
   localStorage.setItem('zs:platform:content:local:v1', JSON.stringify(snapshotValue));
   localStorage.setItem('zs:user:student-fixture:learningPlan', JSON.stringify({ track: 'cet4', dailyMinutes: 20, onboardingVersion: 1 }));
+  Object.defineProperty(window, 'SpeechSynthesisUtterance', { configurable: true, value: function(text){ this.text = text; } });
+  Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: {
+    cancel(){ window.__speechCancelled = (window.__speechCancelled || 0) + 1; },
+    speak(utterance){ window.__spokenText = utterance.text; utterance.onstart?.(); setTimeout(() => utterance.onend?.(), 0); }
+  } });
   const auth = {
     available: true,
     getContext: async () => ({ user: { id: 'student-fixture' }, profile: { role: 'learner', nickname: '测试学员', phone: '+8613800000000' } }),
@@ -68,7 +73,11 @@ await context.addInitScript(snapshotValue => {
     logStudyEvent: async () => ({ error: null }), upsertProgress: async () => ({ error: null }),
     recordStudyActivity: async () => ({ error: null })
   };
-  const cloud = { syncMediaSession: async () => ({}), clearMediaSession: async () => {} };
+  const cloud = {
+    syncMediaSession: async () => ({}), clearMediaSession: async () => {},
+    // Keep teaching hydration pending: a usable word card must still open immediately.
+    pullVideoTeaching: () => new Promise(() => {})
+  };
   Object.defineProperty(window, 'EastudyAuth', { configurable: true, get: () => auth, set: () => {} });
   Object.defineProperty(window, 'EastudyData', { configurable: true, get: () => data, set: () => {} });
   Object.defineProperty(window, 'EastudyCloudContent', { configurable: true, get: () => cloud, set: () => {} });
@@ -103,6 +112,10 @@ assert.notEqual(keywordStyle.color, 'rgb(0, 0, 0)');
 assert.match(keywordStyle.decoration, /underline/);
 
 await keyword.click();
+await page.locator('#dict').waitFor({state:'visible', timeout:500});
+await page.locator('#dictVoice').waitFor({state:'visible'});
+await page.locator('#dictVoice').click();
+await page.waitForFunction(() => window.__spokenText === 'taking');
 await page.locator('#speakOriginal').waitFor({state:'visible'});
 await page.evaluate(() => {
   document.querySelector('#video').currentTime = 15;
@@ -132,6 +145,10 @@ assert.equal(await page.getByText('录音对比').count(), 0);
 await page.setViewportSize({ width: 375, height: 812 });
 await page.waitForTimeout(250);
 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, 'mobile player must not overflow globally');
+await page.locator('#transcript [data-i="0"] .teaching-keyword').click();
+await page.locator('#dict.mobile-dict').waitFor({state:'visible', timeout:500});
+assert.equal(await page.locator('#dictWord').innerText(), 'taking', 'mobile subtitle word opens its matching card');
+await page.locator('#dictClose').click();
 await page.screenshot({ path: 'tmp/local-player-loop-mobile.png', fullPage: true });
 await page.locator('[data-mobile-practice="watch"]').click();
 await page.setViewportSize({width:320,height:640});
