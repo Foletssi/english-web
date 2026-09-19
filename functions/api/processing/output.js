@@ -48,6 +48,11 @@ export async function onRequestPut({ request, env }) {
   if (!key) return json({ error: 'OUTPUT_NOT_ALLOWED' }, 403);
   const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', data));
   const sha256 = [...digest].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  return storeAsset(env, key, body, data, sha256);
+}
+
+async function storeAsset(env, key, body, data, sha256) {
+  const { p_job_id: job, p_path: path, p_run_id: run } = body;
   let upload, receipt, stored;
   try {
     upload = await env.VIDEO_BUCKET.createMultipartUpload(key, {
@@ -83,6 +88,70 @@ async function acknowledge(env, writeId) {
     } catch { /* Idempotent; an uncertain response is safe to retry. */ }
   }
   return false;
+}
+
+// Bounded memory-only envelope: no archive object or destructive cleanup.
+export async function onRequestPost({ request, env }) {
+  const bucketError = requireBucket(env);
+  if (bucketError) return bucketError;
+  const url = new URL(request.url);
+  const job = url.searchParams.get('job') || '', run = url.searchParams.get('run') || '';
+  const token = url.searchParams.get('token') || '';
+  if (!/^[0-9a-f-]{36}$/i.test(job) || !/^[0-9a-f-]{36}$/i.test(run) ||
+      token.length < 32 || token.length > 256) return json({ error: 'OUTPUT_TOKEN_INVALID' }, 401);
+  const maxBody = 3 * 1024 * 1024;
+  if (Number(request.headers.get('Content-Length')) > maxBody) return json({ error: 'OUTPUT_TOO_LARGE' }, 413);
+  // Stream with a hard cap even when Content-Length is absent or dishonest.
+  const reader = request.body?.getReader();
+  const chunks = []; let length = 0, items;
+  try {
+    if (!reader) throw new Error('empty body');
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      length += value.byteLength;
+      if (length > maxBody) { await reader.cancel(); return json({ error: 'OUTPUT_TOO_LARGE' }, 413); }
+      chunks.push(value);
+    }
+    const bytes = new Uint8Array(length); let offset = 0;
+    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+    items = JSON.parse(new TextDecoder().decode(bytes)).items;
+    if (!Array.isArray(items) || items.length < 1 || items.length > 4) throw new Error('count');
+    const paths = new Set(); let total = 0;
+    // Validate the entire envelope before allocating any storage.
+    for (const item of items) {
+      if (!item || !/^voice\/[a-f0-9]{64}\.mp3$/.test(item.path) || paths.has(item.path) ||
+          !Number.isInteger(item.size) || item.size < 1 || item.size > 1024 * 1024 ||
+          !/^[a-f0-9]{64}$/.test(item.sha256) || typeof item.data !== 'string') throw new Error('item');
+      paths.add(item.path); total += item.size;
+      if (total > 2 * 1024 * 1024) throw new Error('total');
+      const binary = atob(item.data);
+      if (btoa(binary) !== item.data || binary.length !== item.size) throw new Error('base64');
+      item.bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+      const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', item.bytes));
+      if ([...digest].map(b => b.toString(16).padStart(2, '0')).join('') !== item.sha256) throw new Error('digest');
+    }
+  } catch { return json({ error: 'OUTPUT_BATCH_INVALID' }, 400); }
+  try { adminConfig(env); } catch { return json({ error: 'OUTPUT_SERVICE_UNAVAILABLE' }, 503); }
+  const results = [];
+  for (const item of items) {
+    const body = { p_job_id: job, p_run_id: run, p_token: token, p_path: item.path };
+    try {
+      const resolved = await serviceRpc(env, 'resolve_processing_output_v2', body);
+      if (!resolved?.object_key) { results.push({ ok: false, path: item.path, error: 'OUTPUT_NOT_ALLOWED' }); continue; }
+      const existing = await env.VIDEO_BUCKET.head(resolved.object_key);
+      if (existing) {
+        results.push(existing.size === item.size && existing.customMetadata?.sha256 === item.sha256
+          ? { ok: true, path: item.path, size: item.size, sha256: item.sha256, etag: existing.etag }
+          : { ok: false, path: item.path, error: 'OUTPUT_RECEIPT_CONFLICT' });
+        continue;
+      }
+      const response = await storeAsset(env, resolved.object_key, body, item.bytes, item.sha256);
+      const result = await response.json();
+      results.push({ ...result, ok: response.ok && result.ok === true, path: item.path });
+    } catch { results.push({ ok: false, path: item.path, error: 'OUTPUT_STATUS_UNAVAILABLE' }); }
+  }
+  return json({ ok: true, results });
 }
 
 // The current run's resolver derives the object key; callers never supply R2 keys.

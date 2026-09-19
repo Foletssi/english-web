@@ -16,6 +16,21 @@ const rows = [sentence('s1', '😀 Go, go!'), sentence('s2', 'We can.')];
 const report = {pairId: 'p0', sentenceIds: ['s1', 's2'], sourceTextRevisions: [2, 2], status: 'no_eligible_source', reasonZh: '两句只有基础呼语和情态表达，没有进阶用法。'};
 rows.forEach(row => row.coverageAnalysis.pairs.push(clone(report)));
 validateTeachingCoverage(rows);
+const current = clone(rows);
+for (const row of current) {
+  Object.assign(row.translationAnalysis, {promptVersion: 'context-lookup-v3-20260919', reviewVersion: 'context-lookup-review-v3-20260919'});
+  Object.assign(row.coverageAnalysis, {promptVersion: 'adjacent-coverage-v2-20260916', reviewVersion: 'adult-selection-review-v2-20260916'});
+  row.teachingAnalysis.reviewVersion = row.coverageAnalysis.reviewVersion;
+}
+validateTeachingCoverage(current);
+for (const mutate of [
+  r => r.translationAnalysis.reviewVersion = 'context-lookup-review-v2-20260916',
+  r => r.translationAnalysis.promptVersion = 'future',
+  r => r.coverageAnalysis.reviewVersion = 'adult-selection-review-v1-20260916',
+  r => r.teachingAnalysis.reviewVersion = 'adult-selection-review-v1-20260916',
+]) {
+  const bad = clone(current[0]); mutate(bad); assert.throws(() => validateTeachingDetails(bad));
+}
 assert.equal(rows[0].wordLookup.tokens[0].start, 3, 'UTF16 emoji counts twice');
 for (const mutate of [
   r => r.wordLookup.tokens[1].tokenId = 't0',

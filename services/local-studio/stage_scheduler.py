@@ -1,6 +1,8 @@
 """Small dependency scheduler: ready stages only, bounded resources, cancellation."""
 import os
 import subprocess
+import threading
+from contextlib import contextmanager
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from contextvars import ContextVar, copy_context
 from dataclasses import dataclass
@@ -8,10 +10,37 @@ from dataclasses import dataclass
 active_stage = ContextVar('active_processing_stage', default=None)
 
 
-def execute_stage(stage, dependencies):
+_resource_limits = {name: threading.BoundedSemaphore(1) for name in ('cpu_media', 'gpu', 'ai', 'network')}
+_resource_held = threading.local()
+
+
+@contextmanager
+def resource_slot(resource, cancelled=None):
+    held = getattr(_resource_held, 'names', set())
+    semaphore = _resource_limits.get(resource)
+    def check():
+        if cancelled and cancelled.is_set():
+            raise RuntimeError('JOB_LEASE_LOST_OR_CANCELLED')
+    check()
+    if semaphore is None or resource in held:
+        yield
+        return
+    while not semaphore.acquire(timeout=.25):
+        check()
+    try:
+        check()
+        _resource_held.names = held | {resource}
+        yield
+    finally:
+        _resource_held.names = held
+        semaphore.release()
+
+
+def execute_stage(stage, dependencies, cancelled=None):
     token = active_stage.set(stage.name)
     try:
-        return stage.execute(dependencies)
+        with resource_slot(stage.resource, cancelled):
+            return stage.execute(dependencies)
     finally:
         active_stage.reset(token)
 
@@ -73,7 +102,7 @@ def run_stages(stages, cancelled=None, observe=None, workers=None):
                     continue
                 event(name, 'RUNNING')
                 deps = {key: results[key] for key in stage.needs}
-                future = pool.submit(copy_context().run, execute_stage, stage, deps)
+                future = pool.submit(copy_context().run, execute_stage, stage, deps, cancelled)
                 running[future] = stage
                 occupied.add(stage.resource)
                 del pending[name]

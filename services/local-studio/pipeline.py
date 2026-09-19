@@ -7,7 +7,7 @@ from contracts import StudioError, validate_transcript
 from media_tools import extract_audio, make_cover, make_cover_variants, probe, transcode
 from teaching_completion import complete_teaching
 from ai_tools import check_ai_cancelled
-from stage_scheduler import Stage, run_stages
+from stage_scheduler import Stage, run_stages, resource_slot
 from media_artifacts import restore_media, save_media
 from media_tools import ladder
 
@@ -54,7 +54,10 @@ def process_job(store, job_id, source_path, cover_path, ai_config, media_root,
         else:
             progress('probe', 10, '已复用素材检查结果')
         progress('asr', 15, '正在从原视频提取英语音轨')
-        audio = extract_audio(source_path, output / 'audio.wav', source_identity=source_identity)
+        if execution.get('preflight_output'):
+            execution['preflight_output']()
+        with resource_slot('cpu_media', ai_config.get('cancelled')):
+            audio = extract_audio(source_path, output / 'audio.wav', source_identity=source_identity)
         profile = asr_profile()
 
         def media(_deps):
@@ -94,10 +97,12 @@ def process_job(store, job_id, source_path, cover_path, ai_config, media_root,
                 'wordsPerMinute': round(word_count * 60 / info['duration']),
             }, ai_config, progress, cache_dir=checkpoints / 'ai')
             learning, completion = complete_teaching(learning, ai_config, progress, checkpoints / 'teaching-completion')
+            if execution.get('validate_teaching'):
+                execution['validate_teaching'](learning)
             return learning, metadata, [*provenance, *completion]
 
         # Reject an unavailable output channel before starting paid teaching work.
-        teaching_needs = ('asr', 'upload_media') if execution.get('upload_media') else ('asr',)
+        teaching_needs = ('asr', 'upload_media') if execution.get('upload_media') and not execution.get('preflight_output') else ('asr',)
         stages = [Stage('media', (), 'cpu_media', media), Stage('asr', (), 'gpu', asr),
                   Stage('teaching', teaching_needs, 'ai', teaching)]
         if execution.get('voice'):

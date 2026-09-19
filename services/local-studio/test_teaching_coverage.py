@@ -1,4 +1,8 @@
 import copy
+import json
+import threading
+from contextvars import ContextVar
+from unittest.mock import patch
 import tempfile
 import unittest
 
@@ -21,6 +25,34 @@ def highlight(row):
 
 
 class CoverageTests(unittest.TestCase):
+    def test_selection_concurrency_preserves_context_payloads_cache_and_order(self):
+        original = rows(32)
+        for row in original:
+            highlight(row)
+        calls = []
+        trace = ContextVar('coverage-test-trace', default='missing')
+        token = trace.set('job-trace')
+        self.addCleanup(trace.reset, token)
+        barrier = threading.Barrier(2)
+        def request(prompt, payload):
+            self.assertEqual(trace.get(), 'job-trace')
+            calls.append(json.dumps([prompt, payload], sort_keys=True))
+            barrier.wait(timeout=3)
+            return self.answer(prompt, payload)
+        with tempfile.TemporaryDirectory() as cache, patch.dict('os.environ', EASTUDY_AI_CONCURRENCY='2'):
+            checked, provenance = complete_coverage(original, cache_dir=cache, request=request)
+            complete_coverage(original, cache_dir=cache, request=request)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual([p['stage'] for p in provenance], ['selection-review-0000', 'selection-review-0016'])
+        serial_calls = []
+        def serial_request(prompt, payload):
+            serial_calls.append(json.dumps([prompt, payload], sort_keys=True))
+            return self.answer(prompt, payload)
+        with patch.dict('os.environ', EASTUDY_AI_CONCURRENCY='1'):
+            serial, _ = complete_coverage(original, request=serial_request)
+        self.assertEqual(checked, serial)
+        self.assertCountEqual(calls, serial_calls)
+
     def answer(self, prompt, payload):
         result = {'teachingSchemaVersion': 3, 'sentences': copy.deepcopy(payload['sentences'])}
         if payload.get('pairs'):

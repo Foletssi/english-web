@@ -1,4 +1,5 @@
 import argparse
+import base64
 import hashlib
 import http.client
 import json
@@ -21,6 +22,7 @@ ROOT = Path(__file__).resolve().parents[2]
 LOCAL_STUDIO = ROOT / 'services' / 'local-studio'
 sys.path.insert(0, str(LOCAL_STUDIO))
 
+from stage_scheduler import resource_slot, parallel_workers
 from pipeline import process_job  # noqa: E402
 from ai_tools import prepare_asr_model, repair_learning  # noqa: E402
 from ai_usage import job_usage_config, summarize_usage  # noqa: E402
@@ -38,7 +40,7 @@ from ai_settings import SettingsStore, start_ai_settings  # noqa: E402
 from final_output import restore_final_output, save_final_output  # noqa: E402
 
 
-VERSION = '2.5.5'
+VERSION = '2.5.6'
 DEFAULT_ENDPOINT = 'https://ehxqtgakjgqgmghhdmjg.supabase.co/functions/v1/video-processing'
 STAGE_MAP = {'probe': 'PROBE', 'transcode': 'TRANSCODE', 'asr': 'ASR', 'enrich': 'ENRICH'}
 
@@ -79,9 +81,15 @@ def transient_request_error(error):
     if error.status is not None and error.status not in {429, 500, 502, 503, 504, 520, 521, 522, 523, 524}:
         return False
     # Named business errors, including unknown ones, must not inherit HTTP retries.
-    return error.code in {'EDGE_UNAVAILABLE', 'OUTPUT_UNAVAILABLE', 'OUTPUT_STATUS_UNAVAILABLE'} or (
+    return error.code in {'EDGE_UNAVAILABLE', 'OUTPUT_UNAVAILABLE', 'OUTPUT_STATUS_UNAVAILABLE',
+        'DB_STATEMENT_TIMEOUT', 'DB_LOCK_TIMEOUT', 'DB_SERIALIZATION_RETRY', 'DB_DEADLOCK_RETRY'} or (
         error.status is not None and error.code in {
             f'EDGE_HTTP_{error.status}', f'OUTPUT_HTTP_{error.status}', 'REQUEST_FAILED'})
+
+
+def recoverable_output_error(error):
+    return transient_request_error(error) or error.code in {
+        'OUTPUT_ACK_PENDING', 'OUTPUT_UPLOAD_RETRY', 'OUTPUT_INVALID_RESPONSE'}
 
 
 def request_json(request, timeout, prefix='EDGE', retryable=False):
@@ -122,9 +130,10 @@ class EdgeClient:
         request = urllib.request.Request(self.endpoint, data=json.dumps(payload).encode('utf-8'), method='POST', headers={
             'Content-Type': 'application/json', 'x-worker-secret': self.secret,
             'User-Agent': f'EastudyCloudWorker/{VERSION}'})
-        timeout = 15 if 'heartbeat' in action else 45
+        timeout = 15 if 'heartbeat' in action else (75 if action == 'worker-complete-v2' else 45)
         return request_json(request, timeout, retryable=action in {
-            'worker-telemetry-v2', 'worker-output-receipt-v2', 'worker-complete-v2'})
+            'worker-telemetry-v2', 'worker-output-receipt-v2', 'worker-complete-v2',
+            'worker-validate-teaching-v2'})
 
     def upload(self, base_url, token, job_id, path, source):
         url = base_url + '&path=' + urllib.parse.quote(path, safe='/')
@@ -149,9 +158,61 @@ class EdgeClient:
                         return status
                 return request_json(request, 300, 'OUTPUT')
             except ApiError as error:
-                recoverable = transient_request_error(error) or error.code in {
-                    'OUTPUT_ACK_PENDING', 'OUTPUT_UPLOAD_RETRY', 'OUTPUT_INVALID_RESPONSE'}
+                recoverable = recoverable_output_error(error)
                 if not recoverable or attempt == 2:
+                    raise
+                time.sleep(2 ** attempt)
+
+
+    def upload_batch(self, base_url, items):
+        if not 1 <= len(items) <= 4:
+            raise ApiError('OUTPUT_BATCH_LIMIT')
+        pending = {}
+        for relative, source in items:
+            if (not re.fullmatch(r'voice/[a-f0-9]{64}\.mp3', relative)
+                    or relative in pending):
+                raise ApiError('OUTPUT_PATH_INVALID')
+            if not 0 < Path(source).stat().st_size <= 1024 ** 2:
+                raise ApiError('OUTPUT_SIZE_LIMIT')
+            data = Path(source).read_bytes()
+            pending[relative] = {'path': relative, 'size': len(data),
+                'sha256': hashlib.sha256(data).hexdigest(),
+                'data': base64.b64encode(data).decode('ascii')}
+        if sum(item['size'] for item in pending.values()) > 2 * 1024 ** 2:
+            raise ApiError('OUTPUT_BATCH_LIMIT')
+        accepted = {}
+        for attempt in range(3):
+            request = urllib.request.Request(base_url,
+                data=json.dumps({'items': list(pending.values())}).encode('utf-8'),
+                method='POST', headers={'Content-Type': 'application/json',
+                    'User-Agent': f'EastudyCloudWorker/{VERSION}'})
+            try:
+                response = request_json(request, 300, 'OUTPUT')
+                rows = response.get('results')
+                if (not isinstance(rows, list) or len(rows) != len(pending)
+                        or any(not isinstance(row, dict) or not isinstance(row.get('path'), str) for row in rows)
+                        or {row.get('path') for row in rows} != set(pending)):
+                    raise ApiError('OUTPUT_RECEIPT_MISMATCH')
+                failures = []
+                for row in rows:
+                    expected = pending[row['path']]
+                    if row.get('ok'):
+                        if (row.get('size') != expected['size'] or row.get('sha256') != expected['sha256']
+                                or not row.get('etag')):
+                            raise ApiError('OUTPUT_RECEIPT_MISMATCH')
+                    else:
+                        failures.append(ApiError(row.get('error') or 'OUTPUT_UPLOAD_RETRY'))
+                # Validate the entire response before accepting any receipt.
+                for row in rows:
+                    if row.get('ok'):
+                        accepted[row['path']] = row
+                        del pending[row['path']]
+                if not pending:
+                    return [accepted[relative] for relative, _ in items]
+                failure = next((error for error in failures if not recoverable_output_error(error)), failures[0])
+                raise failure
+            except ApiError as error:
+                if attempt == 2 or not recoverable_output_error(error):
                     raise
                 time.sleep(2 ** attempt)
 
@@ -281,6 +342,11 @@ def upload_concurrency():
 
 
 def upload_assets(client, lease, output, assets, cancelled=None):
+    with resource_slot('network', cancelled):
+        return _upload_assets(client, lease, output, assets, cancelled)
+
+
+def _upload_assets(client, lease, output, assets, cancelled=None):
     job_id = lease['job']['id']
     ordered = sorted(assets)
     if not ordered:
@@ -288,23 +354,61 @@ def upload_assets(client, lease, output, assets, cancelled=None):
     manifest = {}
     last_progress = None
 
-    def upload_one(path):
+    def check_cancelled():
         if cancelled and cancelled.is_set():
             raise ApiError('JOB_LEASE_LOST_OR_CANCELLED')
+
+    units, batch, batch_size = [], [], 0
+    for path in ordered:
         relative = path.relative_to(output).as_posix()
         if path.is_symlink() or not path.resolve().is_relative_to(Path(output).resolve()):
             raise ApiError('OUTPUT_PATH_INVALID')
-        if not 0 < path.stat().st_size <= 15 * 1024 ** 2:
+        size = path.stat().st_size
+        if not 0 < size <= 15 * 1024 ** 2:
             raise ApiError('OUTPUT_SIZE_LIMIT')
-        receipt = client.upload(lease['outputUrl'], lease['token'], job_id, relative, path)
-        if int(receipt['size']) != path.stat().st_size or str(receipt['sha256']) != file_sha256(path):
-            raise ApiError('OUTPUT_RECEIPT_MISMATCH')
-        return relative, receipt
+        eligible = (run_id(lease) and callable(getattr(client, 'upload_batch', None))
+                    and re.fullmatch(r'voice/[a-f0-9]{64}\.mp3', relative) and size <= 1024 ** 2)
+        if batch and (not eligible or len(batch) == 4 or batch_size + size > 2 * 1024 ** 2):
+            units.append((True, batch))
+            batch, batch_size = [], 0
+        if eligible:
+            batch.append((relative, path))
+            batch_size += size
+        else:
+            units.append((False, [(relative, path)]))
+    if batch:
+        units.append((True, batch))
 
-    with ThreadPoolExecutor(max_workers=min(upload_concurrency(), len(ordered))) as executor:
-        remaining = iter(ordered)
-        futures = {executor.submit(upload_one, path): path for path in
-                   [next(remaining) for _ in range(min(upload_concurrency(), len(ordered))) ]}
+    def upload_unit(unit):
+        check_cancelled()
+        is_batch, items = unit
+        rows = (client.upload_batch(lease['outputUrl'], items) if is_batch else
+                [client.upload(lease['outputUrl'], lease['token'], job_id, *items[0])])
+        if len(rows) != len(items):
+            raise ApiError('OUTPUT_RECEIPT_MISMATCH')
+        for (relative, path), receipt in zip(items, rows):
+            if (int(receipt['size']) != path.stat().st_size or str(receipt['sha256']) != file_sha256(path)
+                    or (is_batch and receipt.get('path') != relative)):
+                raise ApiError('OUTPUT_RECEIPT_MISMATCH')
+        result = []
+        for (relative, _), receipt in zip(items, rows):
+            check_cancelled()
+            item = {'path': relative, 'size': int(receipt['size']), 'sha256': str(receipt['sha256'])}
+            if run_id(lease):
+                client.call('worker-output-receipt-v2', jobId=job_id, token=lease['token'],
+                            runId=run_id(lease), path=relative, size=item['size'],
+                            sha256=item['sha256'], etag=str(receipt['etag']))
+            check_cancelled()
+            receipt_key = hashlib.sha256((relative + ':' + item['sha256']).encode()).hexdigest()
+            atomic_json(Path(output) / '_upload_receipts' / (receipt_key + '.json'),
+                        {'jobId': job_id, 'runId': run_id(lease), **item, 'etag': str(receipt['etag'])})
+            result.append(item)
+        return result
+
+    with ThreadPoolExecutor(max_workers=min(upload_concurrency(), len(units))) as executor:
+        remaining = iter(units)
+        futures = {executor.submit(upload_unit, unit): unit for unit in
+                   [next(remaining) for _ in range(min(upload_concurrency(), len(units))) ]}
         completed = 0
         while futures:
             if cancelled and cancelled.is_set():
@@ -316,20 +420,14 @@ def upload_assets(client, lease, output, assets, cancelled=None):
                 continue
             future = next(iter(finished))
             futures.pop(future)
-            relative, receipt = future.result()
-            completed += 1
-            item = {'path': relative, 'size': int(receipt['size']), 'sha256': str(receipt['sha256'])}
-            manifest[relative] = item
-            if run_id(lease):
-                client.call('worker-output-receipt-v2', jobId=job_id, token=lease['token'],
-                            runId=run_id(lease), path=relative, size=item['size'],
-                            sha256=item['sha256'], etag=str(receipt['etag']))
-            receipt_key = hashlib.sha256((relative + ':' + item['sha256']).encode()).hexdigest()
-            atomic_json(Path(output) / '_upload_receipts' / (receipt_key + '.json'),
-                        {'jobId': job_id, 'runId': run_id(lease), **item, 'etag': str(receipt['etag'])})
+            results = future.result()
+            completed += len(results)
+            for item in results:
+                manifest[item['path']] = item
+            relative = results[-1]['path']
             following = next(remaining, None)
             if following is not None:
-                futures[executor.submit(upload_one, following)] = following
+                futures[executor.submit(upload_unit, following)] = following
             now = time.monotonic()
             if last_progress is None or completed == len(ordered) or now - last_progress >= 5:
                 progress = 96 + int(3 * completed / len(ordered))
@@ -493,7 +591,28 @@ def selected_assets(output, result):
     return assets
 
 
+def validate_teaching(client, lease, rows):
+    if not run_id(lease):
+        raise ApiError('TEACHING_VALIDATION_PROTOCOL_REQUIRED')
+    response = client.call('worker-validate-teaching-v2', jobId=lease['job']['id'],
+        runId=run_id(lease), token=lease['token'], sentences=rows)
+    value = response.get('validation')
+    if not isinstance(value, dict) or value.get('valid') is not True:
+        raise ApiError('TEACHING_VALIDATION_FAILED')
+    return value
+
+
+def preflight_output(lease):
+    return request_json(urllib.request.Request(lease['outputUrl'] + '&path=cover.webp',
+        method='GET', headers={'User-Agent': f'EastudyCloudWorker/{VERSION}'}), 30, 'OUTPUT')
+
+
 def prepare_voice(client, lease, rows, output, cancelled):
+    with resource_slot('gpu', cancelled):
+        return _prepare_voice(client, lease, rows, output, cancelled)
+
+
+def _prepare_voice(client, lease, rows, output, cancelled):
     video_id = str(lease['job'].get('video_id') or '')
     if not video_id or not run_id(lease):
         raise ApiError('VOICE_JOB_IDENTITY_REQUIRED')
@@ -611,10 +730,13 @@ def process_lease(client, lease, local_inputs=None, ai_settings=None):
                     raise ApiError('JOB_LEASE_LOST_OR_CANCELLED')
                 report_progress(client, lease, 'ENRICH', min(99, int(progress)), message, metrics)
             repair_mode = str(job_input.get('mode') or 'fill_missing')
-            repaired, provenance = repair_learning(rows, ai_config, repair_progress,
-                                                   work / 'learning-repair-cache', repair_mode)
-            repaired, completion_provenance = complete_teaching(
-                repaired, ai_config, repair_progress, work / 'teaching-completion-cache')
+            preflight_output(lease)
+            with resource_slot('ai', cancelled):
+                repaired, provenance = repair_learning(rows, ai_config, repair_progress,
+                                                       work / 'learning-repair-cache', repair_mode)
+                repaired, completion_provenance = complete_teaching(
+                    repaired, ai_config, repair_progress, work / 'teaching-completion-cache')
+            validate_teaching(client, lease, repaired)
             provenance.extend(completion_provenance)
             if cancelled.is_set():
                 raise ApiError('JOB_LEASE_LOST_OR_CANCELLED')
@@ -659,6 +781,7 @@ def process_lease(client, lease, local_inputs=None, ai_settings=None):
         restored = restore_final_output(job_root, lease['job'], source, cover, current_run, selected_assets)
         if restored is not None:
             output, final = restored
+            validate_teaching(client, lease, final['sentences'])
             lease['_resume'] = {**lease['_resume'], 'verified': True, 'phase': 'final'}
             report_progress(client, lease, 'LOCAL_UPLOAD', 96, '正在续传已完成的成品，无需重新生成')
             manifest = upload_assets(client, lease, output, selected_assets(output, final), cancelled)
@@ -687,6 +810,8 @@ def process_lease(client, lease, local_inputs=None, ai_settings=None):
                 local_inputs.stage(job_id, current_run, stage, state)
 
         execution = {'cache_root': job_root / 'artifacts', 'observe': observe,
+            'preflight_output': lambda: preflight_output(lease),
+            'validate_teaching': lambda rows: validate_teaching(client, lease, rows),
             'voice': lambda rows, output: prepare_voice(client, lease, rows, output, cancelled),
             'upload_media': upload_media,
             'upload_voice': lambda voice, output: upload_assets(client, lease, output, voice_assets(output, voice), cancelled)}
@@ -735,9 +860,53 @@ def process_lease(client, lease, local_inputs=None, ai_settings=None):
                 ai_config['usageLogPath'], ai_config['runId']), ensure_ascii=False), flush=True)
 
 
+def worker_loop(client, caps, local_inputs, ai_settings, once=False):
+    limit = min(2, parallel_workers())
+    running = set()
+    with ThreadPoolExecutor(max_workers=limit, thread_name_prefix='processing-job') as pool:
+        while True:
+            try:
+                finished = {future for future in running if future.done()}
+                for future in finished:
+                    running.remove(future)
+                    future.result()
+                if len(running) >= limit:
+                    wait(running, timeout=.25, return_when=FIRST_COMPLETED)
+                    continue
+                configured = ai_settings.snapshot()
+                caps['deepseek'] = all(configured.get(k) for k in ('baseUrl', 'model', 'apiKey'))
+                if not all(caps.get(name) for name in ('ffmpeg', 'whisper', 'deepseek', 'teachingVoiceV1')):
+                    client.call('worker-heartbeat')
+                    if once:
+                        return 2
+                    time.sleep(60)
+                    caps = capabilities()
+                    caps['localInputV1'] = local_inputs is not None
+                    client.capabilities = caps
+                    continue
+                lease = client.call('worker-claim-local-v1') if caps.get('localInputV1') else {}
+                if not lease.get('job'):
+                    lease = client.call('worker-claim')
+                if lease.get('job'):
+                    running.add(pool.submit(process_lease, client, lease, local_inputs, ai_settings))
+                elif running:
+                    wait(running, timeout=1, return_when=FIRST_COMPLETED)
+                elif once:
+                    return 0
+                else:
+                    time.sleep(15)
+            except KeyboardInterrupt:
+                return 0
+            except Exception as error:
+                print(f'[poll] {error}', flush=True)
+                if once:
+                    return 1
+                time.sleep(20)
+
+
 def main():
     parser = argparse.ArgumentParser(description='Eastudy production R2/Supabase desktop video worker')
-    parser.add_argument('--once', action='store_true', help='poll once and exit')
+    parser.add_argument('--once', action='store_true', help='drain available jobs and exit when idle')
     parser.add_argument('--check', action='store_true', help='report local readiness and exit')
     args = parser.parse_args()
     configure_ai_environment()
@@ -779,36 +948,7 @@ def main():
         client.call('worker-heartbeat')
     except Exception as error:
         print(f'[startup-heartbeat] {error}', flush=True)
-    while True:
-        try:
-            configured = ai_settings.snapshot()
-            caps['deepseek'] = all(configured.get(k) for k in ('baseUrl', 'model', 'apiKey'))
-            if not all(caps.get(name) for name in ('ffmpeg', 'whisper', 'deepseek', 'teachingVoiceV1')):
-                client.call('worker-heartbeat')
-                if args.once:
-                    return 2
-                time.sleep(60)
-                caps = capabilities()
-                caps['localInputV1'] = local_inputs is not None
-                client.capabilities = caps
-                continue
-            lease = client.call('worker-claim-local-v1') if caps.get('localInputV1') else {}
-            if not lease.get('job'):
-                lease = client.call('worker-claim')
-            if lease.get('job'):
-                process_lease(client, lease, local_inputs, ai_settings)
-            elif args.once:
-                return 0
-            else:
-                time.sleep(15)
-        except KeyboardInterrupt:
-            return 0
-        except Exception as error:
-            print(f'[poll] {error}', flush=True)
-            if args.once:
-                return 1
-            time.sleep(20)
-
+    return worker_loop(client, caps, local_inputs, ai_settings, once=args.once)
 
 if __name__ == '__main__':
     raise SystemExit(main())

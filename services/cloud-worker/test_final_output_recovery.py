@@ -61,6 +61,7 @@ class FinalOutputRecoveryTests(unittest.TestCase):
         self.assertTrue(self.checkpoint.is_file())
         self.client.reset_mock()
         self.client.call.side_effect = None
+        self.client.call.return_value = {"validation": {"valid": True}}
         self.pipeline.reset_mock()
         self.retry = {key: copy.deepcopy(self.lease[key])
                       for key in ('job', 'downloadUrl', 'token')}

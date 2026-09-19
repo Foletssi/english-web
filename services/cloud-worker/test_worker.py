@@ -15,6 +15,22 @@ SPEC.loader.exec_module(worker)
 
 
 class WorkerTests(unittest.TestCase):
+    def test_database_transaction_failures_retry_same_payload(self):
+        for code in ('DB_STATEMENT_TIMEOUT', 'DB_LOCK_TIMEOUT', 'DB_SERIALIZATION_RETRY', 'DB_DEADLOCK_RETRY'):
+            for action in ('worker-complete-v2', 'worker-validate-teaching-v2'):
+                with self.subTest(code=code, action=action):
+                    client = worker.EdgeClient('https://example.test', 'secret', 'worker', {})
+                    error = worker.urllib.error.HTTPError(client.endpoint, 500, 'failed', {},
+                        io.BytesIO(json.dumps({'error': 'SUPABASE_503:' + code}).encode()))
+                    self.addCleanup(error.close)
+                    response = MagicMock()
+                    response.__enter__.return_value.read.return_value = b'{"ok":true}'
+                    with patch.object(worker.urllib.request, 'urlopen', side_effect=[error, response]) as request, patch.object(worker.time, 'sleep'):
+                        self.assertTrue(client.call(action, result={'unchanged': True})['ok'])
+                    self.assertEqual(request.call_count, 2)
+                    self.assertEqual(request.call_args_list[0].args[0].data, request.call_args_list[1].args[0].data)
+                    self.assertEqual(request.call_args.kwargs['timeout'], 75 if action == 'worker-complete-v2' else 45)
+
     def test_gateway_errors_retry_only_idempotent_actions(self):
         for action in ('worker-complete-v2', 'worker-output-receipt-v2'):
             for body in (b'error code: 520', b'[]', b'null', b'"unavailable"'):
@@ -246,7 +262,7 @@ class WorkerTests(unittest.TestCase):
             pipeline.assert_not_called()
 
     def test_worker_reports_v5_protocol_version(self):
-        self.assertEqual(worker.VERSION, '2.5.5')
+        self.assertEqual(worker.VERSION, '2.5.6')
         source = MODULE.read_text(encoding='utf-8')
         self.assertIn("'learningRepairV5': True", source)
         self.assertIn("'teachingSchemaVersion': 3", source)
@@ -264,7 +280,7 @@ class WorkerTests(unittest.TestCase):
                 return {'size': source.stat().st_size, 'sha256': worker.file_sha256(source), 'etag': path}
             def call(self, action, **values):
                 calls.append((action, values))
-                return {'ok': True}
+                return {'ok': True, 'validation': {'valid': True}}
         lease = {'job': {'id': '00000000-0000-0000-0000-000000000001',
                          'run_id': '00000000-0000-0000-0000-000000000002'},
                  'token': 'x' * 32, 'outputUrl': 'https://example.test/upload?job=one'}
@@ -308,7 +324,7 @@ class WorkerTests(unittest.TestCase):
         class Client:
             def call(self, action, **values):
                 calls.append((action, values))
-                return {'ok': True}
+                return {'ok': True, 'validation': {'valid': True}}
         lease = {'job': {'id': '00000000-0000-0000-0000-000000000001',
                          'run_id': '00000000-0000-0000-0000-000000000002'}, 'token': 'x' * 32}
         worker.report_progress(Client(), lease, 'ASR', 55, '识别', {'current': 1, 'total': 10})
@@ -427,7 +443,7 @@ class WorkerTests(unittest.TestCase):
             self.assertEqual(config['detailReviewMode'], 'full')
             settings.snapshot.return_value['model'] = 'later-model'
             self.assertEqual(config['model'], 'new-model')
-            self.assertEqual(set(execution), {'cache_root', 'observe', 'voice', 'upload_media', 'upload_voice'})
+            self.assertEqual(set(execution), {'cache_root', 'observe', 'voice', 'upload_media', 'upload_voice', 'preflight_output', 'validate_teaching'})
             return {'status': 'REVIEW', 'result': {'video': {}, 'sentences': [], '_uploadedManifest': [],
                 'evidence': {'aiUsage': worker.summarize_usage(config['usageLogPath'], config['runId'])}}}
         with tempfile.TemporaryDirectory() as folder, \
@@ -454,7 +470,7 @@ class WorkerTests(unittest.TestCase):
         class Client:
             def call(self, action, **values):
                 calls.append((action, values))
-                return {'ok': True}
+                return {'ok': True, 'validation': {'valid': True}}
         lease = {'job': {'id': '00000000-0000-0000-0000-000000000001',
                          'video_id': 'video-one',
                          'run_id': '00000000-0000-0000-0000-000000000002',
@@ -466,6 +482,7 @@ class WorkerTests(unittest.TestCase):
                      'coreMeaningZh': '早上好', 'contextMeaningZh': '日常问候'}]}]
         with tempfile.TemporaryDirectory() as folder, \
              patch.dict('os.environ', {'EASTUDY_WORK_ROOT': folder}), \
+             patch.object(worker, 'preflight_output'), \
              patch.object(worker, 'repair_learning', return_value=(repaired, [{'model': 'test'}])) as repair_mock, \
              patch.object(worker, 'complete_teaching', side_effect=lambda rows, *args: (rows, [])) as complete_mock, \
              patch.object(worker, 'download') as download_mock, \
@@ -494,6 +511,7 @@ class WorkerTests(unittest.TestCase):
             'run_id': '00000000-0000-0000-0000-000000000002', 'input': {'kind': 'LEARNING_REPAIR', 'sentences': [{'id': 's'}]}}, 'token': 'secret'}
         client = MagicMock()
         with tempfile.TemporaryDirectory() as folder, patch.object(worker, 'worker_root', return_value=Path(folder)), \
+             patch.object(worker, 'preflight_output'), patch.object(worker, 'validate_teaching'), \
              patch.object(worker, 'heartbeat_loop'), patch.object(worker, 'repair_learning', return_value=([{}], [])), \
              patch.object(worker, 'complete_teaching', return_value=([{}], [])), \
              patch.object(worker, 'prepare_voice', side_effect=worker.ApiError('VOICE_GENERATION_INCOMPLETE')), \

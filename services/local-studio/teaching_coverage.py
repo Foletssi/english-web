@@ -5,6 +5,8 @@ is a valid, independently checked outcome. Manual selections remain immutable.
 """
 import copy
 import os
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 
 from checkpoint import canonical_hash
 from contracts import StudioError, validate_learning
@@ -55,21 +57,22 @@ def _input(rows):
 
 def complete_coverage(rows, config=None, progress=None, cache_dir=None, request=None,
                       recheck_pairs=None):
-    from ai_tools import call_json, _cached_ai, mark_teaching_complete
+    from ai_tools import call_json, _cached_ai, mark_teaching_complete, ai_concurrency, check_ai_cancelled
     config, progress = config or {}, progress or (lambda *a, **k: None)
     request = request or (lambda prompt, payload: call_json(config, prompt, payload))
     merged, provenance = copy.deepcopy(rows), []
 
-    def invoke(name, prompt, payload, validator):
+    def invoke(name, prompt, payload, validator, records=None):
         key = canonical_hash({'version': COVERAGE_VERSION, 'prompt': prompt, 'payload': payload,
             'model': config.get('model') or os.getenv('ZOSPEAK_AI_MODEL', ''),
             'baseUrl': config.get('baseUrl') or os.getenv('ZOSPEAK_AI_BASE_URL', '')})
         # Initial attempt plus two retries; a malformed answer never becomes evidence.
         for attempt in range(3):
             try:
+                check_ai_cancelled(config)
                 value, meta, reused = _cached_ai(cache_dir, name, key,
                     lambda: request(prompt, payload), validator, usage_config=config)
-                provenance.append({**meta, 'stage': name, 'cacheReused': reused})
+                (provenance if records is None else records).append({**meta, 'stage': name, 'cacheReused': reused})
                 return value
             except StudioError as error:
                 if not error.retryable or attempt == 2:
@@ -77,19 +80,40 @@ def complete_coverage(rows, config=None, progress=None, cache_dir=None, request=
                 progress('enrich', 86, '正在重新核对教学内容', substage='coverage-retry',
                          current=attempt + 1, total=2, unit='retries')
 
-    for offset in (range(0, len(merged), 16) if recheck_pairs is None else []):
-        batch = merged[offset:offset + 16]
+    selection_source = copy.deepcopy(merged)
+
+    def review_selection(offset):
+        batch = selection_source[offset:offset + 16]
+        records = []
         payload = {'sentences': _input(batch), 'candidate': {'sentences': _input(batch)},
-                   'contextBefore': [r['english'] for r in merged[max(0, offset-2):offset]],
-                   'contextAfter': [r['english'] for r in merged[offset+len(batch):offset+len(batch)+2]]}
+                   'contextBefore': [r['english'] for r in selection_source[max(0, offset-2):offset]],
+                   'contextAfter': [r['english'] for r in selection_source[offset+len(batch):offset+len(batch)+2]]}
         checked = invoke(f'selection-review-{offset:04d}', SELECTION_REVIEW_PROMPT, payload,
-                         lambda result: _preserve_locks(batch, validate_learning(batch, result)))
+                         lambda result: _preserve_locks(batch, validate_learning(batch, result)), records)
         mark_teaching_complete(checked, batch)
         for row in checked:
             row['teachingAnalysis']['reviewVersion'] = REVIEW_VERSION
-        merged[offset:offset+len(batch)] = checked
-        progress('enrich', 86, f'已独立核对重点 {offset + len(batch)}/{len(merged)} 句',
-                 substage='selection-review', current=offset+len(batch), total=len(merged), unit='sentences')
+        return offset, checked, records
+
+    offsets = list(range(0, len(merged), 16)) if recheck_pairs is None else []
+    # Only independent reviews overlap. Keep payloads/cache keys and merge order
+    # unchanged; dependent adjacent-pair passes remain sequential below.
+    with ThreadPoolExecutor(max_workers=ai_concurrency()) as pool:
+        for start in range(0, len(offsets), ai_concurrency()):
+            check_ai_cancelled(config)
+            futures = [pool.submit(copy_context().run, review_selection, offset)
+                       for offset in offsets[start:start + ai_concurrency()]]
+            try:
+                for future in futures:
+                    offset, checked, records = future.result()
+                    merged[offset:offset+len(checked)] = checked
+                    provenance.extend(records)
+                    progress('enrich', 86, f'已独立核对重点 {offset + len(checked)}/{len(merged)} 句',
+                             substage='selection-review', current=offset+len(checked), total=len(merged), unit='sentences')
+            except BaseException:
+                for future in futures:
+                    future.cancel()
+                raise
 
     evidence = {}
     if recheck_pairs is not None:

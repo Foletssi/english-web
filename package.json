@@ -1,7 +1,7 @@
 {
   "name": "zospeak-composite-v1-beta6",
   "private": true,
-  "version": "1.0.0-beta.6.50.7",
+  "version": "1.0.0-beta.6.50.8",
   "scripts": {
     "serve": "python -m http.server 8080",
     "audit": "python audit/static_audit.py",
@@ -19,7 +19,7 @@
     "test:module-boundaries": "node audit/functional_module_boundaries_test.mjs",
     "test:m01": "node audit/unified_auth_access_test.mjs && node audit/auth_contract_test.mjs && node audit/access_guard_contract_test.mjs",
     "test:m04": "node audit/playback_ticket_test.mjs && node audit/playback_route_contract_test.mjs && node audit/media_session_race_contract_test.mjs && node audit/media_player_contract_test.mjs",
-    "test:m08": "node audit/processing_truth_contract_test.mjs && node audit/processing_group_contract_test.mjs && node audit/processing_control_client_test.mjs && node audit/local_reservation_test.mjs && node audit/local_input_recovery_test.mjs && node audit/local_intake_cancelled_test.mjs && node audit/learning_queue_contract_test.mjs && node audit/balanced_worker_contract_test.mjs && node audit/processing_source_route_test.mjs && node audit/processing_output_recovery_test.mjs && node audit/processing_health_timeout_test.mjs && node audit/processing_resume_test.mjs && node audit/admin_cover_preview_test.mjs",
+    "test:m08": "node audit/processing_truth_contract_test.mjs && node audit/processing_group_contract_test.mjs && node audit/processing_control_client_test.mjs && node audit/local_reservation_test.mjs && node audit/local_input_recovery_test.mjs && node audit/local_intake_cancelled_test.mjs && node audit/learning_queue_contract_test.mjs && node audit/balanced_worker_contract_test.mjs && node audit/processing_source_route_test.mjs && node audit/processing_output_recovery_test.mjs && node audit/processing_output_batch_test.mjs && node audit/processing_edge_retry_test.mjs && node audit/processing_health_timeout_test.mjs && node audit/processing_resume_test.mjs && node audit/admin_cover_preview_test.mjs",
     "test:m10": "node audit/relative_time_contract_test.mjs && node audit/functional_module_boundaries_test.mjs && node audit/content_audit_test.mjs && node audit/content_check_ui_test.mjs",
     "test:mapping": "node audit/catalog_mapping_test.mjs && node audit/catalog_admin_ui_test.mjs && node audit/personal_library_test.mjs",
     "test:mapping-ui": "node audit/student_mapping_ui_test.mjs",

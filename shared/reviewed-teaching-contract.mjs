@@ -31,13 +31,12 @@ export function validateTeachingDetails(row) {
     const hint = expression.pronunciationHint ?? '';
     assert(hint === '' && !ambiguous.test(expression.surface) || ipa(hint), 'Invalid phrase contextual IPA');
   }
-  for (const [analysis, prompt, review] of [
-    [translation, 'context-lookup-v2-20260916', 'context-lookup-review-v2-20260916'],
-    [coverage, 'adjacent-coverage-v1-20260916', 'adult-selection-review-v1-20260916'],
+  for (const [analysis, versions] of [
+    [translation, [['context-lookup-v2-20260916', 'context-lookup-review-v2-20260916'], ['context-lookup-v3-20260919', 'context-lookup-review-v3-20260919']]],
+    [coverage, [['adjacent-coverage-v1-20260916', 'adult-selection-review-v1-20260916'], ['adjacent-coverage-v2-20260916', 'adult-selection-review-v2-20260916']]],
   ]) {
     assert.equal(analysis.status, analysis === translation && translation.sourceConcerns?.length ? 'source_unresolved' : 'completed');
-    assert.equal(analysis.promptVersion, prompt);
-    assert.equal(analysis.reviewVersion, review);
+    assert(versions.some(([prompt, review]) => analysis.promptVersion === prompt && analysis.reviewVersion === review), 'Unsupported teaching version pair');
     assert.equal(analysis.sourceTextRevision, revision(row));
   }
   assert(Array.isArray(translation.sourceConcerns) && translation.sourceConcerns.length <= 5);
@@ -47,7 +46,7 @@ export function validateTeachingDetails(row) {
   }
   assert.equal(coverage.schemaVersion, 1);
   assert(Array.isArray(coverage.pairs) && coverage.pairs.length <= 2);
-  assert.equal(row.teachingAnalysis?.reviewVersion, 'adult-selection-review-v1-20260916');
+  assert.equal(row.teachingAnalysis?.reviewVersion, coverage.reviewVersion);
   return true;
 }
 export function validateTeachingCoverage(rows) {

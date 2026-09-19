@@ -17,7 +17,15 @@ async function supabase(path: string, init: RequestInit = {}) {
     headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', ...(init.headers || {}) }
   });
   const payload = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(`SUPABASE_${response.status}:${payload?.message || payload?.code || 'REQUEST_FAILED'}`);
+  if (!response.ok) {
+    const transient: Record<string, string> = {
+      '57014': 'DB_STATEMENT_TIMEOUT', '55P03': 'DB_LOCK_TIMEOUT',
+      '40001': 'DB_SERIALIZATION_RETRY', '40P01': 'DB_DEADLOCK_RETRY'
+    };
+    // Keep business rejections distinct from retryable transaction failures.
+    const retryCode = transient[String(payload?.code || '')];
+    throw new Error(`SUPABASE_${retryCode ? 503 : response.status}:${retryCode || payload?.message || payload?.code || 'REQUEST_FAILED'}`);
+  }
   return payload;
 }
 
@@ -108,6 +116,11 @@ async function handleWorker(action: string, body: any) {
       p_sequence: Number(body.sequence), p_stage: body.stage,
       p_progress: Number(body.progress), p_message: String(body.message || '').slice(0, 300),
       p_metrics: body.metrics && typeof body.metrics === 'object' ? body.metrics : {}
+    }) };
+  }
+  if (action === 'worker-validate-teaching-v2') {
+    return { validation: await rpc('processing_validate_teaching_v2', {
+      p_job_id: jobId, p_run_id: runId, p_token: token, p_worker_id: workerId, p_sentences: body.sentences
     }) };
   }
   if (action === 'worker-output-receipt-v2') {

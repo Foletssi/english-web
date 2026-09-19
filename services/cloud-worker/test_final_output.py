@@ -131,6 +131,7 @@ class FinalOutputTests(unittest.TestCase):
         if corrupt:
             asset.write_bytes(b'corrupt')
         client = MagicMock()
+        client.call.return_value = {"validation": {"valid": True}}
         lease = {'job': self.job, 'token': 'test-token'}
         with patch.object(worker, 'worker_root', return_value=self.root), \
              patch.object(worker, 'heartbeat_loop'), \
@@ -198,6 +199,7 @@ class FinalOutputTests(unittest.TestCase):
             return {'status': 'REVIEW', 'result': result}
 
         client = MagicMock()
+        client.call.return_value = {"validation": {"valid": True}}
         lease = {'job': self.job, 'token': 'test-token'}
         with patch.object(worker, 'worker_root', return_value=self.root), \
              patch.object(worker, 'heartbeat_loop'), \

@@ -1,4 +1,6 @@
 import json
+from contextvars import copy_context
+from stage_scheduler import resource_slot
 import http.client
 import os
 import ssl
@@ -82,6 +84,11 @@ def asr_profile(model_name=None):
 
 
 def prepare_asr_model(model_name=None, verify_inference=False, model_factory=None):
+    with resource_slot('gpu'):
+        return _prepare_asr_model(model_name, verify_inference, model_factory)
+
+
+def _prepare_asr_model(model_name=None, verify_inference=False, model_factory=None):
     configure_cuda_dlls()
     try:
         if model_factory is None:
@@ -383,7 +390,7 @@ def enrich(rows, info, config, progress=None, cache_dir=None):
     completed = 0
     ordered = {}
     with ThreadPoolExecutor(max_workers=min(ai_concurrency(), max(1, learning_count))) as executor:
-        futures = {executor.submit(process_batch, index, batch): index for index, batch in batches}
+        futures = {executor.submit(copy_context().run, process_batch, index, batch): index for index, batch in batches}
         for future in as_completed(futures):
             index = futures[future]
             ordered[index] = future.result()
