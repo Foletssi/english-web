@@ -86,7 +86,11 @@ Prepared on fix/supabase-disk-io-20260920, baseline b68c340; correction commit 4
 On 2026-09-20 the user explicitly authorized this rollout and selected official
 Supabase CLI / Git / Cloudflare Pages / HTTPS as the default for future releases.
 AGENTS.md now records that standing channel preference; Chrome is optional.
-Production rollout is in progress. Earlier database tests ended in ROLLBACK.
+Both migrations were applied and verified at 2026-09-20 06:23 UTC. Draft and
+published snapshot hashes and revision remained unchanged. Two existing video
+jobs were running at the pre-rollout check. Final Pages/HTTPS results are retained
+in tmp/disk-io-rollout-result.json; this preparatory record does not replace that
+release evidence. Earlier synthetic database tests ended in ROLLBACK.
 
 Local evidence: tmp/disk-io-baseline-functions.json and
  tmp/disk-io-rollback-test.sql. The exact pre-change database function restore is
