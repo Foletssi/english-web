@@ -63,11 +63,11 @@ passing test. Its earlier admin table/layout checks completed in both runs.
 
 ## Publication status and rollback
 
-Prepared on fix/supabase-disk-io-20260920, baseline b68c340. Not deployed.
-Production database tests ended in ROLLBACK; the migration is not installed.
-Chrome connector inventory failed with nodeRepl.fetch request failed. The
-project AGENTS.md requires the production rollout lane; ask for explicit CLI /
-Git / HTTPS fallback authorization before a live rollout in this situation.
+Prepared on fix/supabase-disk-io-20260920, baseline b68c340; correction commit 4c15bd6.
+On 2026-09-20 the user explicitly authorized this rollout and selected official
+Supabase CLI / Git / Cloudflare Pages / HTTPS as the default for future releases.
+AGENTS.md now records that standing channel preference; Chrome is optional.
+Production rollout is in progress. Earlier database tests ended in ROLLBACK.
 
 Local evidence: tmp/disk-io-baseline-functions.json and
  tmp/disk-io-rollback-test.sql. The exact pre-change database function restore is
