@@ -2,7 +2,7 @@
 'use strict';
 const Client=global.EastudyStudioClient,Store=global.ZoContent;
 const cloud=()=>global.EastudyCloudContent,bridge=()=>global.EastudyAdminCloudBridge;
-const state={rows:[],polling:new Set(),serviceReady:false,submitting:false,cloudTimer:null,cloudBusy:false,cloudFailures:0,lastSyncAt:0,retrying:new Set(),refreshing:false,recovery:new Map()};
+const state={rows:[],polling:new Set(),contentSynced:new Map(),serviceReady:false,submitting:false,cloudTimer:null,cloudBusy:false,cloudFailures:0,lastSyncAt:0,retrying:new Set(),refreshing:false,recovery:new Map()};
 const $=selector=>document.querySelector(selector);
 const titleFrom=name=>String(name||'').replace(/\.[^.]+$/,'').replace(/[_-]+/g,' ').trim();
 const escapeHtml=value=>String(value||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -67,11 +67,33 @@ async function submitQueue(event){
 function ensureVideo(job,videoId){if(!Store.acceptsJob(videoId,job.id))return null;let video=Store.getVideo(videoId);if(video)return video;const meta=job.metadata||{},creator=ensureCreator(meta.creator||'待确认创作者');video=Store.saveVideo({id:Number(videoId),title:meta.title||titleFrom(job.sourceName),titleZh:'AI 正在生成',creator:creator.name,creatorId:creator.id,category:'AI 自动分类',level:'AI 分析中',description:'后台正在生成中文口语化简介。',status:'PROCESSING',pipelineStatus:'PROCESSING',cover:'assets/images/home_video_1.png',mediaUrl:'',collectionIds:[],localStudioJobId:job.id});Store.startPipeline(videoId,{id:job.id,currentStep:job.currentStep||'upload',progress:job.progress||5});return video}
 function mergeResult(job,videoId){const current=ensureVideo(job,videoId);if(!current||current.pipelineStatus==='READY')return;const result=job.result;if(!result?.sentences?.length||!result?.video?.mediaUrl){Store.failPipeline(videoId,{id:job.id,currentStep:job.currentStep,error:{code:'RESULT_EMPTY',message:'后台结果缺少字幕或媒体'}});return}const category=(result.video.topicIds||[]).map(id=>TOPIC_ZH[id]||id).join(' / ');Store.completePipeline(videoId,{id:job.id,sentences:result.sentences,video:{...result.video,category,creatorId:current.creatorId,creator:current.creator},evidence:result.evidence})}
 async function pollJob(jobId,videoId){if(!Store.localOnly){state.polling.add(jobId);wakeCloudPoll();return}if(state.polling.has(jobId))return;state.polling.add(jobId);try{while(true){const job=await Client.getJob(jobId);if(!Store.acceptsJob(videoId,jobId))break;if(job.status==='REVIEW'){mergeResult(job,videoId);break}if(job.status==='ERROR'){Store.failPipeline(videoId,{id:job.id,currentStep:job.currentStep,error:job.error});break}Store.updatePipeline(videoId,{id:job.id,status:'PROCESSING',currentStep:job.currentStep,progress:job.progress,error:null});global.dispatchEvent(new CustomEvent('eastudy:studio-job-updated'));await new Promise(resolve=>setTimeout(resolve,1800))}}catch(error){toast('读取后台任务失败：'+error.message)}finally{state.polling.delete(jobId);global.dispatchEvent(new CustomEvent('eastudy:studio-job-updated'))}}
-async function syncJobs(){if(!Store.localOnly){const Bridge=bridge();let rows;if(Bridge?.refreshJobs)rows=await Bridge.refreshJobs();else{const result=await cloud()?.listProcessingJobs();if(result?.error)throw result.error;rows=result?.rows||[];Bridge?.setJobs(rows)}rows=rows||[];let reload=false;for(const job of rows){if(['REVIEW','ERROR','CANCELLED'].includes(job.status)){if(state.polling.delete(job.id))reload=true}else state.polling.add(job.id)}if(reload)await bridge()?.reload();return rows}const data=await Client.listJobs();for(const job of data.jobs||[]){const videoId=job.metadata?.localVideoId;if(!videoId)continue;const video=ensureVideo(job,videoId);if(!video)continue;if(job.status==='REVIEW')mergeResult(job,videoId);else if(job.status==='ERROR'){if(video.pipelineStatus!=='ERROR')Store.failPipeline(videoId,{id:job.id,currentStep:job.currentStep,error:job.error})}else pollJob(job.id,videoId)}return data.jobs||[]}
+async function syncJobs(options={}){
+ if(!Store.localOnly){
+  const Bridge=bridge();let rows;
+  if(Bridge?.refreshJobs)rows=await Bridge.refreshJobs();
+  else{const result=await cloud()?.listProcessingJobs();if(result?.error)throw result.error;rows=result?.rows||[];Bridge?.setJobs(rows)}
+  rows=rows||[];
+  const finished=[];
+  for(const job of rows){
+   if(['REVIEW','ERROR','CANCELLED'].includes(job.status)){
+    state.polling.delete(job.id);
+    const signature=JSON.stringify([job.status,job.runId,job.updatedAt,job.completedAt]);
+    if(state.contentSynced.get(job.id)!==signature)finished.push([job.id,signature]);
+   }else{state.polling.add(job.id);state.contentSynced.delete(job.id)}
+  }
+  if(finished.length||options.forceContent){
+   // Mark terminal jobs synchronized only after the content import succeeds.
+   // A failed/deferred read must be retried even when no RUNNING job was observed.
+   const refresh=Bridge?.refreshContent||Bridge?.reload;
+   if(refresh){const imported=await refresh();if(imported!==false)for(const [id,signature] of finished)state.contentSynced.set(id,signature)}
+  }
+  return rows;
+ }
+ const data=await Client.listJobs();for(const job of data.jobs||[]){const videoId=job.metadata?.localVideoId;if(!videoId)continue;const video=ensureVideo(job,videoId);if(!video)continue;if(job.status==='REVIEW')mergeResult(job,videoId);else if(job.status==='ERROR'){if(video.pipelineStatus!=='ERROR')Store.failPipeline(videoId,{id:job.id,currentStep:job.currentStep,error:job.error})}else pollJob(job.id,videoId)}return data.jobs||[]}
 function cloudPollVisible(){
  const path=(global.location?.hash||'#/dashboard').slice(1).split('?')[0];
  return !document.hidden&&global.navigator?.onLine!==false&&bridge()?.isAuthenticated?.()!==false&&
-  (/^\/(dashboard|pipeline)(\/|$)/.test(path)||path.startsWith('/videos/'));
+  (/^\/(dashboard|pipeline)(\/|$)/.test(path)||path==='/videos'||path==='/subtitles'||path.startsWith('/videos/'));
 }
 function scheduleCloudPoll(delay){
  clearTimeout(state.cloudTimer);state.cloudTimer=null;
@@ -98,7 +120,7 @@ function recoveryMessage(key){return state.recovery.get(String(key))||''}
 function reportRecovery(key,message){state.recovery.set(String(key),message);global.dispatchEvent(new CustomEvent('eastudy:studio-job-updated'))}
 async function refreshJobs(){
  if(state.refreshing)return;state.refreshing=true;reportRecovery('refresh','正在刷新任务状态…');
- try{if(!Store.localOnly&&bridge()?.refreshJobs)await bridge().refreshJobs();else await syncJobs();reportRecovery('refresh','已读取最新状态。刷新不会重启任务，请查看当前步骤与最近进展。')}
+ try{await syncJobs({forceContent:true});reportRecovery('refresh','已读取最新状态。刷新不会重启任务，请查看当前步骤与最近进展。')}
  catch{reportRecovery('refresh','暂时无法读取任务状态，请检查网络后再次刷新。已提交的后台任务不会因此取消。')}
  finally{state.refreshing=false}
 }
@@ -168,7 +190,7 @@ async function checkService(){
 }
 function open(){if(state.submitting){$('#studioV2Modal').classList.add('show');return}state.rows=state.rows.filter(row=>!row.submitted);renderRows();const creator=$('#studioV2Creator');if(/^(null|undefined)$/i.test(creator.value.trim()))creator.value='';$('#studioV2Videos').value='';$('#studioCreatorOptions').innerHTML=Store.listCreators().filter(row=>row.name&&!/^(null|undefined)$/i.test(String(row.name))).map(row=>`<option value="${escapeHtml(row.name)}"></option>`).join('');$('#studioV2Modal').classList.add('show');void checkService()}
 
-function bind(){const form=$('#studioV2Form');if(!form)return;form.addEventListener('submit',submitQueue);$('#studioV2Recheck').addEventListener('click',checkService);$('#studioV2Videos').addEventListener('change',event=>addFiles(event.target.files));$('#studioV2Rows').addEventListener('input',event=>{const row=state.rows.find(item=>item.id===event.target.dataset.rowTitle);if(row)row.title=event.target.value});$('#studioV2Rows').addEventListener('change',event=>{const row=state.rows.find(item=>item.id===event.target.dataset.rowCover);if(row){row.cover=event.target.files[0]||null;renderRows()}});$('#studioV2Rows').addEventListener('click',event=>{const button=event.target.closest('[data-remove-row]');if(button)state.rows=state.rows.filter(row=>row.id!==button.dataset.removeRow),renderRows()});document.addEventListener('click',event=>{if(event.target.closest('[data-refresh-studio-jobs]'))void refreshJobs();const retryButton=event.target.closest('[data-retry-studio-job]');if(retryButton)retry(retryButton.dataset.retryStudioJob,retryButton.dataset.videoId)});global.addEventListener('online',wakeCloudPoll);global.addEventListener('offline',wakeCloudPoll);global.addEventListener('hashchange',wakeCloudPoll);global.addEventListener('eastudy:admin-auth-changed',wakeCloudPoll);document.addEventListener('visibilitychange',wakeCloudPoll);if(Store.localOnly)void syncJobs().catch(()=>{});else wakeCloudPoll()}
+function bind(){const form=$('#studioV2Form');if(!form)return;form.addEventListener('submit',submitQueue);$('#studioV2Recheck').addEventListener('click',checkService);$('#studioV2Videos').addEventListener('change',event=>addFiles(event.target.files));$('#studioV2Rows').addEventListener('input',event=>{const row=state.rows.find(item=>item.id===event.target.dataset.rowTitle);if(row)row.title=event.target.value});$('#studioV2Rows').addEventListener('change',event=>{const row=state.rows.find(item=>item.id===event.target.dataset.rowCover);if(row){row.cover=event.target.files[0]||null;renderRows()}});$('#studioV2Rows').addEventListener('click',event=>{const button=event.target.closest('[data-remove-row]');if(button)state.rows=state.rows.filter(row=>row.id!==button.dataset.removeRow),renderRows()});document.addEventListener('click',event=>{if(event.target.closest('[data-refresh-studio-jobs]'))void refreshJobs();const retryButton=event.target.closest('[data-retry-studio-job]');if(retryButton)retry(retryButton.dataset.retryStudioJob,retryButton.dataset.videoId)});global.addEventListener('online',wakeCloudPoll);global.addEventListener('offline',wakeCloudPoll);global.addEventListener('hashchange',wakeCloudPoll);global.addEventListener('eastudy:admin-auth-changed',()=>{state.contentSynced.clear();wakeCloudPoll()});document.addEventListener('visibilitychange',wakeCloudPoll);if(Store.localOnly)void syncJobs().catch(()=>{});else wakeCloudPoll()}
 document.addEventListener('click',event=>{const button=event.target.closest('[data-recover-local-input]');if(button)void recoverLocal(button.dataset.recoverLocalInput,button.dataset.videoId)});
 global.EastudyStudioV2={open,retry,recoverLocal,syncJobs,refreshJobs,recoveryMessage,isRetrying:jobId=>state.retrying.has(jobId),localOnly:Store.localOnly};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();
