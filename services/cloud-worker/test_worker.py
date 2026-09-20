@@ -52,7 +52,7 @@ class WorkerTests(unittest.TestCase):
                 self.assertEqual(request.call_count, attempts)
 
     def test_gateway_errors_retry_only_idempotent_actions(self):
-        for action in ('worker-complete-v2', 'worker-output-receipt-v2'):
+        for action in ('worker-complete-v2', 'worker-output-receipt-v2', 'worker-output-receipts-v3'):
             for body in (b'error code: 520', b'[]', b'null', b'"unavailable"'):
                 with self.subTest(action=action, body=body):
                     client = worker.EdgeClient('https://example.test', 'secret', 'worker', {})

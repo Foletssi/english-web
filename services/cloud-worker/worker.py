@@ -132,7 +132,7 @@ class EdgeClient:
             'User-Agent': f'EastudyCloudWorker/{VERSION}'})
         timeout = 15 if 'heartbeat' in action else (75 if action == 'worker-complete-v2' else 45)
         return request_json(request, timeout, retryable=action in {
-            'worker-telemetry-v2', 'worker-output-receipt-v2', 'worker-complete-v2',
+            'worker-telemetry-v2', 'worker-output-receipt-v2', 'worker-output-receipts-v3', 'worker-complete-v2',
             'worker-validate-teaching-v2'})
 
     def upload(self, base_url, token, job_id, path, source):
@@ -390,19 +390,25 @@ def _upload_assets(client, lease, output, assets, cancelled=None):
             if (int(receipt['size']) != path.stat().st_size or str(receipt['sha256']) != file_sha256(path)
                     or (is_batch and receipt.get('path') != relative)):
                 raise ApiError('OUTPUT_RECEIPT_MISMATCH')
-        result = []
+        registrations = []
         for (relative, _), receipt in zip(items, rows):
             check_cancelled()
             item = {'path': relative, 'size': int(receipt['size']), 'sha256': str(receipt['sha256'])}
-            if run_id(lease):
+            registrations.append({**item, 'etag': str(receipt['etag'])})
+        if run_id(lease):
+            if is_batch:
+                client.call('worker-output-receipts-v3', jobId=job_id, token=lease['token'],
+                            runId=run_id(lease), receipts=registrations)
+            else:
                 client.call('worker-output-receipt-v2', jobId=job_id, token=lease['token'],
-                            runId=run_id(lease), path=relative, size=item['size'],
-                            sha256=item['sha256'], etag=str(receipt['etag']))
+                            runId=run_id(lease), **registrations[0])
+        result = []
+        for item in registrations:
             check_cancelled()
-            receipt_key = hashlib.sha256((relative + ':' + item['sha256']).encode()).hexdigest()
+            receipt_key = hashlib.sha256((item['path'] + ':' + item['sha256']).encode()).hexdigest()
             atomic_json(Path(output) / '_upload_receipts' / (receipt_key + '.json'),
-                        {'jobId': job_id, 'runId': run_id(lease), **item, 'etag': str(receipt['etag'])})
-            result.append(item)
+                        {'jobId': job_id, 'runId': run_id(lease), **item})
+            result.append({key: item[key] for key in ('path', 'size', 'sha256')})
         return result
 
     with ThreadPoolExecutor(max_workers=min(upload_concurrency(), len(units))) as executor:

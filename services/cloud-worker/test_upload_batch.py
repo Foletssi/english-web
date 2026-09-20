@@ -18,7 +18,7 @@ def receipt(relative, path):
 
 class RecordingClient:
     def __init__(self):
-        self.batches, self.singles, self.registered = [], [], []
+        self.batches, self.singles, self.registered, self.actions = [], [], [], []
         self.fail_registration = False
         self.alter = lambda rows: rows
         self.cancel_after_upload = None
@@ -35,6 +35,13 @@ class RecordingClient:
         return rows
 
     def call(self, action, **values):
+        self.actions.append(action)
+        if action == 'worker-output-receipts-v3':
+            if self.fail_registration:
+                raise worker.ApiError('OUTPUT_RECEIPT_REGISTER_FAILED')
+            self.registered.extend({'jobId': values['jobId'], 'runId': values['runId'], **item}
+                                   for item in values['receipts'])
+            return {'ok': True}
         if action == 'worker-output-receipt-v2':
             if self.fail_registration:
                 raise worker.ApiError('OUTPUT_RECEIPT_REGISTER_FAILED')
@@ -127,6 +134,8 @@ class UploadBatchTests(unittest.TestCase):
         self.assertTrue(all(relative.startswith('voice/') for batch in self.client.batches for relative, _ in batch))
         self.assertEqual([item['path'] for item in manifest], sorted(item['path'] for item in manifest))
         self.assertEqual(len(self.client.registered), 6)
+        self.assertEqual(self.client.actions.count('worker-output-receipts-v3'), 2)
+        self.assertEqual(self.client.actions.count('worker-output-receipt-v2'), 1)
         for item in manifest:
             registration = next(value for value in self.client.registered if value['path'] == item['path'])
             self.assertEqual(registration['sha256'], item['sha256'])

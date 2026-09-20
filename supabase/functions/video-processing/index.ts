@@ -102,7 +102,7 @@ async function handleWorker(action: string, body: any) {
   const token = String(body.token || '');
   if (!/^[0-9a-f-]{36}$/i.test(jobId) || token.length < 32 || token.length > 256) throw new Error('JOB_TOKEN_INVALID');
   const runId = String(body.runId || '');
-  const v2 = action.endsWith('-v2') || action.endsWith('-v4') || action.endsWith('-v5');
+  const v2 = action.endsWith('-v2') || action.endsWith('-v3') || action.endsWith('-v4') || action.endsWith('-v5');
   if (v2 && !/^[0-9a-f-]{36}$/i.test(runId)) throw new Error('RUN_ID_INVALID');
   if (action === 'worker-job-heartbeat-v2') {
     return { job: await rpc('processing_heartbeat_job_v2', {
@@ -128,6 +128,12 @@ async function handleWorker(action: string, body: any) {
       p_job_id: jobId, p_run_id: runId, p_token: token, p_worker_id: workerId,
       p_path: String(body.path || ''), p_size: Number(body.size),
       p_sha256: String(body.sha256 || ''), p_etag: String(body.etag || '')
+    }) };
+  }
+  if (action === 'worker-output-receipts-v3') {
+    return { receipt: await rpc('processing_record_outputs_v3', {
+      p_job_id: jobId, p_run_id: runId, p_token: token, p_worker_id: workerId,
+      p_receipts: Array.isArray(body.receipts) ? body.receipts : []
     }) };
   }
   if (action === 'worker-fail-v2') {

@@ -94,7 +94,7 @@ assert.ok(processingMedia.includes("request.headers.get('Range')"), 'processed m
 for (const action of ['worker-heartbeat', 'worker-claim', 'worker-job-heartbeat', 'worker-progress', 'worker-fail', 'worker-complete']) {
   assert.ok(edgeWorker.includes(`'${action}'`), `Edge worker must expose ${action}`);
 }
-for (const action of ['worker-job-heartbeat-v2', 'worker-telemetry-v2', 'worker-output-receipt-v2',
+for (const action of ['worker-job-heartbeat-v2', 'worker-telemetry-v2', 'worker-output-receipt-v2', 'worker-output-receipts-v3',
   'worker-fail-v2', 'worker-complete-v2']) {
   assert.ok(edgeWorker.includes(`'${action}'`), `Edge worker must expose ${action}`);
 }
