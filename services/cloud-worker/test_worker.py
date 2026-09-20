@@ -460,7 +460,8 @@ class WorkerTests(unittest.TestCase):
             self.assertEqual(config['model'], 'new-model')
             self.assertEqual(config['apiKey'], 'fixture-key')
             self.assertEqual(config['thinkingMode'], 'auto')
-            self.assertEqual(config['detailReviewMode'], 'full')
+            self.assertEqual(config['detailReviewMode'], 'delta')
+            self.assertEqual(config['eligibilityContextMode'], 'table')
             settings.snapshot.return_value['model'] = 'later-model'
             self.assertEqual(config['model'], 'new-model')
             self.assertEqual(set(execution), {'cache_root', 'observe', 'voice', 'upload_media', 'upload_voice', 'preflight_output', 'validate_teaching'})

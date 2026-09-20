@@ -709,7 +709,8 @@ def process_lease(client, lease, local_inputs=None, ai_settings=None):
         if not work.resolve().is_relative_to(worker_root()):
             raise ApiError('WORK_PATH_INVALID')
         configured = ai_settings.snapshot() if ai_settings is not None else {}
-        ai_config = job_usage_config({**configured, 'detailReviewMode': 'full', 'cancelled': cancelled},
+        ai_config = job_usage_config({**configured, 'detailReviewMode': 'delta',
+                                      'eligibilityContextMode': 'table', 'cancelled': cancelled},
                                     job_id, work, run_id(lease))
         job_input = lease['job'].get('input') or {}
         if job_input.get('kind') == 'MEDIA_REENCODE':
@@ -731,11 +732,10 @@ def process_lease(client, lease, local_inputs=None, ai_settings=None):
                 report_progress(client, lease, 'ENRICH', min(99, int(progress)), message, metrics)
             repair_mode = str(job_input.get('mode') or 'fill_missing')
             preflight_output(lease)
-            with resource_slot('ai', cancelled):
-                repaired, provenance = repair_learning(rows, ai_config, repair_progress,
-                                                       work / 'learning-repair-cache', repair_mode)
-                repaired, completion_provenance = complete_teaching(
-                    repaired, ai_config, repair_progress, work / 'teaching-completion-cache')
+            repaired, provenance = repair_learning(rows, ai_config, repair_progress,
+                                                   work / 'learning-repair-cache', repair_mode)
+            repaired, completion_provenance = complete_teaching(
+                repaired, ai_config, repair_progress, work / 'teaching-completion-cache')
             validate_teaching(client, lease, repaired)
             provenance.extend(completion_provenance)
             if cancelled.is_set():

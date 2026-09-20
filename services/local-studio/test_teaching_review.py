@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from contracts import StudioError
-from teaching_details import complete_details, source_tokens
+from teaching_details import complete_details, source_tokens, validate_details
 from teaching_review import apply_review, REVIEW_VERSION
 
 
@@ -82,6 +82,48 @@ class DeltaReviewTests(unittest.TestCase):
         result = apply_review(self.rows, self.candidate, self.response)
         self.assertEqual(result[0]['chinese'], self.rows[0]['chinese'])
         self.assertEqual(result[0]['translationAnalysis']['sourceConcerns'], ['疑似漏词'])
+
+    def test_delta_matches_full_validation_for_semantic_boundaries(self):
+        rows = [
+            {'id': 's1', 'english': "I don't think she means it.", 'chinese': '我不觉得她是认真的。',
+             'startTime': 1, 'endTime': 2, 'textRevision': 2, 'keyWords': ["don't think"],
+             'expressions': [{'expressionId': 'e1', 'surface': "don't think", 'coreMeaningZh': '不认为'}]},
+            {'id': 's2', 'english': 'She read it yesterday.', 'chinese': '她昨天读过了。',
+             'translationLocked': True, 'startTime': 2, 'endTime': 3, 'textRevision': 3,
+             'keyWords': ['read'], 'expressions': [
+                 {'expressionId': 'e2', 'surface': 'read', 'coreMeaningZh': '读过'}]},
+        ]
+        candidate = {'sentences': []}
+        for row in rows:
+            candidate['sentences'].append({'id': row['id'],
+                'chinese': '我不觉得她昨天是认真的。' if row['id'] == 's1' else row['chinese'],
+                'sourceConcerns': [],
+                'tokens': [{**token, 'coreMeaningZh': '原义', 'pronunciationHint': '/aɪ/'}
+                           for token in source_tokens(row)['tokens']],
+                'expressions': [{'expressionId': expression['expressionId'],
+                                 'pronunciationHint': '/riːd/'} for expression in row['expressions']]})
+        expected_candidate = copy.deepcopy(candidate)
+        expected_candidate['sentences'][0]['chinese'] = rows[0]['chinese']
+        expected_candidate['sentences'][0]['sourceConcerns'] = ['it 的指代需结合前文确认。']
+        first_tokens = expected_candidate['sentences'][0]['tokens']
+        first_tokens[1].update(coreMeaningZh='不', pronunciationHint='/doʊnt/')
+        first_tokens[-1].update(coreMeaningZh='这件事', pronunciationHint='/ɪt/')
+        second_tokens = expected_candidate['sentences'][1]['tokens']
+        second_tokens[1].update(coreMeaningZh='读过', pronunciationHint='/rɛd/')
+        expected_candidate['sentences'][1]['expressions'][0]['pronunciationHint'] = '/rɛd/'
+        response = {'schemaVersion': 1, 'reviewedIds': ['s1', 's2'], 'patches': [
+            {'id': 's1', 'chinese': rows[0]['chinese'],
+             'sourceConcerns': ['it 的指代需结合前文确认。'],
+             'tokens': [
+                 {'tokenId': first_tokens[1]['tokenId'], 'coreMeaningZh': '不', 'pronunciationHint': '/doʊnt/'},
+                 {'tokenId': first_tokens[-1]['tokenId'], 'coreMeaningZh': '这件事', 'pronunciationHint': '/ɪt/'}]},
+            {'id': 's2', 'tokens': [
+                 {'tokenId': second_tokens[1]['tokenId'], 'coreMeaningZh': '读过', 'pronunciationHint': '/rɛd/'}],
+             'expressions': [{'expressionId': 'e2', 'pronunciationHint': '/rɛd/'}]},
+        ]}
+        self.assertEqual(apply_review(rows, candidate, response),
+                         validate_details(rows, expected_candidate))
+        self.assertEqual(rows[1]['chinese'], '她昨天读过了。')
 
     def test_delta_cache_is_separate_but_generation_reused_and_revalidated(self):
         with tempfile.TemporaryDirectory() as cache:
