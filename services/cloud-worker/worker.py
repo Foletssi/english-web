@@ -123,6 +123,29 @@ class EdgeClient:
         self.secret = secret
         self.worker_id = worker_id
         self.capabilities = capabilities
+        self._network_metrics = threading.local()
+
+    def reset_network_timing(self):
+        self._network_metrics.value = {'queueSeconds': 0.0, 'activeSeconds': 0.0, 'requests': 0}
+
+    def consume_network_timing(self):
+        value = getattr(self._network_metrics, 'value', None) or {
+            'queueSeconds': 0.0, 'activeSeconds': 0.0, 'requests': 0}
+        self._network_metrics.value = None
+        return value
+
+    def _request_json(self, request, timeout, prefix='EDGE', retryable=False):
+        queued = time.monotonic()
+        with resource_slot('network'):
+            active = time.monotonic()
+            try:
+                return request_json(request, timeout, prefix, retryable)
+            finally:
+                metrics = getattr(self._network_metrics, 'value', None)
+                if metrics is not None:
+                    metrics['queueSeconds'] += active - queued
+                    metrics['activeSeconds'] += time.monotonic() - active
+                    metrics['requests'] += 1
 
     def call(self, action, **values):
         payload = {'action': action, 'workerId': self.worker_id, 'version': VERSION,
@@ -131,7 +154,7 @@ class EdgeClient:
             'Content-Type': 'application/json', 'x-worker-secret': self.secret,
             'User-Agent': f'EastudyCloudWorker/{VERSION}'})
         timeout = 15 if 'heartbeat' in action else (75 if action == 'worker-complete-v2' else 45)
-        return request_json(request, timeout, retryable=action in {
+        return self._request_json(request, timeout, retryable=action in {
             'worker-telemetry-v2', 'worker-output-receipt-v2', 'worker-output-receipts-v3', 'worker-complete-v2',
             'worker-validate-teaching-v2'})
 
@@ -150,13 +173,13 @@ class EdgeClient:
         for attempt in range(3):
             try:
                 if has_run:
-                    status = request_json(urllib.request.Request(url, method='GET', headers={
+                    status = self._request_json(urllib.request.Request(url, method='GET', headers={
                         'User-Agent': f'EastudyCloudWorker/{VERSION}'}), 30, 'OUTPUT')
                     if status.get('found'):
                         if status.get('sha256') != expected_hash or status.get('size') != len(data):
                             raise ApiError('OUTPUT_RECEIPT_CONFLICT')
                         return status
-                return request_json(request, 300, 'OUTPUT')
+                return self._request_json(request, 300, 'OUTPUT')
             except ApiError as error:
                 recoverable = recoverable_output_error(error)
                 if not recoverable or attempt == 2:
@@ -187,7 +210,7 @@ class EdgeClient:
                 method='POST', headers={'Content-Type': 'application/json',
                     'User-Agent': f'EastudyCloudWorker/{VERSION}'})
             try:
-                response = request_json(request, 300, 'OUTPUT')
+                response = self._request_json(request, 300, 'OUTPUT')
                 rows = response.get('results')
                 if (not isinstance(rows, list) or len(rows) != len(pending)
                         or any(not isinstance(row, dict) or not isinstance(row.get('path'), str) for row in rows)
@@ -335,15 +358,14 @@ def content_type(path):
 
 def upload_concurrency():
     try:
-        value = int(os.getenv('EASTUDY_UPLOAD_CONCURRENCY', '2'))
+        value = int(os.getenv('EASTUDY_UPLOAD_CONCURRENCY', '4'))
     except ValueError:
-        value = 2
-    return min(2, max(1, value))
+        value = 4
+    return min(4, max(1, value))
 
 
 def upload_assets(client, lease, output, assets, cancelled=None):
-    with resource_slot('network', cancelled):
-        return _upload_assets(client, lease, output, assets, cancelled)
+    return _upload_assets(client, lease, output, assets, cancelled)
 
 
 def _upload_assets(client, lease, output, assets, cancelled=None):
@@ -353,6 +375,11 @@ def _upload_assets(client, lease, output, assets, cancelled=None):
         raise ApiError('OUTPUT_ASSETS_EMPTY')
     manifest = {}
     last_progress = None
+    total_bytes = sum(path.stat().st_size for path in ordered)
+    uploaded_bytes = 0
+    network_queue = 0.0
+    network_active = 0.0
+    network_requests = 0
 
     def check_cancelled():
         if cancelled and cancelled.is_set():
@@ -381,6 +408,8 @@ def _upload_assets(client, lease, output, assets, cancelled=None):
 
     def upload_unit(unit):
         check_cancelled()
+        if hasattr(client, 'reset_network_timing'):
+            client.reset_network_timing()
         is_batch, items = unit
         rows = (client.upload_batch(lease['outputUrl'], items) if is_batch else
                 [client.upload(lease['outputUrl'], lease['token'], job_id, *items[0])])
@@ -409,7 +438,8 @@ def _upload_assets(client, lease, output, assets, cancelled=None):
             atomic_json(Path(output) / '_upload_receipts' / (receipt_key + '.json'),
                         {'jobId': job_id, 'runId': run_id(lease), **item})
             result.append({key: item[key] for key in ('path', 'size', 'sha256')})
-        return result
+        timing = client.consume_network_timing() if hasattr(client, 'consume_network_timing') else {}
+        return result, timing
 
     with ThreadPoolExecutor(max_workers=min(upload_concurrency(), len(units))) as executor:
         remaining = iter(units)
@@ -426,8 +456,12 @@ def _upload_assets(client, lease, output, assets, cancelled=None):
                 continue
             future = next(iter(finished))
             futures.pop(future)
-            results = future.result()
+            results, timing = future.result()
             completed += len(results)
+            uploaded_bytes += sum(item['size'] for item in results)
+            network_queue += float(timing.get('queueSeconds') or 0)
+            network_active += float(timing.get('activeSeconds') or 0)
+            network_requests += int(timing.get('requests') or 0)
             for item in results:
                 manifest[item['path']] = item
             relative = results[-1]['path']
@@ -440,7 +474,11 @@ def _upload_assets(client, lease, output, assets, cancelled=None):
                 report_progress(client, lease, 'LOCAL_UPLOAD', min(99, progress),
                                 f'正在上传成品 {completed}/{len(ordered)}',
                                 {'substage': relative, 'current': completed,
-                                 'total': len(ordered), 'unit': 'files'})
+                                 'total': len(ordered), 'unit': 'files',
+                                 'uploadedBytes': uploaded_bytes, 'totalBytes': total_bytes,
+                                 'networkQueueSeconds': round(network_queue, 3),
+                                 'networkActiveSeconds': round(network_active, 3),
+                                 'networkRequests': network_requests})
                 last_progress = time.monotonic()
     return [manifest[path.relative_to(output).as_posix()] for path in ordered]
 

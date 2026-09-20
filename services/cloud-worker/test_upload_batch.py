@@ -124,7 +124,8 @@ class UploadBatchTests(unittest.TestCase):
         paths = self.voices(5)
         normal = self.make_file('540p/00001.ts', b'video')
         self.make_file('original.mp4', b'never-upload-this')
-        manifest = worker.upload_assets(self.client, self.lease, self.output, [normal, *reversed(paths)])
+        with patch.object(worker, 'report_progress') as progress:
+            manifest = worker.upload_assets(self.client, self.lease, self.output, [normal, *reversed(paths)])
         self.assertEqual([len(batch) for batch in self.client.batches], [5])
         self.assertTrue(all(1 <= len(batch) <= 32 for batch in self.client.batches))
         sent = [item for batch in self.client.batches for item in batch] + self.client.singles
@@ -136,6 +137,10 @@ class UploadBatchTests(unittest.TestCase):
         self.assertEqual(len(self.client.registered), 6)
         self.assertEqual(self.client.actions.count('worker-output-receipts-v3'), 1)
         self.assertEqual(self.client.actions.count('worker-output-receipt-v2'), 1)
+        metrics = progress.call_args.args[-1]
+        self.assertEqual(metrics['uploadedBytes'], sum(path.stat().st_size for path in [normal, *paths]))
+        self.assertEqual(metrics['totalBytes'], metrics['uploadedBytes'])
+        self.assertIn('networkQueueSeconds', metrics)
         for item in manifest:
             registration = next(value for value in self.client.registered if value['path'] == item['path'])
             self.assertEqual(registration['sha256'], item['sha256'])

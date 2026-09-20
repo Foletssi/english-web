@@ -289,9 +289,20 @@ class WorkerTests(unittest.TestCase):
 
     def test_upload_concurrency_is_bounded(self):
         with patch.dict('os.environ', {'EASTUDY_UPLOAD_CONCURRENCY': '99'}):
-            self.assertEqual(worker.upload_concurrency(), 2)
+            self.assertEqual(worker.upload_concurrency(), 4)
         with patch.dict('os.environ', {'EASTUDY_UPLOAD_CONCURRENCY': 'invalid'}):
-            self.assertEqual(worker.upload_concurrency(), 2)
+            self.assertEqual(worker.upload_concurrency(), 4)
+
+    def test_edge_requests_record_queue_and_active_network_time(self):
+        client = worker.EdgeClient('https://example.test', 'secret', 'test-worker', {})
+        client.reset_network_timing()
+        with patch.object(worker.time, 'monotonic', side_effect=[1.0, 1.25, 1.75]), \
+             patch.object(worker, 'request_json', return_value={'ok': True}):
+            client.call('worker-heartbeat')
+        timing = client.consume_network_timing()
+        self.assertEqual(timing['requests'], 1)
+        self.assertEqual(timing['queueSeconds'], .25)
+        self.assertEqual(timing['activeSeconds'], .5)
 
     def test_parallel_upload_preserves_manifest_order_and_receipts(self):
         calls = []
