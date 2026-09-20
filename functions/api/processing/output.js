@@ -168,7 +168,7 @@ export async function onRequestPost({ request, env }) {
   }
   const results = new Map();
   const missing = [];
-  await mapBounded(items, 4, async item => {
+  await mapBounded(items, 2, async item => {
     const key = keys.get(item.path);
     try {
       const existing = await env.VIDEO_BUCKET.head(key);
@@ -178,7 +178,7 @@ export async function onRequestPost({ request, env }) {
         : { ok: false, path: item.path, error: 'OUTPUT_RECEIPT_CONFLICT' });
     } catch { results.set(item.path, { ok: false, path: item.path, error: 'OUTPUT_STATUS_UNAVAILABLE' }); }
   });
-  const prepared = (await mapBounded(missing, 4, async entry => {
+  const prepared = (await mapBounded(missing, 2, async entry => {
     try {
       const upload = await env.VIDEO_BUCKET.createMultipartUpload(entry.key, {
         httpMetadata: { contentType: contentType(entry.item.path), cacheControl: 'private, max-age=31536000, immutable' },
@@ -198,19 +198,19 @@ export async function onRequestPost({ request, env }) {
         p_items: prepared.map(entry => ({ path: entry.item.path, uploadId: entry.upload.uploadId }))
       });
     } catch {
-      await mapBounded(prepared, 4, async entry => { try { await entry.upload.abort(); } catch {} });
+      await mapBounded(prepared, 2, async entry => { try { await entry.upload.abort(); } catch {} });
       for (const entry of prepared) results.set(entry.item.path,
         { ok: false, path: entry.item.path, error: 'OUTPUT_UPLOAD_RETRY' });
       return json({ ok: true, results: items.map(item => results.get(item.path)) });
     }
     const writeMap = new Map((writes?.writes || []).map(row => [row.path, row.write_id]));
     if (writeMap.size !== prepared.length || prepared.some(entry => !writeMap.get(entry.item.path))) {
-      await mapBounded(prepared, 4, async entry => { try { await entry.upload.abort(); } catch {} });
+      await mapBounded(prepared, 2, async entry => { try { await entry.upload.abort(); } catch {} });
       for (const entry of prepared) results.set(entry.item.path,
         { ok: false, path: entry.item.path, error: 'OUTPUT_UPLOAD_RETRY' });
       return json({ ok: true, results: items.map(item => results.get(item.path)) });
     }
-    const stored = await mapBounded(prepared, 4, async entry => {
+    const stored = await mapBounded(prepared, 2, async entry => {
       const writeId = writeMap.get(entry.item.path);
       try {
         const part = await entry.upload.uploadPart(1, entry.item.bytes);

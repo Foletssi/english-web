@@ -40,7 +40,7 @@ from ai_settings import SettingsStore, start_ai_settings  # noqa: E402
 from final_output import restore_final_output, save_final_output  # noqa: E402
 
 
-VERSION = '2.5.8'
+VERSION = '2.5.9'
 DEFAULT_ENDPOINT = 'https://ehxqtgakjgqgmghhdmjg.supabase.co/functions/v1/video-processing'
 STAGE_MAP = {'probe': 'PROBE', 'transcode': 'TRANSCODE', 'asr': 'ASR', 'enrich': 'ENRICH'}
 
@@ -92,6 +92,15 @@ def recoverable_output_error(error):
         'OUTPUT_ACK_PENDING', 'OUTPUT_UPLOAD_RETRY', 'OUTPUT_INVALID_RESPONSE'}
 
 
+def batch_protocol_fallback(error):
+    """Only compatibility/transport failures may use the idempotent v2 path."""
+    return isinstance(error, ApiError) and (
+        transient_request_error(error)
+        or error.status in {404, 405}
+        or error.code in {'ACTION_INVALID', 'METHOD_NOT_ALLOWED', 'OUTPUT_BATCH_INVALID',
+                          'OUTPUT_STATUS_UNAVAILABLE'})
+
+
 def request_json(request, timeout, prefix='EDGE', retryable=False):
     # Retry only operations whose server contract is idempotent, using the same bytes.
     attempts = 3 if retryable else 1
@@ -126,26 +135,42 @@ class EdgeClient:
         self._network_metrics = threading.local()
 
     def reset_network_timing(self):
-        self._network_metrics.value = {'queueSeconds': 0.0, 'activeSeconds': 0.0, 'requests': 0}
+        self._network_metrics.value = {
+            'queueSeconds': 0.0, 'activeSeconds': 0.0, 'requests': 0, 'retries': 0}
 
     def consume_network_timing(self):
         value = getattr(self._network_metrics, 'value', None) or {
-            'queueSeconds': 0.0, 'activeSeconds': 0.0, 'requests': 0}
+            'queueSeconds': 0.0, 'activeSeconds': 0.0, 'requests': 0, 'retries': 0}
         self._network_metrics.value = None
         return value
 
-    def _request_json(self, request, timeout, prefix='EDGE', retryable=False):
-        queued = time.monotonic()
-        with resource_slot('network'):
-            active = time.monotonic()
+    def _request_json(self, request, timeout, prefix='EDGE', retryable=False, gate=None):
+        attempts = 3 if retryable else 1
+        for attempt in range(attempts):
+            queued = time.monotonic()
+            def perform():
+                with resource_slot('network'):
+                    active = time.monotonic()
+                    try:
+                        return request_json(request, timeout, prefix, False)
+                    finally:
+                        metrics = getattr(self._network_metrics, 'value', None)
+                        if metrics is not None:
+                            metrics['queueSeconds'] += active - queued
+                            metrics['activeSeconds'] += time.monotonic() - active
+                            metrics['requests'] += 1
             try:
-                return request_json(request, timeout, prefix, retryable)
-            finally:
+                if gate:
+                    with resource_slot(gate):
+                        return perform()
+                return perform()
+            except ApiError as failure:
+                if attempt + 1 == attempts or not transient_request_error(failure):
+                    raise
                 metrics = getattr(self._network_metrics, 'value', None)
                 if metrics is not None:
-                    metrics['queueSeconds'] += active - queued
-                    metrics['activeSeconds'] += time.monotonic() - active
-                    metrics['requests'] += 1
+                    metrics['retries'] += 1
+                time.sleep(2 ** attempt)
 
     def call(self, action, **values):
         payload = {'action': action, 'workerId': self.worker_id, 'version': VERSION,
@@ -210,7 +235,7 @@ class EdgeClient:
                 method='POST', headers={'Content-Type': 'application/json',
                     'User-Agent': f'EastudyCloudWorker/{VERSION}'})
             try:
-                response = self._request_json(request, 300, 'OUTPUT')
+                response = self._request_json(request, 300, 'OUTPUT', gate='voice_batch')
                 rows = response.get('results')
                 if (not isinstance(rows, list) or len(rows) != len(pending)
                         or any(not isinstance(row, dict) or not isinstance(row.get('path'), str) for row in rows)
@@ -380,6 +405,7 @@ def _upload_assets(client, lease, output, assets, cancelled=None):
     network_queue = 0.0
     network_active = 0.0
     network_requests = 0
+    network_retries = 0
 
     def check_cancelled():
         if cancelled and cancelled.is_set():
@@ -411,13 +437,23 @@ def _upload_assets(client, lease, output, assets, cancelled=None):
         if hasattr(client, 'reset_network_timing'):
             client.reset_network_timing()
         is_batch, items = unit
-        rows = (client.upload_batch(lease['outputUrl'], items) if is_batch else
-                [client.upload(lease['outputUrl'], lease['token'], job_id, *items[0])])
+        used_batch = is_batch
+        if is_batch:
+            try:
+                rows = client.upload_batch(lease['outputUrl'], items)
+            except ApiError as error:
+                if not batch_protocol_fallback(error):
+                    raise
+                rows = [client.upload(lease['outputUrl'], lease['token'], job_id, *item)
+                        for item in items]
+                used_batch = False
+        else:
+            rows = [client.upload(lease['outputUrl'], lease['token'], job_id, *items[0])]
         if len(rows) != len(items):
             raise ApiError('OUTPUT_RECEIPT_MISMATCH')
         for (relative, path), receipt in zip(items, rows):
             if (int(receipt['size']) != path.stat().st_size or str(receipt['sha256']) != file_sha256(path)
-                    or (is_batch and receipt.get('path') != relative)):
+                    or (used_batch and receipt.get('path') != relative)):
                 raise ApiError('OUTPUT_RECEIPT_MISMATCH')
         registrations = []
         for (relative, _), receipt in zip(items, rows):
@@ -425,12 +461,20 @@ def _upload_assets(client, lease, output, assets, cancelled=None):
             item = {'path': relative, 'size': int(receipt['size']), 'sha256': str(receipt['sha256'])}
             registrations.append({**item, 'etag': str(receipt['etag'])})
         if run_id(lease):
-            if is_batch:
-                client.call('worker-output-receipts-v3', jobId=job_id, token=lease['token'],
-                            runId=run_id(lease), receipts=registrations)
+            if used_batch:
+                try:
+                    client.call('worker-output-receipts-v3', jobId=job_id, token=lease['token'],
+                                runId=run_id(lease), receipts=registrations)
+                except ApiError as error:
+                    if not batch_protocol_fallback(error):
+                        raise
+                    for item in registrations:
+                        client.call('worker-output-receipt-v2', jobId=job_id, token=lease['token'],
+                                    runId=run_id(lease), **item)
             else:
-                client.call('worker-output-receipt-v2', jobId=job_id, token=lease['token'],
-                            runId=run_id(lease), **registrations[0])
+                for item in registrations:
+                    client.call('worker-output-receipt-v2', jobId=job_id, token=lease['token'],
+                                runId=run_id(lease), **item)
         result = []
         for item in registrations:
             check_cancelled()
@@ -462,6 +506,7 @@ def _upload_assets(client, lease, output, assets, cancelled=None):
             network_queue += float(timing.get('queueSeconds') or 0)
             network_active += float(timing.get('activeSeconds') or 0)
             network_requests += int(timing.get('requests') or 0)
+            network_retries += int(timing.get('retries') or 0)
             for item in results:
                 manifest[item['path']] = item
             relative = results[-1]['path']
@@ -478,7 +523,8 @@ def _upload_assets(client, lease, output, assets, cancelled=None):
                                  'uploadedBytes': uploaded_bytes, 'totalBytes': total_bytes,
                                  'networkQueueSeconds': round(network_queue, 3),
                                  'networkActiveSeconds': round(network_active, 3),
-                                 'networkRequests': network_requests})
+                                 'networkRequests': network_requests,
+                                 'networkRetries': network_retries})
                 last_progress = time.monotonic()
     return [manifest[path.relative_to(output).as_posix()] for path in ordered]
 

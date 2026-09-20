@@ -20,6 +20,8 @@ class RecordingClient:
     def __init__(self):
         self.batches, self.singles, self.registered, self.actions = [], [], [], []
         self.fail_registration = False
+        self.batch_error = None
+        self.batch_registration_error = None
         self.alter = lambda rows: rows
         self.cancel_after_upload = None
 
@@ -29,6 +31,8 @@ class RecordingClient:
 
     def upload_batch(self, url, items):
         self.batches.append(list(items))
+        if self.batch_error:
+            raise self.batch_error
         rows = self.alter([receipt(relative, path) for relative, path in items])
         if self.cancel_after_upload:
             self.cancel_after_upload.set()
@@ -37,6 +41,8 @@ class RecordingClient:
     def call(self, action, **values):
         self.actions.append(action)
         if action == 'worker-output-receipts-v3':
+            if self.batch_registration_error:
+                raise self.batch_registration_error
             if self.fail_registration:
                 raise worker.ApiError('OUTPUT_RECEIPT_REGISTER_FAILED')
             self.registered.extend({'jobId': values['jobId'], 'runId': values['runId'], **item}
@@ -141,6 +147,7 @@ class UploadBatchTests(unittest.TestCase):
         self.assertEqual(metrics['uploadedBytes'], sum(path.stat().st_size for path in [normal, *paths]))
         self.assertEqual(metrics['totalBytes'], metrics['uploadedBytes'])
         self.assertIn('networkQueueSeconds', metrics)
+        self.assertIn('networkRetries', metrics)
         for item in manifest:
             registration = next(value for value in self.client.registered if value['path'] == item['path'])
             self.assertEqual(registration['sha256'], item['sha256'])
@@ -177,6 +184,27 @@ class UploadBatchTests(unittest.TestCase):
             worker.upload_assets(self.client, self.lease, self.output, paths)
         self.assertTrue(self.client.batches)
         self.assertEqual(list((self.output / '_upload_receipts').glob('*.json')), [])
+
+    def test_unavailable_batch_upload_falls_back_to_reconciled_single_puts(self):
+        paths = self.voices(5)
+        self.client.batch_error = worker.ApiError('OUTPUT_BATCH_INVALID', status=400)
+        manifest = worker.upload_assets(self.client, self.lease, self.output, paths)
+        self.assertEqual(len(self.client.batches), 1)
+        self.assertEqual(len(self.client.singles), 5)
+        self.assertEqual(self.client.actions.count('worker-output-receipts-v3'), 0)
+        self.assertEqual(self.client.actions.count('worker-output-receipt-v2'), 5)
+        self.assertEqual([item['path'] for item in manifest], sorted(item['path'] for item in manifest))
+
+    def test_unavailable_batch_registration_replays_exact_v2_receipts(self):
+        paths = self.voices(5)
+        self.client.batch_registration_error = worker.ApiError('ACTION_INVALID', status=400)
+        manifest = worker.upload_assets(self.client, self.lease, self.output, paths)
+        self.assertEqual(len(self.client.batches), 1)
+        self.assertFalse(self.client.singles)
+        self.assertEqual(self.client.actions.count('worker-output-receipts-v3'), 1)
+        self.assertEqual(self.client.actions.count('worker-output-receipt-v2'), 5)
+        self.assertEqual(len(self.client.registered), 5)
+        self.assertEqual([item['path'] for item in manifest], sorted(item['path'] for item in manifest))
 
     def test_cancelled_batch_cannot_register_or_return_manifest(self):
         paths = self.voices(4)

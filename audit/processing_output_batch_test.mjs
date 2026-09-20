@@ -19,7 +19,7 @@ function request(items, options = {}) {
 }
 function fixture(options = {}) {
   const objects = new Map(), receipts = new Map(), uploads = [], calls = [];
-  let sequence = 0;
+  let sequence = 0, activeParts = 0, maxActiveParts = 0;
   const bucket = {
     async head(key) { calls.push({ name: 'head', key }); return objects.get(key) || null; },
     async createMultipartUpload(key, metadata) {
@@ -31,9 +31,13 @@ function fixture(options = {}) {
         async uploadPart(partNumber, data) {
           calls.push({ name: 'part', key });
           assert.ok(active); assert.equal(partNumber, 1);
-          if (key === objectKey(options.failPartPath)) throw new Error('R2 write failed');
-          bytes = Buffer.from(data);
-          return { partNumber, etag: `part-${uploadId}` };
+          activeParts += 1; maxActiveParts = Math.max(maxActiveParts, activeParts);
+          try {
+            await new Promise(resolve => setTimeout(resolve, 5));
+            if (key === objectKey(options.failPartPath)) throw new Error('R2 write failed');
+            bytes = Buffer.from(data);
+            return { partNumber, etag: `part-${uploadId}` };
+          } finally { activeParts -= 1; }
         },
         async complete() {
           calls.push({ name: 'complete', key }); assert.ok(active); active = false;
@@ -69,7 +73,8 @@ function fixture(options = {}) {
     }
     throw new Error(`unexpected RPC ${name}`);
   };
-  return { objects, receipts, uploads, calls, env: { VIDEO_BUCKET: bucket, SUPABASE_URL: 'https://fixture.supabase.co', SUPABASE_SERVICE_ROLE_KEY: 'fixture-service' } };
+  return { objects, receipts, uploads, calls, maxActiveParts: () => maxActiveParts,
+    env: { VIDEO_BUCKET: bucket, SUPABASE_URL: 'https://fixture.supabase.co', SUPABASE_SERVICE_ROLE_KEY: 'fixture-service' } };
 }
 async function rejectsBeforeStorage(items, label, options = {}) {
   const f = fixture();
@@ -111,6 +116,7 @@ try {
   }
   assert.equal(f.receipts.size, 0, 'success clears exact durable write receipts');
   assert.equal(f.calls.filter(call => call.name === 'begin_processing_output_writes_v3').length, 1, 'batch retains deletion fencing');
+  assert.equal(f.maxActiveParts(), 2, 'one batch writes at most two R2 objects concurrently');
 
   f = fixture();
   const existing = { size: good.size, etag: 'existing-etag', customMetadata: { sha256: good.sha256 } };

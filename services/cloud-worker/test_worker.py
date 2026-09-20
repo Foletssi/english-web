@@ -282,7 +282,7 @@ class WorkerTests(unittest.TestCase):
             pipeline.assert_not_called()
 
     def test_worker_reports_v5_protocol_version(self):
-        self.assertEqual(worker.VERSION, '2.5.8')
+        self.assertEqual(worker.VERSION, '2.5.9')
         source = MODULE.read_text(encoding='utf-8')
         self.assertIn("'learningRepairV5': True", source)
         self.assertIn("'teachingSchemaVersion': 3", source)
@@ -292,6 +292,61 @@ class WorkerTests(unittest.TestCase):
             self.assertEqual(worker.upload_concurrency(), 4)
         with patch.dict('os.environ', {'EASTUDY_UPLOAD_CONCURRENCY': 'invalid'}):
             self.assertEqual(worker.upload_concurrency(), 4)
+
+    def test_idempotent_retry_records_each_attempt_and_releases_backoff(self):
+        client = worker.EdgeClient('https://example.test', 'secret', 'test-worker', {})
+        client.reset_network_timing()
+        with patch.object(worker, 'request_json', side_effect=[
+                worker.ApiError('EDGE_HTTP_503', status=503), {'ok': True}]) as request, \
+             patch.object(worker.time, 'sleep') as sleep:
+            self.assertTrue(client.call('worker-output-receipt-v2')['ok'])
+        timing = client.consume_network_timing()
+        self.assertEqual(request.call_count, 2)
+        self.assertEqual(timing['requests'], 2)
+        self.assertEqual(timing['retries'], 1)
+        sleep.assert_called_once_with(1)
+
+    def test_voice_batch_requests_are_globally_bounded_to_two(self):
+        active = 0
+        maximum = 0
+        lock = worker.threading.Lock()
+        two_active = worker.threading.Event()
+        release = worker.threading.Event()
+
+        def request_json(request, *_args, **_kwargs):
+            nonlocal active, maximum
+            envelope = worker.json.loads(request.data)
+            with lock:
+                active += 1
+                maximum = max(maximum, active)
+                if active == 2:
+                    two_active.set()
+            try:
+                release.wait(3)
+                return {'ok': True, 'results': [
+                    {'ok': True, 'path': item['path'], 'size': item['size'],
+                     'sha256': item['sha256'], 'etag': 'etag'} for item in envelope['items']]}
+            finally:
+                with lock:
+                    active -= 1
+
+        with tempfile.TemporaryDirectory() as folder, patch.object(worker, 'request_json', side_effect=request_json):
+            root = Path(folder)
+            items = []
+            for index in range(3):
+                source = root / f'{index}.mp3'
+                source.write_bytes(bytes([index + 1]))
+                items.append([(f'voice/{index:064x}.mp3', source)])
+            client = worker.EdgeClient('https://example.test', 'secret', 'test-worker', {})
+            with worker.ThreadPoolExecutor(max_workers=3) as executor:
+                futures = [executor.submit(client.upload_batch, 'https://example.test/output', item)
+                           for item in items]
+                self.assertTrue(two_active.wait(3))
+                self.assertEqual(maximum, 2)
+                release.set()
+                for future in futures:
+                    self.assertTrue(future.result(timeout=3)[0]['ok'])
+        self.assertEqual(maximum, 2)
 
     def test_edge_requests_record_queue_and_active_network_time(self):
         client = worker.EdgeClient('https://example.test', 'secret', 'test-worker', {})
