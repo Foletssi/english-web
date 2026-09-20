@@ -90,6 +90,29 @@ async function acknowledge(env, writeId) {
   return false;
 }
 
+async function retryServiceRpc(env, name, input) {
+  let failure;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try { return await serviceRpc(env, name, input); }
+    catch (error) {
+      failure = error;
+      if (error?.upstreamStatus && error.upstreamStatus < 500 && error.upstreamStatus !== 429) throw error;
+    }
+  }
+  throw failure;
+}
+
+async function mapBounded(items, limit, work) {
+  const results = new Array(items.length); let next = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await work(items[index], index);
+    }
+  }));
+  return results;
+}
+
 // Bounded memory-only envelope: no archive object or destructive cleanup.
 export async function onRequestPost({ request, env }) {
   const bucketError = requireBucket(env);
@@ -116,7 +139,7 @@ export async function onRequestPost({ request, env }) {
     const bytes = new Uint8Array(length); let offset = 0;
     for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
     items = JSON.parse(new TextDecoder().decode(bytes)).items;
-    if (!Array.isArray(items) || items.length < 1 || items.length > 4) throw new Error('count');
+    if (!Array.isArray(items) || items.length < 1 || items.length > 32) throw new Error('count');
     const paths = new Set(); let total = 0;
     // Validate the entire envelope before allocating any storage.
     for (const item of items) {
@@ -133,25 +156,88 @@ export async function onRequestPost({ request, env }) {
     }
   } catch { return json({ error: 'OUTPUT_BATCH_INVALID' }, 400); }
   try { adminConfig(env); } catch { return json({ error: 'OUTPUT_SERVICE_UNAVAILABLE' }, 503); }
-  const results = [];
-  for (const item of items) {
-    const body = { p_job_id: job, p_run_id: run, p_token: token, p_path: item.path };
-    try {
-      const resolved = await serviceRpc(env, 'resolve_processing_output_v2', body);
-      if (!resolved?.object_key) { results.push({ ok: false, path: item.path, error: 'OUTPUT_NOT_ALLOWED' }); continue; }
-      const existing = await env.VIDEO_BUCKET.head(resolved.object_key);
-      if (existing) {
-        results.push(existing.size === item.size && existing.customMetadata?.sha256 === item.sha256
-          ? { ok: true, path: item.path, size: item.size, sha256: item.sha256, etag: existing.etag }
-          : { ok: false, path: item.path, error: 'OUTPUT_RECEIPT_CONFLICT' });
-        continue;
-      }
-      const response = await storeAsset(env, resolved.object_key, body, item.bytes, item.sha256);
-      const result = await response.json();
-      results.push({ ...result, ok: response.ok && result.ok === true, path: item.path });
-    } catch { results.push({ ok: false, path: item.path, error: 'OUTPUT_STATUS_UNAVAILABLE' }); }
+  let resolved;
+  try {
+    resolved = await retryServiceRpc(env, 'resolve_processing_outputs_v3', {
+      p_job_id: job, p_run_id: run, p_token: token, p_paths: items.map(item => item.path)
+    });
+  } catch { return json({ error: 'OUTPUT_STATUS_UNAVAILABLE' }, 503); }
+  const keys = new Map((resolved?.outputs || []).map(row => [row.path, row.object_key]));
+  if (keys.size !== items.length || items.some(item => !keys.get(item.path))) {
+    return json({ error: 'OUTPUT_NOT_ALLOWED' }, 403);
   }
-  return json({ ok: true, results });
+  const results = new Map();
+  const missing = [];
+  await mapBounded(items, 4, async item => {
+    const key = keys.get(item.path);
+    try {
+      const existing = await env.VIDEO_BUCKET.head(key);
+      if (!existing) { missing.push({ item, key }); return; }
+      results.set(item.path, existing.size === item.size && existing.customMetadata?.sha256 === item.sha256
+        ? { ok: true, path: item.path, size: item.size, sha256: item.sha256, etag: existing.etag }
+        : { ok: false, path: item.path, error: 'OUTPUT_RECEIPT_CONFLICT' });
+    } catch { results.set(item.path, { ok: false, path: item.path, error: 'OUTPUT_STATUS_UNAVAILABLE' }); }
+  });
+  const prepared = (await mapBounded(missing, 4, async entry => {
+    try {
+      const upload = await env.VIDEO_BUCKET.createMultipartUpload(entry.key, {
+        httpMetadata: { contentType: contentType(entry.item.path), cacheControl: 'private, max-age=31536000, immutable' },
+        customMetadata: { processingJobId: job, sha256: entry.item.sha256 }
+      });
+      return { ...entry, upload };
+    } catch {
+      results.set(entry.item.path, { ok: false, path: entry.item.path, error: 'OUTPUT_UPLOAD_RETRY' });
+      return null;
+    }
+  })).filter(Boolean);
+  if (prepared.length) {
+    let writes;
+    try {
+      writes = await retryServiceRpc(env, 'begin_processing_output_writes_v3', {
+        p_job_id: job, p_run_id: run, p_token: token,
+        p_items: prepared.map(entry => ({ path: entry.item.path, uploadId: entry.upload.uploadId }))
+      });
+    } catch {
+      await mapBounded(prepared, 4, async entry => { try { await entry.upload.abort(); } catch {} });
+      for (const entry of prepared) results.set(entry.item.path,
+        { ok: false, path: entry.item.path, error: 'OUTPUT_UPLOAD_RETRY' });
+      return json({ ok: true, results: items.map(item => results.get(item.path)) });
+    }
+    const writeMap = new Map((writes?.writes || []).map(row => [row.path, row.write_id]));
+    if (writeMap.size !== prepared.length || prepared.some(entry => !writeMap.get(entry.item.path))) {
+      await mapBounded(prepared, 4, async entry => { try { await entry.upload.abort(); } catch {} });
+      for (const entry of prepared) results.set(entry.item.path,
+        { ok: false, path: entry.item.path, error: 'OUTPUT_UPLOAD_RETRY' });
+      return json({ ok: true, results: items.map(item => results.get(item.path)) });
+    }
+    const stored = await mapBounded(prepared, 4, async entry => {
+      const writeId = writeMap.get(entry.item.path);
+      try {
+        const part = await entry.upload.uploadPart(1, entry.item.bytes);
+        const object = await entry.upload.complete([part]);
+        return { entry, writeId, acknowledged: true, object };
+      } catch {
+        try { await entry.upload.abort(); return { entry, writeId, acknowledged: true, error: 'OUTPUT_UPLOAD_RETRY' }; }
+        catch { return { entry, writeId, acknowledged: false, error: 'OUTPUT_UPLOAD_RETRY' }; }
+      }
+    });
+    const writeIds = stored.filter(row => row.acknowledged).map(row => row.writeId);
+    let acknowledged = writeIds.length === 0;
+    if (writeIds.length) {
+      try {
+        await retryServiceRpc(env, 'finish_processing_output_writes_v3', { p_write_ids: writeIds });
+        acknowledged = true;
+      } catch { acknowledged = false; }
+    }
+    for (const row of stored) {
+      const { item } = row.entry;
+      if (row.object && acknowledged) results.set(item.path,
+        { ok: true, path: item.path, size: row.object.size, sha256: item.sha256, etag: row.object.etag });
+      else results.set(item.path, { ok: false, path: item.path,
+        error: row.object ? 'OUTPUT_ACK_PENDING' : (row.error || 'OUTPUT_UPLOAD_RETRY') });
+    }
+  }
+  return json({ ok: true, results: items.map(item => results.get(item.path)) });
 }
 
 // The current run's resolver derives the object key; callers never supply R2 keys.

@@ -31,6 +31,7 @@ function fixture(options = {}) {
         async uploadPart(partNumber, data) {
           calls.push({ name: 'part', key });
           assert.ok(active); assert.equal(partNumber, 1);
+          if (key === objectKey(options.failPartPath)) throw new Error('R2 write failed');
           bytes = Buffer.from(data);
           return { partNumber, etag: `part-${uploadId}` };
         },
@@ -49,19 +50,22 @@ function fixture(options = {}) {
     calls.push({ name, input });
     assert.ok(init.signal, 'each RPC has a deadline');
     assert.equal(input.p_run_id ?? run, run, 'current-run authorization must be retained');
-    if (name === 'resolve_processing_output_v2') {
+    if (name === 'resolve_processing_outputs_v3') {
       assert.equal(input.p_job_id, job); assert.equal(input.p_token, 'x'.repeat(64));
-      return Response.json([{ object_key: objectKey(input.p_path) }]);
+      return Response.json({ outputs: input.p_paths.map(path => ({ path, object_key: objectKey(path) })) });
     }
-    if (name === 'begin_processing_output_write') {
+    if (name === 'begin_processing_output_writes_v3') {
       assert.equal(init.headers.Authorization, 'Bearer fixture-service');
-      if (input.p_path === options.failPath) return Response.json({ message: 'VIDEO_PERMANENT_DELETION_STARTED' }, { status: 400 });
-      const write_id = `write-${input.p_upload_id}`;
-      receipts.set(write_id, input);
-      return Response.json({ object_key: objectKey(input.p_path), write_id });
+      const writes = input.p_items.map(item => {
+        const write_id = `write-${item.uploadId}`;
+        receipts.set(write_id, item);
+        return { path: item.path, object_key: objectKey(item.path), write_id };
+      });
+      return Response.json({ writes });
     }
-    if (name === 'finish_processing_output_write') {
-      receipts.delete(input.p_write_id); return Response.json({ ok: true });
+    if (name === 'finish_processing_output_writes_v3') {
+      for (const id of input.p_write_ids) receipts.delete(id);
+      return Response.json({ ok: true });
     }
     throw new Error(`unexpected RPC ${name}`);
   };
@@ -79,7 +83,7 @@ const originalFetch = globalThis.fetch;
 try {
   const good = item('laundry'), other = item('gonna');
   await rejectsBeforeStorage([], 'empty batch');
-  await rejectsBeforeStorage(Array.from({ length: 9 }, (_, n) => item(`word-${n}`)), 'count limit');
+  await rejectsBeforeStorage(Array.from({ length: 33 }, (_, n) => item(`word-${n}`)), 'count limit');
   await rejectsBeforeStorage([good, good], 'duplicate paths');
   for (const path of ['../voice/x.mp3', `voice/../${'a'.repeat(64)}.mp3`, `540p/${'a'.repeat(64)}.mp3`, `voice/${'a'.repeat(63)}.mp3`, `voice/${'a'.repeat(64)}.mp3/extra`]) {
     await rejectsBeforeStorage([good, { ...other, path }], `unsafe path ${path}`);
@@ -106,7 +110,7 @@ try {
     assert.ok(result.etag); assert.ok(f.objects.has(objectKey(expected.path)));
   }
   assert.equal(f.receipts.size, 0, 'success clears exact durable write receipts');
-  assert.equal(f.calls.filter(call => call.name === 'begin_processing_output_write').length, 2, 'batch retains deletion fencing');
+  assert.equal(f.calls.filter(call => call.name === 'begin_processing_output_writes_v3').length, 1, 'batch retains deletion fencing');
 
   f = fixture();
   const existing = { size: good.size, etag: 'existing-etag', customMetadata: { sha256: good.sha256 } };
@@ -115,7 +119,7 @@ try {
   payload = await response.json();
   assert.equal(payload.ok, true); assert.equal(payload.results[0].ok, true);
   assert.equal(payload.results[0].etag, 'existing-etag'); assert.equal(f.uploads.length, 0);
-  assert.ok(f.calls.some(call => call.name === 'resolve_processing_output_v2'), 'reuse still checks current-run authorization');
+  assert.ok(f.calls.some(call => call.name === 'resolve_processing_outputs_v3'), 'reuse still checks current-run authorization');
 
   for (const conflict of [{ ...existing, customMetadata: { sha256: '0'.repeat(64) } }, { ...existing, size: good.size + 1 }]) {
     f = fixture(); f.objects.set(objectKey(good.path), conflict);
@@ -126,8 +130,8 @@ try {
     assert.equal(f.uploads.length, 0); assert.equal(f.objects.get(objectKey(good.path)), conflict);
   }
 
-  // One rejected fenced write does not discard the independently completed receipt.
-  f = fixture({ failPath: other.path });
+  // One failed R2 write does not discard the independently completed receipt.
+  f = fixture({ failPartPath: other.path });
   response = await onRequestPost({ request: request([good, other]), env: f.env });
   assert.equal(response.status, 200); payload = await response.json();
   assert.equal(payload.ok, true);
@@ -136,8 +140,8 @@ try {
   assert.ok(payload.results.find(result => result.path === other.path).error);
   assert.ok(f.objects.has(objectKey(good.path))); assert.ok(!f.objects.has(objectKey(other.path)));
   assert.equal(f.receipts.size, 0);
-  assert.ok(!f.calls.some(call => call.name === 'part' && call.key === objectKey(other.path)), 'rejected begin cannot upload bytes');
-  assert.ok(f.calls.some(call => call.name === 'abort' && call.key === objectKey(other.path)), 'rejected begin aborts exact multipart upload');
+  assert.ok(f.calls.some(call => call.name === 'part' && call.key === objectKey(other.path)), 'failed item reached its isolated R2 write');
+  assert.ok(f.calls.some(call => call.name === 'abort' && call.key === objectKey(other.path)), 'failed write aborts exact multipart upload');
 
   // Retry reconciles a successful item and never sends its bytes again.
   const firstGoodWrites = f.calls.filter(call => call.name === 'part' && call.key === objectKey(good.path)).length;

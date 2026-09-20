@@ -40,7 +40,7 @@ from ai_settings import SettingsStore, start_ai_settings  # noqa: E402
 from final_output import restore_final_output, save_final_output  # noqa: E402
 
 
-VERSION = '2.5.7'
+VERSION = '2.5.8'
 DEFAULT_ENDPOINT = 'https://ehxqtgakjgqgmghhdmjg.supabase.co/functions/v1/video-processing'
 STAGE_MAP = {'probe': 'PROBE', 'transcode': 'TRANSCODE', 'asr': 'ASR', 'enrich': 'ENRICH'}
 
@@ -165,7 +165,7 @@ class EdgeClient:
 
 
     def upload_batch(self, base_url, items):
-        if not 1 <= len(items) <= 4:
+        if not 1 <= len(items) <= 32:
             raise ApiError('OUTPUT_BATCH_LIMIT')
         pending = {}
         for relative, source in items:
@@ -368,7 +368,7 @@ def _upload_assets(client, lease, output, assets, cancelled=None):
             raise ApiError('OUTPUT_SIZE_LIMIT')
         eligible = (run_id(lease) and callable(getattr(client, 'upload_batch', None))
                     and re.fullmatch(r'voice/[a-f0-9]{64}\.mp3', relative) and size <= 1024 ** 2)
-        if batch and (not eligible or len(batch) == 4 or batch_size + size > 2 * 1024 ** 2):
+        if batch and (not eligible or len(batch) == 32 or batch_size + size > 2 * 1024 ** 2):
             units.append((True, batch))
             batch, batch_size = [], 0
         if eligible:

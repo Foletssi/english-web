@@ -90,7 +90,7 @@ class UploadBatchTests(unittest.TestCase):
                 'data': base64.b64encode(path.read_bytes()).decode('ascii')})
 
     def test_edge_rejects_oversized_or_ineligible_batches_before_network(self):
-        paths = self.voices(5)
+        paths = self.voices(33)
         items = [(path.relative_to(self.output).as_posix(), path) for path in paths]
         large = self.make_file('voice/' + 'e' * 64 + '.mp3', b'x' * (1024 * 1024 + 1))
         heavy = [self.make_file('voice/' + f'{number + 10:064x}' + '.mp3', b'x' * (800 * 1024))
@@ -120,13 +120,13 @@ class UploadBatchTests(unittest.TestCase):
                 with self.assertRaises(worker.ApiError):
                     client.upload_batch(self.url, items)
 
-    def test_five_voices_are_batched_four_plus_one_and_manifest_is_sorted(self):
+    def test_voice_files_use_one_bounded_batch_and_manifest_is_sorted(self):
         paths = self.voices(5)
         normal = self.make_file('540p/00001.ts', b'video')
         self.make_file('original.mp4', b'never-upload-this')
         manifest = worker.upload_assets(self.client, self.lease, self.output, [normal, *reversed(paths)])
-        self.assertTrue(any(len(batch) == 4 for batch in self.client.batches))
-        self.assertTrue(all(1 <= len(batch) <= 4 for batch in self.client.batches))
+        self.assertEqual([len(batch) for batch in self.client.batches], [5])
+        self.assertTrue(all(1 <= len(batch) <= 32 for batch in self.client.batches))
         sent = [item for batch in self.client.batches for item in batch] + self.client.singles
         self.assertCountEqual([relative for relative, _ in sent],
                               [path.relative_to(self.output).as_posix() for path in [normal, *paths]])
@@ -134,7 +134,7 @@ class UploadBatchTests(unittest.TestCase):
         self.assertTrue(all(relative.startswith('voice/') for batch in self.client.batches for relative, _ in batch))
         self.assertEqual([item['path'] for item in manifest], sorted(item['path'] for item in manifest))
         self.assertEqual(len(self.client.registered), 6)
-        self.assertEqual(self.client.actions.count('worker-output-receipts-v3'), 2)
+        self.assertEqual(self.client.actions.count('worker-output-receipts-v3'), 1)
         self.assertEqual(self.client.actions.count('worker-output-receipt-v2'), 1)
         for item in manifest:
             registration = next(value for value in self.client.registered if value['path'] == item['path'])
