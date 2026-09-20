@@ -19,7 +19,7 @@ an exact measurement of the email's unknown alert window.
 - Apply the projection to list/history/detail, private cover preview, and the
   existing non-voice playback resolver. Leave all role, entitlement, run,
   publication, deletion, path and receipt predicates unchanged. Voice delivery
-  retains its registered-voice validation path.
+  retains its registered-voice validation rules through a scalar snapshot predicate.
 - Sort job IDs before loading the five selected processing records.
 - Pause automatic admin polling when hidden, offline, signed out or outside the
   dashboard/processing/video-detail pages. Resume when eligible. Idle polling is
@@ -60,6 +60,25 @@ Existing admin_intake_ui_test.cjs fails at line 64: it expects an enabled submit
 button while the current service is unavailable. The exact same assertion also
 fails with pre-change HEAD source. This fixture was not changed or counted as a
 passing test. Its earlier admin table/layout checks completed in both runs.
+
+## Existing video channels included
+
+The user also requested existing video channels be covered. The shared non-voice
+resolver covers existing 540p/720p manifests, segments and covers; the added
+20260920051000 migration removes full-array materialization from registered voice
+access. Existing URLs, source/revision comparisons, job/run ownership, receipt
+hashes, publication/trash rules and entitlement checks are retained. No stored
+video is republished, regenerated, restored from trash or otherwise rewritten.
+
+33 synthetic voice access cases matched the previous predicate, including denied
+and missing fields, stale source/meaning/revision, ownership/run/hash changes,
+valid later duplicates, token and expression identities. In a 6 MiB synthetic
+snapshot, temporary writes fell from 769 blocks (about 6.3 MB) to zero, and time
+from 26.252 ms to 14.083 ms. These tests ran inside ROLLBACK.
+
+The full scripts/test-release.ps1 gate passed, including 109 cloud-worker tests,
+local-studio tests, the relevant JS contract suites and Deno type checking.
+The separately inspected older intake fixture failure remains as noted above.
 
 ## Publication status and rollback
 
