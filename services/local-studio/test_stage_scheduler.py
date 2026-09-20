@@ -1,12 +1,61 @@
 import threading
+import time
 import unittest
 from unittest.mock import patch
 from contextvars import ContextVar
 
-from stage_scheduler import Stage, active_stage, run_stages, parallel_workers
+from stage_scheduler import FairResourceGate, Stage, active_stage, run_stages, parallel_workers
 
 
 class StageSchedulerTests(unittest.TestCase):
+    def test_fair_gate_admits_waiters_in_fifo_order(self):
+        gate = FairResourceGate(1)
+        entered = []
+        first_inside = threading.Event()
+        release_first = threading.Event()
+
+        def run(name):
+            with gate.slot(lambda: None):
+                entered.append(name)
+                if name == 'first':
+                    first_inside.set()
+                    release_first.wait(3)
+
+        threads = [threading.Thread(target=run, args=(name,))
+                   for name in ('first', 'second', 'third')]
+        threads[0].start()
+        self.assertTrue(first_inside.wait(3))
+        threads[1].start()
+        time.sleep(.02)
+        threads[2].start()
+        time.sleep(.02)
+        release_first.set()
+        for thread in threads:
+            thread.join(3)
+            self.assertFalse(thread.is_alive())
+        self.assertEqual(entered, ['first', 'second', 'third'])
+
+    def test_waiting_gate_honors_cancellation(self):
+        gate = FairResourceGate(1)
+        cancelled = threading.Event()
+        failure = []
+        with gate.slot(lambda: None):
+            def check():
+                if cancelled.is_set():
+                    raise RuntimeError('CANCELLED')
+            def wait_for_slot():
+                try:
+                    with gate.slot(check):
+                        self.fail('cancelled waiter entered')
+                except RuntimeError as error:
+                    failure.append(str(error))
+            thread = threading.Thread(target=wait_for_slot)
+            thread.start()
+            time.sleep(.03)
+            cancelled.set()
+        thread.join(3)
+        self.assertEqual(failure, ['CANCELLED'])
+
     def test_low_or_unknown_gpu_memory_falls_back_to_serial(self):
         with patch.dict('os.environ', {'EASTUDY_SERIAL_PIPELINE': '0'}), patch('os.cpu_count', return_value=8), patch('stage_scheduler.subprocess.run') as gpu:
             for memory, expected in [('2048\n', 1), ('8192\n', 3), ('8192\n1024\n', 1), ('unknown', 1)]:

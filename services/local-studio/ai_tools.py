@@ -170,12 +170,25 @@ def endpoint(base_url):
 def call_json(config, system_prompt, payload, timeout=120, opener=None):
     started = time.monotonic()
     receipt = {'status': 'error'}
+    active_started = None
     try:
-        return _call_json(config, system_prompt, payload, timeout, opener, receipt)
+        check_ai_cancelled(config)
+        with resource_slot('ai', (config or {}).get('cancelled')):
+            active_started = time.monotonic()
+            receipt['queueSeconds'] = round(active_started - started, 3)
+            return _call_json(config, system_prompt, payload, timeout, opener, receipt)
+    except RuntimeError as error:
+        if str(error) != 'JOB_LEASE_LOST_OR_CANCELLED':
+            raise
+        converted = StudioError('JOB_LEASE_LOST_OR_CANCELLED', '本次处理已停止，不再发起 AI 请求。', False)
+        receipt['errorCode'] = converted.code
+        raise converted from error
     except StudioError as error:
         receipt['errorCode'] = error.code
         raise
     finally:
+        if active_started is not None:
+            receipt['activeSeconds'] = round(time.monotonic() - active_started, 3)
         event = 'request' if receipt.pop('requestAttempted', False) else 'preflight_failed'
         record_usage(event, config, elapsedSeconds=round(time.monotonic() - started, 3), **receipt)
 

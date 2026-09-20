@@ -104,13 +104,13 @@ def process_job(store, job_id, source_path, cover_path, ai_config, media_root,
         # Reject an unavailable output channel before starting paid teaching work.
         teaching_needs = ('asr', 'upload_media') if execution.get('upload_media') and not execution.get('preflight_output') else ('asr',)
         stages = [Stage('media', (), 'cpu_media', media), Stage('asr', (), 'gpu', asr),
-                  Stage('teaching', teaching_needs, 'ai', teaching)]
+                  Stage('teaching', teaching_needs, 'teaching', teaching)]
         if execution.get('voice'):
             stages.append(Stage('voice', ('teaching',), 'gpu', lambda deps: execution['voice'](deps['teaching'][0], output)))
         if execution.get('upload_media'):
-            stages.append(Stage('upload_media', ('media',), 'network', lambda deps: execution['upload_media'](deps['media'], output)))
+            stages.append(Stage('upload_media', ('media',), 'upload_media', lambda deps: execution['upload_media'](deps['media'], output)))
         if execution.get('upload_voice'):
-            stages.append(Stage('upload_voice', ('voice',), 'network', lambda deps: execution['upload_voice'](deps['voice'], output)))
+            stages.append(Stage('upload_voice', ('voice',), 'upload_voice', lambda deps: execution['upload_voice'](deps['voice'], output)))
         completed = run_stages(stages, cancelled=ai_config.get('cancelled'), observe=execution.get('observe'))
         learning, metadata, provenance = completed['teaching']
         variants, cover_images = completed['media']['variants'], completed['media']['coverImages']

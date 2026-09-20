@@ -2,6 +2,7 @@
 import os
 import subprocess
 import threading
+from collections import deque
 from contextlib import contextmanager
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from contextvars import ContextVar, copy_context
@@ -10,30 +11,79 @@ from dataclasses import dataclass
 active_stage = ContextVar('active_processing_stage', default=None)
 
 
-_resource_limits = {name: threading.BoundedSemaphore(1) for name in ('cpu_media', 'gpu', 'ai', 'network')}
+def _configured_limit(name, default, maximum):
+    try:
+        value = int(os.getenv(name, str(default)))
+    except ValueError:
+        value = default
+    return min(maximum, max(1, value))
+
+
+class FairResourceGate:
+    """Bounded FIFO admission shared by every concurrently processed job."""
+    def __init__(self, capacity):
+        self.capacity = max(1, int(capacity))
+        self._active = 0
+        self._waiters = deque()
+        self._condition = threading.Condition()
+
+    @contextmanager
+    def slot(self, check):
+        ticket = object()
+        admitted = False
+        with self._condition:
+            self._waiters.append(ticket)
+            try:
+                while self._active >= self.capacity or self._waiters[0] is not ticket:
+                    check()
+                    self._condition.wait(.25)
+                self._waiters.popleft()
+                self._active += 1
+                admitted = True
+                self._condition.notify_all()
+            except BaseException:
+                if not admitted:
+                    try:
+                        self._waiters.remove(ticket)
+                    except ValueError:
+                        pass
+                    self._condition.notify_all()
+                raise
+        try:
+            check()
+            yield
+        finally:
+            with self._condition:
+                self._active -= 1
+                self._condition.notify_all()
+
+
+_resource_limits = {
+    'cpu_media': FairResourceGate(1),
+    'gpu': FairResourceGate(1),
+    'ai': FairResourceGate(_configured_limit('EASTUDY_GLOBAL_AI_CONCURRENCY', 3, 4)),
+    'network': FairResourceGate(_configured_limit('EASTUDY_GLOBAL_NETWORK_CONCURRENCY', 4, 8)),
+}
 _resource_held = threading.local()
 
 
 @contextmanager
 def resource_slot(resource, cancelled=None):
     held = getattr(_resource_held, 'names', set())
-    semaphore = _resource_limits.get(resource)
+    gate = _resource_limits.get(resource)
     def check():
         if cancelled and cancelled.is_set():
             raise RuntimeError('JOB_LEASE_LOST_OR_CANCELLED')
     check()
-    if semaphore is None or resource in held:
+    if gate is None or resource in held:
         yield
         return
-    while not semaphore.acquire(timeout=.25):
-        check()
-    try:
-        check()
+    with gate.slot(check):
         _resource_held.names = held | {resource}
-        yield
-    finally:
-        _resource_held.names = held
-        semaphore.release()
+        try:
+            yield
+        finally:
+            _resource_held.names = held
 
 
 def execute_stage(stage, dependencies, cancelled=None):
