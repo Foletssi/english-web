@@ -39,4 +39,12 @@
 
 数据库迁移为前向兼容新增函数，不删除旧 RPC。应用回退可恢复上一提交并让 Worker 使用逐文件 v2 路径；数据库函数保留，避免回滚时破坏已完成回执。Worker 回退前先确认无活动租约。任何回退都不删除 R2 媒体对象。
 
-生产证据将在发布完成后追加。
+## 生产发布记录（2026-09-21，北京时间）
+
+- Supabase CLI 2.117.0 正式应用 `20260920160000` 与 `20260920161000`，远端迁移表与本地一致。迁移事务成功即包含四个函数的定义、撤销公开角色权限及 `service_role` 授权。
+- `video-processing` Edge Function 从版本 8 升到 9，HTTPS 健康检查为 200、`ready=true`。使用 Worker 服务端身份调用 `worker-output-receipts-v3` 的空批次得到 `SUPABASE_400:OUTPUT_RECEIPTS_INVALID`，确认新 action、RPC 和服务端执行权限已贯通。
+- 核心应用提交 `2829a8f88278e774ce77b51c0e98e7b9e1edb0f1` 已快进推送到 GitHub main，Cloudflare Pages 对该精确 SHA 显示成功。生产域名和该部署预览域名的学生端、管理端 HTML 均为 HTTP 200，并与本地发布文件逐字一致（只规范化 CRLF/LF）。
+- 生产与预览的 `/api/processing/output` 均接受 5 个格式、大小和摘要正确的隔离假条目，随后在当前 run 授权阶段返回 `503 OUTPUT_STATUS_UNAVAILABLE`；这证明 32 文件批量路由已生效，且失败发生在分配 multipart/R2 写入之前。
+- 同提交的独立 `Workers Builds: english-web` 检查失败；上一生产提交 `94fa6c1` 也有相同的 Workers 失败与 Pages 成功组合。正式发布通道是项目规定的 Cloudflare Pages，Pages 本轮成功，生产 HTTPS 与部署预览一致。
+- 空闲 Worker 经 5 秒采样确认 CPU 和日志无变化后更新。旧 `2.5.7` 进程停止，新 `2.5.9` 进程启动；线上心跳确认 FFmpeg、Whisper、DeepSeek、`localInputV1` 就绪，计划任务运行中，启动错误日志 0 字节。
+- 本轮没有创建或领取生产视频任务，没有重新处理旧视频，没有调用付费 AI，没有执行 R2 删除。

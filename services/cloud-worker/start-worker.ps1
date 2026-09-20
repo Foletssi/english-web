@@ -24,7 +24,7 @@ if (-not $env:EASTUDY_ASR_DEVICE) { $env:EASTUDY_ASR_DEVICE = 'cuda' }
 if (-not $env:EASTUDY_ASR_COMPUTE) { $env:EASTUDY_ASR_COMPUTE = 'float16' }
 if (-not $env:EASTUDY_AI_CONCURRENCY) { $env:EASTUDY_AI_CONCURRENCY = '3' }
 if (-not $env:EASTUDY_AI_ATTEMPTS) { $env:EASTUDY_AI_ATTEMPTS = '3' }
-if (-not $env:EASTUDY_UPLOAD_CONCURRENCY) { $env:EASTUDY_UPLOAD_CONCURRENCY = '2' }
+if (-not $env:EASTUDY_UPLOAD_CONCURRENCY) { $env:EASTUDY_UPLOAD_CONCURRENCY = '4' }
 # Scheduled tasks can retain an older environment snapshot. Refresh only the
 # persisted data and ASR overrides; leave credentials in their existing channel.
 foreach ($settingName in @('EASTUDY_WORK_ROOT', 'EASTUDY_ASR_MODEL_DIR', 'EASTUDY_ASR_MODEL', 'EASTUDY_ASR_DEVICE', 'EASTUDY_ASR_COMPUTE')) {
