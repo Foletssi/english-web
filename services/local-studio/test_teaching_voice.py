@@ -166,6 +166,16 @@ class VoiceTests(unittest.TestCase):
         with self.assertRaises(StudioError):
             pronunciation_input({**present, 'pronunciationHint': ''})
 
+    def test_american_flap_diacritic_is_normalized_for_kokoro(self):
+        cases = {
+            'motivation': ('/ˌmoʊ.t̬əˈveɪ.ʃən/', 'ˌmoʊ.ɾəˈveɪ.ʃən'),
+            'excited': ('/ɪkˈsaɪ.t̬ɪd/', 'ɪkˈsaɪ.ɾɪd'),
+            'little': ('/ˈlɪt̬.əl/', 'ˈlɪɾ.əl'),
+        }
+        for text, (hint, expected) in cases.items():
+            item = collect_voice_items('1', '2', [row(text=text, hint=hint)])[0]
+            self.assertEqual(pronunciation_input(item), (expected, True))
+
     def test_stale_source_and_duplicate_identity_rejected(self):
         stale = row()
         stale['textRevision'] = 2

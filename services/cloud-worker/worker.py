@@ -41,7 +41,7 @@ from ai_settings import SettingsStore, start_ai_settings  # noqa: E402
 from final_output import restore_final_output, save_final_output  # noqa: E402
 
 
-VERSION = '2.5.10'
+VERSION = '2.5.11'
 DEFAULT_ENDPOINT = 'https://ehxqtgakjgqgmghhdmjg.supabase.co/functions/v1/video-processing'
 STAGE_MAP = {'probe': 'PROBE', 'transcode': 'TRANSCODE', 'asr': 'ASR', 'enrich': 'ENRICH'}
 

@@ -93,6 +93,11 @@ def pronunciation_input(item):
             raise StudioError('VOICE_PRONUNCIATION_AMBIGUOUS', '发音提示包含多个读音。', True)
         phonemes = explicit[0].strip().replace('r', 'ɹ')
         phonemes = phonemes.replace('ɝ', 'ɜɹ').replace('ɚ', 'əɹ').replace('g', 'ɡ')
+        # American dictionaries write an intervocalic flap as t plus the IPA
+        # voicing diacritic. Kokoro supports the equivalent alveolar tap /ɾ/,
+        # but silently drops the combining mark; normalize it explicitly so a
+        # valid teaching hint cannot fail the whole voice batch.
+        phonemes = phonemes.replace('t̬', 'ɾ')
         # Conventional dictionary /e/ maps to the model's DRESS vowel /ɛ/.
         if item['text'].casefold() == 'read' and phonemes in {'ɹed', 'ɹˈed'}:
             phonemes = phonemes.replace('e', 'ɛ')
