@@ -30,6 +30,7 @@ from checkpoint import atomic_json, file_sha256  # noqa: E402
 from media_tools import ladder  # noqa: E402
 from teaching_prompts import TEACHING_PROMPT_VERSION  # noqa: E402
 from teaching_completion import complete_teaching  # noqa: E402
+from teaching_contract import validate_completed_teaching  # noqa: E402
 from voice_runtime import generate_worker_voice, voice_assets, voice_capability  # noqa: E402
 from media_cancellation import cancellation_scope  # noqa: E402
 from local_source import SourceCache, start_intake  # noqa: E402
@@ -40,7 +41,7 @@ from ai_settings import SettingsStore, start_ai_settings  # noqa: E402
 from final_output import restore_final_output, save_final_output  # noqa: E402
 
 
-VERSION = '2.5.9'
+VERSION = '2.5.10'
 DEFAULT_ENDPOINT = 'https://ehxqtgakjgqgmghhdmjg.supabase.co/functions/v1/video-processing'
 STAGE_MAP = {'probe': 'PROBE', 'transcode': 'TRANSCODE', 'asr': 'ASR', 'enrich': 'ENRICH'}
 
@@ -684,6 +685,7 @@ def selected_assets(output, result):
 def validate_teaching(client, lease, rows):
     if not run_id(lease):
         raise ApiError('TEACHING_VALIDATION_PROTOCOL_REQUIRED')
+    validate_completed_teaching(rows)
     response = client.call('worker-validate-teaching-v2', jobId=lease['job']['id'],
         runId=run_id(lease), token=lease['token'], sentences=rows)
     value = response.get('validation')
@@ -911,7 +913,9 @@ def process_lease(client, lease, local_inputs=None, ai_settings=None):
             raise ApiError('JOB_LEASE_LOST_OR_CANCELLED')
         if result_job.get('status') != 'REVIEW':
             error = result_job.get('error') or {'code': 'PIPELINE_FAILED', 'message': result_job.get('message', '处理失败')}
-            print(f'[pipeline-error] {job_id}: {error.get("code")}: {error.get("message")}', flush=True)
+            message = f'[pipeline-error] {job_id}: {error.get("code")}: {error.get("message")}'
+            print(message, flush=True)
+            print(message, file=sys.stderr, flush=True)
             report_failure(client, lease, error, bool(error.get('retryable', True)))
             return
         output = work / 'output' / job_id
@@ -932,7 +936,9 @@ def process_lease(client, lease, local_inputs=None, ai_settings=None):
             client.call('worker-complete', jobId=job_id, token=lease['token'], result=final)
         print(f'[complete] {job_id}', flush=True)
     except Exception as error:
-        print(f'[error] {job_id}: {error}', flush=True)
+        message = f'[error] {job_id}: {error}'
+        print(message, flush=True)
+        print(message, file=sys.stderr, flush=True)
         if cancelled.is_set() or lease_cancelled(error):
             print(f'[cancelled] {job_id}: stale lease stopped before the next stage', flush=True)
             return
