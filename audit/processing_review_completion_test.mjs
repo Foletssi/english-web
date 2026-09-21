@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const studio=readFileSync('admin/assets/studio-v2.js','utf8');
+const migration=readFileSync('supabase/migrations/20260921232500_processing_review_completion.sql','utf8');
+assert.doesNotMatch(studio,/titleZh:'待生成'|titleZh:'AI 正在生成'/);
+assert.match(studio,/titleZh:displayTitle/);
+assert.match(studio,/titleZh:row\.title\|\|titleFrom/);
+assert.match(migration,/reviewStatus','approved'/);
+assert.match(migration,/processing_finalize_ai_result_v1/);
+assert.match(migration,/private\.sync_processing_retry_snapshot_v1/);
+assert.match(migration,/dd0164a4-132f-49a7-962a-7c98b4b323b7/);
+console.log('PASS queued titles remain visible, AI difficulty auto-approves, and timeout recovery reuses the existing job');

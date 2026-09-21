@@ -147,7 +147,7 @@ def validate_difficulty(value, sentence_ids):
                 or not isinstance(row.get('reasonZh'), str) or not row['reasonZh'].strip()):
             raise StudioError('AI_DIFFICULTY_EVIDENCE', '学习难度证据与字幕不对应。', True)
     return {'schemaVersion': 1, 'primaryTrack': primary, 'targetTracks': list(dict.fromkeys(targets)),
-            'evidence': evidence, 'reviewStatus': 'review', 'source': 'ai'}
+            'evidence': evidence, 'reviewStatus': 'approved' if primary else 'review', 'source': 'ai'}
 
 
 def validate_metadata(payload, topic_ids, goal_ids, sentence_ids, tag_ids=None):

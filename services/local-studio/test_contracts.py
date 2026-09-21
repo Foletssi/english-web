@@ -25,7 +25,7 @@ class Contracts(unittest.TestCase):
     def test_difficulty_requires_explicit_result_and_real_evidence(self):
         valid = {'primaryTrack': 'cet6', 'targetTracks': ['cet6'],
                  'evidence': [{'sentenceIds': ['v:1'], 'reasonZh': '结合原句义项与结构审核。'}]}
-        self.assertEqual(validate_difficulty(valid, {'v:1'})['reviewStatus'], 'review')
+        self.assertEqual(validate_difficulty(valid, {'v:1'})['reviewStatus'], 'approved')
         for invalid in ({}, {'difficulty': valid}, {**valid, 'targetTracks': ['cet4']},
                         {**valid, 'evidence': []},
                         {**valid, 'evidence': [{'sentenceIds': ['unknown'], 'reasonZh': '依据'}]},

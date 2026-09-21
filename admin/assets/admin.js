@@ -305,6 +305,27 @@ async function refreshProcessingContent(){
  })();
  try{return await processingContentRequest}finally{processingContentRequest=null}
 }
+async function refreshProcessingVideoContent(videoId){
+ if(Store.localOnly||!Cloud||!AdminAuth.context)return false;
+ const context=AdminAuth.context,generation=contentEditGeneration;
+ if(cloudSyncTimer)return false;
+ await cloudSyncPromise;
+ if(cloudSyncTimer||AdminAuth.context!==context)return false;
+ const result=await Cloud.pullAdminVideoContent(videoId);
+ if(result.error)throw result.error;
+ if(AdminAuth.context!==context||cloudSyncTimer||generation!==contentEditGeneration)return false;
+ const remote=result.data,snapshot=Store.snapshot(),id=String(videoId);
+ const index=snapshot.videos.findIndex(video=>String(video.id)===id);
+ if(index<0)return false;
+ snapshot.videos[index]=remote.video;
+ snapshot.sentences[id]=Array.isArray(remote.sentences)?remote.sentences:[];
+ cloudImporting=true;
+ try{Store.importSnapshot(snapshot,{type:'cloud.import',revision:remote.revision,videoId:id})}finally{cloudImporting=false}
+ CloudState.revision=Math.max(CloudState.revision,Number(remote.revision)||0);
+ updateCounts();
+ window.dispatchEvent(new CustomEvent('eastudy:processing-content-updated',{detail:{videoId:id}}));
+ return true;
+}
 async function refreshCloudJobs(){if(Store.localOnly||!Cloud)return;const result=await Cloud.listProcessingJobs(ProcessingView.page,ProcessingView.pageSize);if(result.error){CloudState.jobsSyncError=result.error;throw result.error}CloudState.summary=result.summary||null;CloudState.jobs=result.rows;CloudState.videoGroups=result.groups;CloudState.processingTotal=result.total;ProcessingView.total=result.total;CloudState.jobsSyncError=null;CloudState.lastJobsSyncAt=Date.now();updateCounts();window.dispatchEvent(new CustomEvent('eastudy:studio-job-updated'));return result.rows}
 async function pollPermanentDeletion(deletionId){
  const generation=trashViewGeneration,key=generation+':'+deletionId;
@@ -342,7 +363,7 @@ function sentenceFromCard(card,existing,{approve=false,fill=false}={}){const inp
 function readSentenceDraft(card,existing,options={}){const approve=Boolean(options.approve),resolveTeachingReview=Boolean(options.resolveTeachingReview)||Boolean(card.querySelector('[data-field="resolveTeachingReview"]')?.checked),draft=sentenceFromCard(card,existing,{...options,approve:false}),raw=String(card.querySelector('[data-field="expressions"]')?.value||'[]');let expressions;try{expressions=JSON.parse(raw);if(!Array.isArray(expressions))throw new Error('必须是数组')}catch(error){throw new Error(`句子 #${(existing.order??0)+1} 的重点表达 JSON 无效：${error.message}`)}const selectionChanged=LearningContract.normalizeSurface((draft.keyWords||[]).join(' | '))!==LearningContract.normalizeSurface((existing.keyWords||[]).join(' | ')),sourceChanged=String(draft.english)!==String(existing.english)||selectionChanged,textRevision=Math.max(1,Number(existing.textRevision)||1)+(sourceChanged?1:0);draft.textRevision=textRevision;draft.learningContractVersion=LearningContract.VERSION;draft.selectionLocked=Boolean(card.querySelector('[data-field="selectionLocked"]')?.checked||selectionChanged);draft.selectionSource=draft.selectionLocked?'manual':existing.selectionSource||'ai';draft.selectionRevision=Math.max(0,Number(existing.selectionRevision)||0)+(selectionChanged?1:0);draft.expressions=expressions.map(row=>({...row,surface:String(row?.surface||'').trim(),coreMeaningZh:String(row?.coreMeaningZh||'').trim(),contextMeaningZh:String(row?.contextMeaningZh||'').trim(),usageNoteZh:String(row?.usageNoteZh||'').trim(),source:row?.source==='ai'?'ai':'manual',sourceTextRevision:textRevision,approved:approve,reviewStatus:approve?'APPROVED':'REVIEW'})).filter(row=>row.surface);if(approve&&resolveTeachingReview){const hadPendingTeachingReview=Boolean(existing.segmentationNeedsReview)||(existing.expressions||[]).some(row=>row?.needsReview);draft.segmentationNeedsReview=false;draft.expressions=draft.expressions.map(row=>({...row,needsReview:false}));if(hadPendingTeachingReview)draft.reviewRevision=(Number(existing.reviewRevision)||0)+1}if(approve)draft.reviewStatus='APPROVED';const issues=LearningContract.sentenceIssues(draft,{forPublish:approve});if(approve&&issues.length){const error=new Error(`句子 #${(existing.order??0)+1}：${issues[0].message}`);error.issues=issues;throw error}const changed=['english','chinese','grammar','keyWords','expressions','selectionLocked'].some(key=>JSON.stringify(draft[key])!==JSON.stringify(existing[key]));draft.reviewStatus=approve?'APPROVED':changed?'REVIEW':existing.reviewStatus||'REVIEW';return draft}
 function collectSentenceDrafts(videoId,options={}){const current=new Map(Store.listSentences(videoId).map(row=>[String(row.id),row]));return $$('.sentence-row').map(card=>{const existing=current.get(String(card.dataset.sentenceId));if(!existing)throw new Error('发现已失效的字幕行，请刷新后重试');return readSentenceDraft(card,existing,options)})}
 async function persistSentenceDrafts(videoId,rows){cancelCloudDraftSync();const before=Store.snapshot();try{rows.forEach(row=>Store.saveSentence(videoId,row));if(Store.localOnly)return;cancelCloudDraftSync();const result=await Cloud.saveDraft(Store.snapshot(),CloudState.revision);if(result?.error)throw result.error;CloudState.revision=Number(result.data?.revision)||CloudState.revision}catch(error){cloudImporting=true;try{Store.importSnapshot(before,{type:'cloud.import',reason:'sentence-save-rollback'})}finally{cloudImporting=false}throw error}}
-window.EastudyAdminCloudBridge={isAuthenticated:()=>!!AdminAuth.context,processingSummary:()=>CloudState.summary,revision:()=>CloudState.revision,flush:flushCloudDraftSync,reserveLocal:reserveLocalProcessing,importMutation:importCloudMutation,reload:loadAdminCloud,refreshContent:refreshProcessingContent,refreshJobs:refreshCloudJobs,setJobs(rows){CloudState.jobs=rows||[];CloudState.videoGroups=groupedVideoWork(CloudState.jobs);CloudState.processingTotal=CloudState.videoGroups.length;CloudState.jobsSyncError=null;CloudState.lastJobsSyncAt=Date.now();window.dispatchEvent(new CustomEvent('eastudy:studio-job-updated'))}};
+window.EastudyAdminCloudBridge={isAuthenticated:()=>!!AdminAuth.context,processingSummary:()=>CloudState.summary,revision:()=>CloudState.revision,flush:flushCloudDraftSync,reserveLocal:reserveLocalProcessing,importMutation:importCloudMutation,reload:loadAdminCloud,refreshContent:refreshProcessingContent,refreshVideoContent:refreshProcessingVideoContent,refreshJobs:refreshCloudJobs,setJobs(rows){CloudState.jobs=rows||[];CloudState.videoGroups=groupedVideoWork(CloudState.jobs);CloudState.processingTotal=CloudState.videoGroups.length;CloudState.jobsSyncError=null;CloudState.lastJobsSyncAt=Date.now();window.dispatchEvent(new CustomEvent('eastudy:studio-job-updated'))}};
 function bindDeletionActions(){
  const selected=()=>$$('[data-select-video]:checked').map(x=>x.dataset.selectVideo);
  const updateSelection=()=>{const button=$('[data-delete-selected]'),all=$('[data-select-all-videos]'),count=selected().length,total=$$('[data-select-video]').length;if(button){button.disabled=!count;button.textContent=count?`删除所选（${count}）`:'删除所选'}if(all){all.checked=total>0&&count===total;all.indeterminate=count>0&&count<total}};
