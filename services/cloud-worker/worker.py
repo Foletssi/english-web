@@ -42,7 +42,7 @@ from ai_settings import SettingsStore, start_ai_settings  # noqa: E402
 from final_output import restore_final_output, save_final_output  # noqa: E402
 
 
-VERSION = '2.5.11'
+VERSION = '2.5.12'
 DEFAULT_ENDPOINT = 'https://ehxqtgakjgqgmghhdmjg.supabase.co/functions/v1/video-processing'
 STAGE_MAP = {'probe': 'PROBE', 'transcode': 'TRANSCODE', 'asr': 'ASR', 'enrich': 'ENRICH'}
 
@@ -83,15 +83,20 @@ def transient_request_error(error):
     if error.status is not None and error.status not in {429, 500, 502, 503, 504, 520, 521, 522, 523, 524}:
         return False
     # Named business errors, including unknown ones, must not inherit HTTP retries.
+    transport_proxy_failure = error.status in {429, 500, 502, 503, 504, 520, 521, 522, 523, 524} and any(
+        marker in error.code.lower() for marker in (
+            'error sending request', 'connection reset', 'connection error',
+            'read operation timed out', 'timed out'))
     return error.code in {'EDGE_UNAVAILABLE', 'EDGE_INVALID_RESPONSE', 'OUTPUT_UNAVAILABLE', 'OUTPUT_STATUS_UNAVAILABLE',
         'DB_STATEMENT_TIMEOUT', 'DB_LOCK_TIMEOUT', 'DB_SERIALIZATION_RETRY', 'DB_DEADLOCK_RETRY'} or (
         error.status is not None and error.code in {
-            f'EDGE_HTTP_{error.status}', f'OUTPUT_HTTP_{error.status}', 'REQUEST_FAILED'})
+            f'EDGE_HTTP_{error.status}', f'OUTPUT_HTTP_{error.status}', 'REQUEST_FAILED'}) or transport_proxy_failure
 
 
 def recoverable_output_error(error):
     return transient_request_error(error) or error.code in {
-        'OUTPUT_ACK_PENDING', 'OUTPUT_UPLOAD_RETRY', 'OUTPUT_INVALID_RESPONSE'}
+        'OUTPUT_ACK_PENDING', 'OUTPUT_UPLOAD_RETRY', 'OUTPUT_INVALID_RESPONSE',
+        'OUTPUT_AUTH_UNAVAILABLE'}
 
 
 def batch_protocol_fallback(error):
@@ -183,7 +188,7 @@ class EdgeClient:
         timeout = 15 if 'heartbeat' in action else (75 if action == 'worker-complete-v2' else 45)
         return self._request_json(request, timeout, retryable=action in {
             'worker-telemetry-v2', 'worker-output-receipt-v2', 'worker-output-receipts-v3', 'worker-complete-v2',
-            'worker-validate-teaching-v2'})
+            'worker-validate-teaching-v2', 'worker-fail-v2'})
 
     def upload(self, base_url, token, job_id, path, source):
         url = base_url + '&path=' + urllib.parse.quote(path, safe='/')

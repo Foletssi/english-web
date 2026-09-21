@@ -257,6 +257,34 @@ class WorkerTests(unittest.TestCase):
                 self.assertEqual(request.call_count, 2 if retry else 1)
                 self.assertEqual(sleep.call_count, 1 if retry else 0)
 
+    def test_proxy_transport_error_and_failure_report_retry_same_payload(self):
+        client = worker.EdgeClient('https://example.test', 'secret', 'test-worker', {})
+        detail = {'ok': False, 'error': 'SUPABASE_500:error sending request: connection reset'}
+        error = worker.urllib.error.HTTPError(client.endpoint, 500, 'failed', {},
+            io.BytesIO(worker.json.dumps(detail).encode()))
+        self.addCleanup(error.close)
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = b'{"ok":true}'
+        with patch.object(worker.urllib.request, 'urlopen', side_effect=[error, response]) as request, \
+             patch.object(worker.time, 'sleep'):
+            self.assertTrue(client.call('worker-fail-v2', jobId='job', runId='run',
+                error={'code': 'OUTPUT_AUTH_UNAVAILABLE'})['ok'])
+        self.assertEqual(request.call_count, 2)
+        self.assertEqual(request.call_args_list[0].args[0].data, request.call_args_list[1].args[0].data)
+
+    def test_output_auth_outage_retries_without_resending_bytes(self):
+        client = worker.EdgeClient('https://example.test', 'secret', 'worker', {})
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / 'a.ts'
+            source.write_bytes(b'abc')
+            receipt = {'ok': True, 'found': True, 'size': 3,
+                       'sha256': worker.file_sha256(source), 'etag': 'etag'}
+            with patch.object(worker, 'request_json', side_effect=[
+                    worker.ApiError('OUTPUT_AUTH_UNAVAILABLE', status=503), receipt]) as request, \
+                 patch.object(worker.time, 'sleep'):
+                self.assertEqual(client.upload('https://example.test?run=run', '', '', 'a.ts', source), receipt)
+            self.assertEqual([call.args[0].method for call in request.call_args_list], ['GET', 'GET'])
+
     def test_upload_retries_network_failure_without_changing_bytes(self):
         client = worker.EdgeClient('https://example.test', 'secret', 'test-worker', {})
         response = MagicMock()
@@ -282,7 +310,7 @@ class WorkerTests(unittest.TestCase):
             pipeline.assert_not_called()
 
     def test_worker_reports_v5_protocol_version(self):
-        self.assertEqual(worker.VERSION, '2.5.11')
+        self.assertEqual(worker.VERSION, '2.5.12')
         source = MODULE.read_text(encoding='utf-8')
         self.assertIn("'learningRepairV5': True", source)
         self.assertIn("'teachingSchemaVersion': 3", source)
