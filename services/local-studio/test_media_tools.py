@@ -6,6 +6,7 @@ from unittest.mock import patch
 import subprocess
 import os
 from media_tools import extract_audio, ladder, make_cover, probe, run, transcode
+from contracts import StudioError
 
 
 class MediaTools(unittest.TestCase):
@@ -25,6 +26,13 @@ class MediaTools(unittest.TestCase):
         self.assertEqual([x['preset'] for x in levels], ['medium'])
         self.assertEqual([x['profileVersion'] for x in levels], ['balanced-540-v1'])
         self.assertEqual([x['fps'] for x in ladder(1920, 1080, 20)], [20])
+
+    def test_invalid_ffprobe_output_is_explicit_and_retryable(self):
+        with patch('media_tools.run', return_value=b''):
+            with self.assertRaises(StudioError) as raised:
+                probe('broken.mp4')
+        self.assertEqual(raised.exception.code, 'MEDIA_PROBE_INVALID')
+        self.assertTrue(raised.exception.retryable)
 
     def test_commands_do_not_open_windows(self):
         with patch('media_tools.require_tools'), patch('media_tools.subprocess.Popen') as execute:

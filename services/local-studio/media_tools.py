@@ -134,9 +134,33 @@ def run_progress(args, duration, progress=None, timeout=7200):
         process.stderr.close()
 
 
+def _parse_json_output(raw, code, label):
+    try:
+        data = json.loads(raw)
+    except (TypeError, UnicodeError, ValueError) as error:
+        size = len(raw or b'') if isinstance(raw, (bytes, bytearray)) else len(str(raw or ''))
+        raise StudioError(code, f'{label} 未返回有效 JSON（{size} bytes）。', True) from error
+    if not isinstance(data, dict):
+        raise StudioError(code, f'{label} 返回的数据结构无效。', True)
+    return data
+
+
+def _ffprobe_json(args, code, label, timeout=60):
+    last = None
+    for attempt in range(2):
+        raw = run(args, timeout)
+        try:
+            return _parse_json_output(raw, code, label)
+        except StudioError as error:
+            last = error
+            if attempt == 0:
+                time.sleep(.25)
+    raise last
+
+
 def probe(source):
-    raw = run(['ffprobe', '-v', 'error', '-show_format', '-show_streams', '-of', 'json', str(source)], 60)
-    data = json.loads(raw)
+    data = _ffprobe_json(['ffprobe', '-v', 'error', '-show_format', '-show_streams', '-of', 'json', str(source)],
+                         'MEDIA_PROBE_INVALID', 'ffprobe')
     streams = data.get('streams', [])
     video = next((x for x in streams if x.get('codec_type') == 'video'), None)
     if not video:
@@ -375,9 +399,13 @@ def make_cover_variants(source, output):
         if not target.is_file() or not 0 < target.stat().st_size <= budget:
             raise StudioError('COVER_INVALID', '缩略图生成失败。')
         # Width descriptors must match the encoded pixels, including small sources.
-        measured = json.loads(subprocess.check_output(['ffprobe', '-v', 'error',
-            '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'json', str(target)], timeout=30,
-            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0)))['streams'][0]
+        measured_data = _ffprobe_json(['ffprobe', '-v', 'error',
+            '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'json', str(target)],
+            'COVER_PROBE_INVALID', '缩略图 ffprobe', 30)
+        streams = measured_data.get('streams') or []
+        if not streams or not isinstance(streams[0], dict):
+            raise StudioError('COVER_PROBE_INVALID', '缩略图 ffprobe 未返回视频尺寸。', True)
+        measured = streams[0]
         rows.append({'path': target.name, 'width': measured['width'], 'height': measured['height'],
                      'bytes': target.stat().st_size})
     return rows

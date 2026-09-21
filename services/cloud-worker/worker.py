@@ -12,6 +12,7 @@ import socket
 import sys
 import threading
 import time
+import traceback
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -696,7 +697,7 @@ def validate_teaching(client, lease, rows):
 
 def preflight_output(lease):
     return request_json(urllib.request.Request(lease['outputUrl'] + '&path=cover.webp',
-        method='GET', headers={'User-Agent': f'EastudyCloudWorker/{VERSION}'}), 30, 'OUTPUT')
+        method='GET', headers={'User-Agent': f'EastudyCloudWorker/{VERSION}'}), 30, 'OUTPUT', retryable=True)
 
 
 def prepare_voice(client, lease, rows, output, cancelled):
@@ -939,6 +940,7 @@ def process_lease(client, lease, local_inputs=None, ai_settings=None):
         message = f'[error] {job_id}: {error}'
         print(message, flush=True)
         print(message, file=sys.stderr, flush=True)
+        print(traceback.format_exc(), file=sys.stderr, flush=True)
         if cancelled.is_set() or lease_cancelled(error):
             print(f'[cancelled] {job_id}: stale lease stopped before the next stage', flush=True)
             return

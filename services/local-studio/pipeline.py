@@ -1,4 +1,6 @@
 from pathlib import Path
+import sys
+import traceback
 
 from ai_tools import asr_profile, enrich, transcribe, semantic_segments
 from ai_usage import job_usage_config, summarize_usage
@@ -155,6 +157,12 @@ def process_job(store, job_id, source_path, cover_path, ai_config, media_root,
                             error={'code': error.code, 'message': error.message,
                                    'retryable': error.retryable})
     except Exception as error:
+        print(f'[pipeline-traceback] {job_id}: {error}', file=sys.stderr, flush=True)
+        print(traceback.format_exc(), file=sys.stderr, flush=True)
+        code = str(getattr(error, 'code', '') or 'PIPELINE_INTERNAL')[:120]
+        retryable = bool(getattr(error, 'retryable', True))
+        message = str(error)[:500]
         return store.update(job_id, status='ERROR', progress=min(99, store.get(job_id)['progress']),
-                            message='后台处理发生异常，请查看任务详情或处理服务日志', retryable=True,
-                            error={'code': 'PIPELINE_INTERNAL', 'message': str(error), 'retryable': True})
+                            message=message if code != 'PIPELINE_INTERNAL' else '后台处理发生异常，请查看任务详情或处理服务日志',
+                            retryable=retryable,
+                            error={'code': code, 'message': message, 'retryable': retryable})
