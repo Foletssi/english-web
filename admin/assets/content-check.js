@@ -66,9 +66,9 @@
         const response=store.localOnly?{snapshot:store.snapshot(),revision:'本地'}:await cloud.pullAdmin();
         if(response.error)throw response.error;
         if(!response.snapshot||!Array.isArray(response.snapshot.videos)||(!store.localOnly&&!Number.isSafeInteger(Number(response.revision))))throw new Error('内容响应不完整，请稍后重试');
-        const next=Audit.inspect(response.snapshot);
         const jobs=store.localOnly?{summary:Audit.processingSummary(response.snapshot.jobs||[])}:await cloud.listProcessingJobs(1,1);
         if(jobs.error)throw jobs.error;
+        const next=Audit.inspect(response.snapshot,global.EastudyLearningContract,jobs.rows||response.snapshot.jobs||[]);
         if(token!==generation)return;
         result=next;revision=response.revision;checkedAt=Date.now();jobSummary=jobs.summary||null;
       }catch(e){if(token===generation)error=failureText(e)}

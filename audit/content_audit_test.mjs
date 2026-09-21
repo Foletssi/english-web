@@ -29,4 +29,8 @@ result=audit.inspect(large);assert.equal(result.issues.length,3300);assert.equal
 const summary=audit.processingSummary([{videoId:1,status:'RUNNING',updatedAt:'2026-01-01'},
  {videoId:1,status:'CANCELLED',updatedAt:'2026-01-03'},{videoId:2,status:'ERROR'},{videoId:3,status:'REVIEW'}]);
 assert.equal(summary.active,1);assert.equal(summary.failed,1);assert.equal(summary.review,1);assert.equal(summary.total,3);
+const stale=audit.processingIntegrity({id:1,processingJobId:'job-1',pipelineStatus:'WAITING',mediaUrl:''},[],{id:'job-1',status:'REVIEW',resultSentenceCount:2});
+assert.equal(Array.from(stale.issues,issue=>issue.code).join('|'),'PROCESSING_SNAPSHOT_NOT_READY|PROCESSING_MEDIA_MISSING|PROCESSING_SUBTITLES_MISSING|PROCESSING_SENTENCE_COUNT_MISMATCH');
+const ready=audit.processingIntegrity({id:1,processingJobId:'job-1',pipelineStatus:'READY',mediaUrl:'/media.m3u8'},[{},{}],{id:'job-1',status:'REVIEW',resultSentenceCount:2});
+assert.equal(ready.ok,true);
 console.log('Content audit: exact card counts, issue identity, empty-analysis provenance and 3300 diagnoses passed.');

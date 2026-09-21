@@ -17,6 +17,7 @@ const checks=[
   js.includes('开始处理')&&js.includes('只上传成品')&&js.includes('data-recover-local-input'),
   admin.includes('本步骤预计剩余')&&admin.includes('最近真实进展'),
   admin.includes('return Store.localOnly?Store.listJobs():CloudState.jobs'),
+  admin.includes("path.startsWith('/videos/')"),
 ];
 checks.forEach((value,index)=>assert.ok(value,`Studio V2 contract check ${index+1} failed`));
 console.log(`Studio V2 contract: ${checks.length}/${checks.length} checks passed.`);

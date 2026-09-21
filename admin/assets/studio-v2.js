@@ -81,11 +81,16 @@ async function syncJobs(options={}){
     if(state.contentSynced.get(job.id)!==signature)finished.push([job.id,signature]);
    }else{state.polling.add(job.id);state.contentSynced.delete(job.id)}
   }
-  if(finished.length||options.forceContent){
+  const integrity=global.EastudyContentAudit;
+  const staleTerminal=Boolean(integrity&&typeof Store.getVideo==='function'&&typeof Store.listSentences==='function'&&rows.some(job=>{
+   if(String(job.rawStatus||job.status||'').toUpperCase()!=='REVIEW')return false;
+   return integrity.processingIntegrity(Store.getVideo(job.videoId),Store.listSentences(job.videoId),job).issues.length>0;
+  }));
+  if(finished.length||options.forceContent||staleTerminal){
    // Mark terminal jobs synchronized only after the content import succeeds.
    // A failed/deferred read must be retried even when no RUNNING job was observed.
    const refresh=Bridge?.refreshContent||Bridge?.reload;
-   if(refresh){const imported=await refresh();if(imported!==false)for(const [id,signature] of finished)state.contentSynced.set(id,signature)}
+   if(refresh){const imported=await refresh();if(imported!==false){for(const [id,signature] of finished)state.contentSynced.set(id,signature);if(staleTerminal)global.dispatchEvent(new CustomEvent('eastudy:studio-integrity-rechecked'))}}
   }
   return rows;
  }

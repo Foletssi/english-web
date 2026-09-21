@@ -23,7 +23,26 @@
     }
     return [...unique.values()];
   }
-  function inspect(snapshot, contract = global.EastudyLearningContract) {
+  function processingIntegrity(video, rows, job) {
+    const raw = String(job?.rawStatus || job?.status || '').toUpperCase();
+    if (!['REVIEW', 'ERROR'].includes(raw)) return {ok: true, issues: []};
+    const issues = [];
+    if (raw === 'ERROR') {
+      issues.push({severity: 'ERROR', code: 'PROCESSING_JOB_ERROR', field: 'job', message: job?.error?.message || '处理任务已失败，不能进入审核'});
+      return {ok: false, issues};
+    }
+    if (!video) issues.push({severity: 'ERROR', code: 'PROCESSING_VIDEO_MISSING', field: 'video', message: '任务已结束但视频记录不存在'});
+    else {
+      if (String(video.processingJobId || '') !== String(job?.id || '')) issues.push({severity: 'ERROR', code: 'PROCESSING_JOB_LINK_MISMATCH', field: 'processingJobId', message: '任务与内容快照的关联不一致'});
+      if (!['READY', 'SUCCESS'].includes(String(video.pipelineStatus || ''))) issues.push({severity: 'ERROR', code: 'PROCESSING_SNAPSHOT_NOT_READY', field: 'pipelineStatus', message: '任务已结束但内容快照仍未就绪'});
+      if (!String(video.mediaUrl || '').trim()) issues.push({severity: 'ERROR', code: 'PROCESSING_MEDIA_MISSING', field: 'mediaUrl', message: '任务已结束但快照没有可播放媒体'});
+    }
+    if (!Array.isArray(rows) || !rows.length) issues.push({severity: 'ERROR', code: 'PROCESSING_SUBTITLES_MISSING', field: 'sentences', message: '任务已结束但快照没有字幕'});
+    const resultCount = Number(job?.resultSentenceCount ?? job?.result?.sentences?.length ?? 0);
+    if (resultCount > 0 && Array.isArray(rows) && resultCount !== rows.length) issues.push({severity: 'ERROR', code: 'PROCESSING_SENTENCE_COUNT_MISMATCH', field: 'sentences', message: `任务结果 ${resultCount} 句，快照 ${rows.length} 句`});
+    return {ok: issues.length === 0, issues};
+  }
+  function inspect(snapshot, contract = global.EastudyLearningContract, jobs = []) {
     if (!contract) throw new Error('LEARNING_CONTRACT_UNAVAILABLE');
     const found = [], ids = new Set(), videos = snapshot.videos || [];
     for (const video of videos) {
@@ -62,6 +81,13 @@
         }
       });
     }
+    const jobByVideo = new Map((Array.isArray(jobs) ? jobs : []).map(job => [String(job.videoId ?? job.video_id), job]));
+    for (const video of videos) {
+      const job = jobByVideo.get(String(video.id));
+      if (!job) continue;
+      for (const issue of processingIntegrity(video, snapshot.sentences?.[String(video.id)] || [], job).issues)
+        found.push({severity: 'ERROR', ...issue, videoId: String(video.id), sentenceId: null, sentenceIndex: null});
+    }
     const issues = deduplicate(found), wordCards = new Set(), pending = new Set();
     for (const issue of issues) {
       if (issue.expressionKey && issue.code !== 'EXPRESSION_REVIEW_REQUIRED')
@@ -87,5 +113,5 @@
       state === 'ERROR' ? 'failed' : state === 'REVIEW' ? 'review' : state === 'CANCELLED' ? 'cancelled' : 'completed']++;
     return result;
   }
-  global.EastudyContentAudit = Object.freeze({inspect, deduplicate, text, analysisComplete, processingSummary});
+  global.EastudyContentAudit = Object.freeze({inspect, processingIntegrity, deduplicate, text, analysisComplete, processingSummary});
 })(window);
