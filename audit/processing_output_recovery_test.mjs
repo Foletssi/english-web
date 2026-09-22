@@ -49,7 +49,10 @@ function fixture(options = {}) {
     const name = String(url).split('/').at(-1), input = JSON.parse(init.body);
     calls.push(name); assert.ok(init.signal, 'RPCs must have a bounded deadline');
     let result = { ok: true };
-    if (name.startsWith('resolve_processing_output')) result = [{ object_key: key }];
+    if (name.startsWith('resolve_processing_output')) {
+      if (options.resolveStatus) return Response.json({ message: 'upstream' }, { status: options.resolveStatus });
+      result = [{ object_key: key }];
+    }
     if (name === 'begin_processing_output_write') {
       assert.equal(init.headers.Authorization, 'Bearer fixture-service');
       if (options.rejectBegin || deletionConfirmed) return Response.json({ message: 'VIDEO_PERMANENT_DELETION_STARTED' }, { status: 400 });
@@ -79,6 +82,16 @@ assert.equal(response.status, 200);
 assert.equal(f.receipts.size, 0);
 assert.equal(f.calls.filter(x => x === 'finish_processing_output_write').length, 3);
 assert.ok(!JSON.stringify(await response.json()).includes('write-'), 'server receipt must never leak');
+
+// Upstream database/gateway failures are retryable, while a real token rejection stays auth failure.
+f = fixture({ resolveStatus: 503 });
+response = await onRequestPut({ request: request(), env: f.env });
+assert.equal(response.status, 503);
+assert.equal((await response.json()).error, 'OUTPUT_AUTH_UNAVAILABLE');
+f = fixture({ resolveStatus: 401 });
+response = await onRequestPut({ request: request(), env: f.env });
+assert.equal(response.status, 401);
+assert.equal((await response.json()).error, 'OUTPUT_AUTH_FAILED');
 
 // A committed output whose confirmation was lost is recovered before inventory.
 f = fixture({ ackFailures: 3 });

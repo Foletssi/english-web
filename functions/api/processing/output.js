@@ -42,7 +42,14 @@ export async function onRequestPut({ request, env }) {
     headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
   }); } catch { return json({ error: 'OUTPUT_AUTH_UNAVAILABLE' }, 503); }
-  if (!response.ok) return json({ error: 'OUTPUT_AUTH_FAILED' }, 502);
+  if (!response.ok) {
+    // A gateway/database outage is recoverable and must stay on the same
+    // Job/Run. Reserve auth failure for a real lease/token rejection.
+    if (response.status >= 500 || response.status === 429) {
+      return json({ error: 'OUTPUT_AUTH_UNAVAILABLE' }, 503);
+    }
+    return json({ error: 'OUTPUT_AUTH_FAILED' }, response.status === 401 ? 401 : 502);
+  }
   const rows = await response.json().catch(() => null);
   const key = rows?.[0]?.object_key;
   if (!key) return json({ error: 'OUTPUT_NOT_ALLOWED' }, 403);
