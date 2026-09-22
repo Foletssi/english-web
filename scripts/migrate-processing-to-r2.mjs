@@ -20,6 +20,14 @@ if (exportFile) {
   rows = await response.json();
 }
 const jobs = (Array.isArray(rows) ? rows : []).map(row => ({ id: row.id || row.job_id, video_id: row.video_id, source_key: row.source_key || null, input: row.input || { kind: 'cloud_r2' }, requested_by: row.requested_by || null, idempotency_key: row.idempotency_key || row.id, status: row.status, stage: row.stage, progress: row.progress, result: row.result || null, error: row.error || null, run_id: row.run_id || null, output_run_id: row.output_run_id || null, work: row.work || {}, attempt: row.attempt || 0, created_at: row.created_at, updated_at: row.updated_at, heartbeat_at: row.heartbeat_at || row.last_heartbeat_at || null }));
-const imported = await fetch(controlUrl, { method: 'POST', headers: { 'content-type': 'application/json', 'x-worker-secret': workerSecret, 'x-control-admin': migrationSecret }, body: JSON.stringify({ action: 'processing-bootstrap', jobs }) });
-if (!imported.ok) throw new Error(`R2_IMPORT_${imported.status}: ${await imported.text()}`);
-console.log(JSON.stringify({ exported: jobs.length, imported: await imported.json() }, null, 2));
+const importedResults = [];
+for (let index = 0; index < jobs.length; index += 1) {
+  const job = jobs[index];
+  const body = JSON.stringify({ action: 'processing-bootstrap', jobs: [job] });
+  if (Buffer.byteLength(body, 'utf8') > 12 * 1024 * 1024) throw new Error(`R2_IMPORT_JOB_TOO_LARGE:${job.id}`);
+  const imported = await fetch(controlUrl, { method: 'POST', headers: { 'content-type': 'application/json', 'x-worker-secret': workerSecret, 'x-control-admin': migrationSecret }, body });
+  if (!imported.ok) throw new Error(`R2_IMPORT_${imported.status}:${job.id}: ${await imported.text()}`);
+  importedResults.push(await imported.json());
+  console.log(JSON.stringify({ index: index + 1, total: jobs.length, jobId: job.id, imported: true }));
+}
+console.log(JSON.stringify({ exported: jobs.length, imported: importedResults.length }, null, 2));
