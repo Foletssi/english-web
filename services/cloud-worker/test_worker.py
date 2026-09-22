@@ -148,8 +148,8 @@ class WorkerTests(unittest.TestCase):
              patch.object(worker.time, 'sleep') as sleep:
             with self.assertRaises(worker.ApiError):
                 client.call('worker-output-receipt-v2')
-        self.assertEqual(request.call_count, 3)
-        self.assertEqual([call.args[0] for call in sleep.call_args_list], [1, 2])
+        self.assertEqual(request.call_count, 5)
+        self.assertEqual([call.args[0] for call in sleep.call_args_list], [1, 2, 4, 8])
 
     def test_receipt_retries_transient_failure_with_identical_payload(self):
         client = worker.EdgeClient('https://example.test', 'secret', 'test-worker', {})
@@ -643,3 +643,5 @@ class WorkerTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+

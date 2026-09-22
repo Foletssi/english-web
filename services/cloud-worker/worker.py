@@ -152,7 +152,11 @@ class EdgeClient:
         return value
 
     def _request_json(self, request, timeout, prefix='EDGE', retryable=False, gate=None):
-        attempts = 3 if retryable else 1
+        # Validation, telemetry, and receipt registration are idempotent. A
+        # concurrent heartbeat/finalization can briefly hold the job row lock;
+        # give transient DB lock errors a longer bounded retry window so they do
+        # not become false terminal failures.
+        attempts = 5 if retryable else 1
         for attempt in range(attempts):
             queued = time.monotonic()
             def perform():
@@ -1132,3 +1136,4 @@ def main():
 
 if __name__ == '__main__':
     raise SystemExit(main())
+
