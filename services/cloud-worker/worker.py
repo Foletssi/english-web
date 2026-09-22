@@ -86,7 +86,8 @@ def transient_request_error(error):
     transport_proxy_failure = error.status in {429, 500, 502, 503, 504, 520, 521, 522, 523, 524} and any(
         marker in error.code.lower() for marker in (
             'error sending request', 'connection reset', 'connection error',
-            'read operation timed out', 'timed out'))
+            'read operation timed out', 'timed out', 'schema cache',
+            'could not query the database', 'connection terminated'))
     return error.code in {'EDGE_UNAVAILABLE', 'EDGE_INVALID_RESPONSE', 'OUTPUT_UNAVAILABLE', 'OUTPUT_STATUS_UNAVAILABLE',
         'DB_STATEMENT_TIMEOUT', 'DB_LOCK_TIMEOUT', 'DB_SERIALIZATION_RETRY', 'DB_DEADLOCK_RETRY'} or (
         error.status is not None and error.code in {
@@ -1138,6 +1139,8 @@ def main():
 
 if __name__ == '__main__':
     raise SystemExit(main())
+
+
 
 
 
