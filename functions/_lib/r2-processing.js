@@ -52,7 +52,7 @@ export async function replaceJob(bucket, job) { const current = await readObject
 export async function createOrImportJob(bucket, input) {
   const id = String(input.id || crypto.randomUUID());
   if (!UUID.test(id)) throw new Error('JOB_ID_INVALID');
-  const existing = await readJob(bucket, id); if (existing) return existing;
+  const existing = await readJob(bucket, id); if (existing) { await upsertIndex(bucket, existing); return existing; }
   const job = {
     id, video_id: input.video_id || input.videoId || null, source_key: input.source_key || input.sourceKey || null,
     input: input.input && typeof input.input === 'object' ? input.input : { kind: 'cloud_r2' }, requested_by: input.requested_by || input.requestedBy || null,
