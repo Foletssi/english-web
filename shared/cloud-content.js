@@ -98,6 +98,13 @@
     return {data:row?.video?row:null,error:result.error||(!row?.video?new Error('PROCESSING_VIDEO_CONTENT_MISSING'):null)};
   }
 
+  async function pullAdminProcessingResult(jobId) {
+    try {
+      const payload = await apiRequest('/api/admin/processing-control?action=get&id=' + encodeURIComponent(String(jobId || '')), {method: 'GET'});
+      const job = normalizeProcessingJob(payload.data || {});
+      return {data: job, error: job.id ? null : new Error('PROCESSING_JOB_RESPONSE_INVALID')};
+    } catch (error) { return {data: null, error}; }
+  }
   async function publish(snapshot, expectedRevision) {
     if(global.ZoContent?.localOnly)return {error:new Error('LOCAL_CONTENT_CLOUD_WRITE_DISABLED')};
     const api = auth('admin');
@@ -430,7 +437,7 @@
     return [...records].sort((a,b)=>Number(ids.includes(String(b.id)))-Number(ids.includes(String(a.id)))||Number(active(b))-Number(active(a))||date(b)-date(a)||String(a.id).localeCompare(String(b.id)))[0]||null;
   }
 
-  global.EastudyCloudContent = Object.freeze({ selectCurrentProcessingJob, pullPublished, pullVideoTeaching, pullAdminVideoContent, pullAdmin, saveDraft, publish, publishEntity, setCreatorStatus, setVideoPublication, createLearningRepair, listTrash, trashVideos, restoreVideo,planPermanentVideoDeletion,confirmPermanentVideoDeletion,getVideoDeletion,getVideoDeletionCapability,retryVideoDeletion,
+  global.EastudyCloudContent = Object.freeze({ selectCurrentProcessingJob, pullPublished, pullVideoTeaching, pullAdminVideoContent, pullAdminProcessingResult, pullAdmin, saveDraft, publish, publishEntity, setCreatorStatus, setVideoPublication, createLearningRepair, listTrash, trashVideos, restoreVideo,planPermanentVideoDeletion,confirmPermanentVideoDeletion,getVideoDeletion,getVideoDeletionCapability,retryVideoDeletion,
     processingHealth, createProcessingJob, reserveLocalProcessingJob, localProcessingCapability, getLocalProcessingInput, recoverLocalProcessingInput, listProcessingJobs, listProcessingHistory, getProcessingJob, retryProcessingJob, controlProcessingJob,
     syncMediaSession, clearMediaSession, uploadVideo, uploadCreatorAvatar });
 })(window);

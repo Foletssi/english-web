@@ -305,17 +305,60 @@ async function refreshProcessingContent(){
  })();
  try{return await processingContentRequest}finally{processingContentRequest=null}
 }
-async function refreshProcessingVideoContent(videoId){
+function processingResultIsAlreadySynchronized(videoId, job){
+ const video=Store.getVideo(videoId), rows=Store.listSentences(videoId), raw=String(job?.rawStatus||job?.status||'').toUpperCase();
+ if(raw!=='REVIEW'||!video||String(video.processingJobId||'')!==String(job?.id||'')||
+    !['READY','SUCCESS'].includes(String(video.pipelineStatus||''))||!String(video.mediaUrl||'').trim())return false;
+ const count=Number(job?.resultSentenceCount??job?.result?.sentences?.length??0);
+ return count>0&&rows.length===count;
+}
+async function refreshProcessingVideoContent(videoId, jobHint=null){
  if(Store.localOnly||!Cloud||!AdminAuth.context)return false;
- const context=AdminAuth.context,generation=contentEditGeneration;
+ const context=AdminAuth.context,generation=contentEditGeneration,id=String(videoId);
  if(cloudSyncTimer)return false;
  await cloudSyncPromise;
- if(cloudSyncTimer||AdminAuth.context!==context)return false;
+ if(cloudSyncTimer||AdminAuth.context!==context||generation!==contentEditGeneration)return false;
+ let job=jobHint;
+ if(!job?.result){
+  const idHint=job?.id||CloudState.jobs.find(row=>String(row.videoId)===id)?.id;
+  if(idHint&&Cloud.pullAdminProcessingResult){
+   const pulled=await Cloud.pullAdminProcessingResult(idHint);
+   if(!pulled.error)job=pulled.data;
+  }
+ }
+ if(processingResultIsAlreadySynchronized(id,job))return true;
+ const merger=window.EastudyProcessingResult;
+ if(job&&merger?.isUsable(job)&&merger?.mergeIntoSnapshot){
+  const merged=merger.mergeIntoSnapshot(Store.snapshot(),job);
+  if(merged.ok){
+   const before=Store.snapshot();
+   try{
+    const saved=await Cloud.saveDraft(merged.snapshot,CloudState.revision);
+    if(saved?.error)throw saved.error;
+    if(AdminAuth.context!==context||generation!==contentEditGeneration) return false;
+    cloudImporting=true;
+    try{Store.importSnapshot(merged.snapshot,{type:'cloud.processing-result-sync',revision:saved.data?.revision,videoId:id,jobId:job.id})}finally{cloudImporting=false}
+    CloudState.revision=Number(saved.data?.revision)||CloudState.revision;
+    updateCounts();
+    window.dispatchEvent(new CustomEvent('eastudy:processing-content-updated',{detail:{videoId:id,jobId:job.id,source:'r2-result'}}));
+    return true;
+   }catch(error){
+    if(String(error?.message||'').includes('CONTENT_REVISION_CONFLICT')){
+     await refreshProcessingContent();
+     return false;
+    }
+    cloudImporting=true;
+    try{Store.importSnapshot(before,{type:'cloud.import',reason:'processing-result-sync-rollback'})}finally{cloudImporting=false}
+    throw error;
+   }
+  }
+ }
+ // Compatibility read is retained only for already-registered content; a REVIEW
+ // result without an R2 payload must remain stale and be retried on the next poll.
  const result=await Cloud.pullAdminVideoContent(videoId);
  if(result.error)throw result.error;
  if(AdminAuth.context!==context||cloudSyncTimer||generation!==contentEditGeneration)return false;
- const remote=result.data,snapshot=Store.snapshot(),id=String(videoId);
- const index=snapshot.videos.findIndex(video=>String(video.id)===id);
+ const remote=result.data,snapshot=Store.snapshot(),index=snapshot.videos.findIndex(video=>String(video.id)===id);
  if(index<0)return false;
  snapshot.videos[index]=remote.video;
  snapshot.sentences[id]=Array.isArray(remote.sentences)?remote.sentences:[];
@@ -325,8 +368,7 @@ async function refreshProcessingVideoContent(videoId){
  updateCounts();
  window.dispatchEvent(new CustomEvent('eastudy:processing-content-updated',{detail:{videoId:id}}));
  return true;
-}
-async function refreshCloudJobs(){if(Store.localOnly||!Cloud)return;const result=await Cloud.listProcessingJobs(ProcessingView.page,ProcessingView.pageSize);if(result.error){CloudState.jobsSyncError=result.error;throw result.error}CloudState.summary=result.summary||null;CloudState.jobs=result.rows;CloudState.videoGroups=result.groups;CloudState.processingTotal=result.total;ProcessingView.total=result.total;CloudState.jobsSyncError=null;CloudState.lastJobsSyncAt=Date.now();updateCounts();window.dispatchEvent(new CustomEvent('eastudy:studio-job-updated'));return result.rows}
+}async function refreshCloudJobs(){if(Store.localOnly||!Cloud)return;const result=await Cloud.listProcessingJobs(ProcessingView.page,ProcessingView.pageSize);if(result.error){CloudState.jobsSyncError=result.error;throw result.error}CloudState.summary=result.summary||null;CloudState.jobs=result.rows;CloudState.videoGroups=result.groups;CloudState.processingTotal=result.total;ProcessingView.total=result.total;CloudState.jobsSyncError=null;CloudState.lastJobsSyncAt=Date.now();updateCounts();window.dispatchEvent(new CustomEvent('eastudy:studio-job-updated'));return result.rows}
 async function pollPermanentDeletion(deletionId){
  const generation=trashViewGeneration,key=generation+':'+deletionId;
  if(deletionPolls.has(key))return;

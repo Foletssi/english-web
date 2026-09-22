@@ -23,7 +23,9 @@ assert.ok(!media.includes('authenticate(request, env)'));
 
 const client=read('shared/cloud-content.js');
 const admin=read('admin/assets/admin.js');
-assert.ok(client.includes('admin_list_processing_video_groups_v1'));
+assert.ok(client.includes('/api/admin/processing-control?action=list'));
+assert.ok(client.includes('pullAdminProcessingResult'));
+assert.ok(!client.includes('admin_list_processing_video_groups_v1'));
 assert.ok(!client.includes("api.rpc('admin_list_processing_jobs'"));
 assert.ok(admin.includes('pipelineVideoGroups()'));
 assert.ok(admin.includes('changeProcessingPage('));

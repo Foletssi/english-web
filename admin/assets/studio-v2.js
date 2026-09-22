@@ -94,7 +94,11 @@ async function syncJobs(options={}){
    const targets=[...new Set([...finished.map(row=>String(row[2])),...staleRows.map(job=>String(job.videoId))])];
    let imported=false;
    if(!options.forceContent&&targets.length&&Bridge?.refreshVideoContent){
-    const results=await Promise.all(targets.map(id=>Bridge.refreshVideoContent(id)));
+    const results=[];
+    for(const id of targets){
+     const job=staleRows.find(row=>String(row.videoId)===String(id))||rows.find(row=>String(row.videoId)===String(id)&&String(row.status).toUpperCase()==='REVIEW');
+     results.push(await Bridge.refreshVideoContent(id,job));
+    }
     imported=results.every(Boolean);
    }else{
     const refresh=Bridge?.refreshContent||Bridge?.reload;
