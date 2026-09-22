@@ -1,8 +1,5 @@
 project_id = "ehxqtgakjgqgmghhdmjg"
 
-[functions.video-processing]
-verify_jwt = false
-
 [functions.invite-register]
 verify_jwt = false
 

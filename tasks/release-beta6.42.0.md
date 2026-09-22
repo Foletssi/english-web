@@ -39,4 +39,14 @@
 
 发布前不删除媒体或教学数据。回退前端可重新部署 559f267；新增 RPC 与旧前端兼容，可保留。事务测试最后 ROLLBACK，不保留测试账号偏好修改。临时日志、缓存及设计原型不进入部署提交。
 
-当前状态：本地测试、代码审查、云端迁移及事务验证完成，准备推送 main。部署结果以随后记录的 HTTPS 实测为准。
+当前状态：已提交并推送 main，发布提交为 `faf9ef3`；Cloudflare 连接 Git 部署已通过线上 HTTPS 验证。
+
+## 线上验收结果
+
+- 学生端 `/`、管理端 `/admin/` 均返回 HTTP 200，HTML 包含 `beta6.42.0`。
+- `node tmp/verify-release-6400.mjs`（期望版本已设为 beta6.42.0）最终退出码为0：32/32 页面及引用的 JS/CSS 与本地发布内容一致，比较时仅统一换行符，不生成摘要。首次检查发生在部署切换前，后续完整检查全部通过。
+- HTML 响应为 `no-cache, no-store, must-revalidate`；固定版本 Supabase 脚本为 `public, max-age=31536000, immutable`，类型为 `application/javascript`。
+- 未携带播放会话访问540P播放清单，返回 HTTP 401 与 `PLAYBACK_SESSION_REQUIRED`，响应 `Cache-Control: no-store`。
+- 本次没有完成真实手机、真实会员登录后的视频解码及系统语音实测；32项资源一致不等同于所有设备端到端功能保证。两个视频的新教学候选仍待人工审核发布。
+
+本段为部署后本地补记，未再次提交触发无必要的生产构建；线上发布代码对应 `faf9ef3`。

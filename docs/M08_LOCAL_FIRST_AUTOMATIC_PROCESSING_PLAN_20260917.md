@@ -273,7 +273,7 @@ checkpoint_key = canonical_hash({
 
 本地执行目录按 `jobId/runId` 隔离，旧运行不能覆盖新运行文件。复用通过只读已验证产物和新运行回执；发音二进制可以复用，但包含 runId／条目身份的 manifest 必须重新绑定校验。不能只把旧 manifest 原样提交到新 run。
 
-成品上传仍走 `functions/api/processing/output.js`、`begin_processing_output_write`、`worker-register-output-v2` 与 `worker-complete-v2`。每个文件上传回执持久化键为 `(jobId, runId, relativePath, sha256, size)`；本地显示成功不足以跳过上传，必须查询或重新确认服务端登记。若新增输出状态查询，只允许当前租约查看服务端派生路径。
+成品上传仍走 `functions/api/processing/output.js`、`begin_processing_output_write`、`worker-register-output-v2` 与 `worker-complete-v3 + worker-finalization-status-v3 + worker-defer-v3`。每个文件上传回执持久化键为 `(jobId, runId, relativePath, sha256, size)`；本地显示成功不足以跳过上传，必须查询或重新确认服务端登记。若新增输出状态查询，只允许当前租约查看服务端派生路径。
 
 - 同 run 网络失败只补缺失上传；响应不确定时先对账，不重新跑 AI。
 - 新 run 不直接借用旧 run 的上传登记；从本地复用成品并按新 run 路径重新上传登记，保持现有运行 fence。

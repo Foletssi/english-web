@@ -66,8 +66,21 @@ No running or queued jobs existed at that restart. The last read-only check of
 the original task found ERROR at LOCAL_UPLOAD / 97%, EDGE_HTTP_520.
 It has not yet been retried through an admin session.
 
-The 2.5.5 database rollout is verified. Pages rollout and the idle-worker restart
-for this follow-up remain pending at the time of this entry.
+The 2.5.5 rollout is verified. All three follow-up database migrations match
+the remote migration list. Commit 366d55b42cc37548391c4e5d34ece0fb49203e2d
+was pushed to main and its exact "Cloudflare Pages" check succeeded, deployment
+da6d025e-0217-4470-8131-e395efe27b0f. Student and admin URLs returned HTTP 200.
+Production admin.js, processing-control.js and cloud-content.js matched local
+source after line-ending normalization. The separate "Workers Builds:
+english-web" check failed; the Pages check succeeded. Chrome remains unavailable,
+so authenticated UI behavior is not covered by these HTTPS checks.
+
+With zero QUEUED/RUNNING/WAITING jobs, the verified old worker and launcher were
+stopped and the existing hidden launcher restarted without changing credentials
+or checkpoints. Startup reports 2.5.5, both loopback listeners are ready, stderr
+is empty, and cloud heartbeat confirms 2.5.5 with teaching voice ready and the
+unchanged teaching prompt. The post-rollout read-only check still finds the real
+job in ERROR at LOCAL_UPLOAD / 97%; no real retry has been performed.
 
 The real task still requires an authenticated administrator retry. Do not forge
 admin claims, change production status directly, or synthesize a worker lease.

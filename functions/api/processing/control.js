@@ -1,5 +1,5 @@
 import { json, readJson } from '../../_lib/auth.js';
-import { claimJob, updateJob, recordReceipts, createOrImportJob, health, listJobs, readJob } from '../../_lib/r2-processing.js';
+import { claimJob, updateJob, recordReceipts, health, listJobs, readJob } from '../../_lib/r2-processing.js';
 
 function authorized(request, env) { const secret = String(env.WORKER_SECRET || '').trim(); return Boolean(secret && request.headers.get('x-worker-secret') === secret); }
 function workerPayload(body) { const workerId = String(body.workerId || '').trim(); if (!/^[A-Za-z0-9._-]{3,80}$/.test(workerId)) throw new Error('WORKER_ID_INVALID'); return { workerId, capabilities: body.capabilities && typeof body.capabilities === 'object' ? body.capabilities : {} }; }
@@ -19,10 +19,6 @@ async function handleAction(request, env, body) {
     const inputSource = claimed.job.input?.kind === 'local' || claimed.job.input?.kind === 'LOCAL_UPLOAD' ? { kind: 'local', sourceId: claimed.job.input.sourceId || null } : { kind: 'cloud_r2', key: claimed.job.source_key };
     return { ...claimed, protocolVersion: 3, workerId, inputSource, downloadUrl: inputSource.kind === 'local' ? null : `${base}/api/processing/source?job=${claimed.job.id}&token=${claimed.token}`, outputUrl: `${base}/api/processing/output?job=${claimed.job.id}&token=${claimed.token}&run=${claimed.job.run_id}` };
   }
-  if (action === 'processing-bootstrap') {
-    if (request.headers.get('x-control-admin') !== String(env.PROCESSING_MIGRATION_SECRET || '')) throw new Error('UNAUTHORIZED');
-    const jobs = Array.isArray(body.jobs) ? body.jobs : []; for (const input of jobs) await createOrImportJob(env.VIDEO_BUCKET, input); return { imported: jobs.length };
-  }
   if (action === 'processing-list') { if (!authorized(request, env)) throw new Error('UNAUTHORIZED'); return { jobs: await listJobs(env.VIDEO_BUCKET, body.limit) }; }
   if (action === 'run') return { claimed: 0, mode: 'r2-control' };
   const { workerId } = workerPayload(body); const { jobId, runId, token } = requireIds(body);
@@ -40,8 +36,8 @@ async function handleAction(request, env, body) {
 
 export async function onRequestGet({ env }) { if (!env.VIDEO_BUCKET) return json({ ok: false, ready: false, error: 'R2_VIDEO_BUCKET_NOT_BOUND' }, 503); return json({ ok: true, ...(await health(env.VIDEO_BUCKET)) }); }
 export async function onRequestPost({ request, env }) {
-  if (!authorized(request, env) && request.headers.get('x-control-admin') !== String(env.PROCESSING_MIGRATION_SECRET || '')) return json({ ok: false, error: 'UNAUTHORIZED' }, 401);
-  try { const declared = Number(request.headers.get('Content-Length')) || 0; const body = await readJson(request, declared > 512 * 1024 ? 16 * 1024 * 1024 : 512 * 1024); return json({ ok: true, ...(await handleAction(request, env, body)) }); }
+  if (!authorized(request, env)) return json({ ok: false, error: 'UNAUTHORIZED' }, 401);
+  try { const body = await readJson(request, 512 * 1024); return json({ ok: true, ...(await handleAction(request, env, body)) }); }
   catch (error) { const message = error instanceof Error ? error.message : String(error); const status = /UNAUTHORIZED/.test(message) ? 401 : /NOT_FOUND|TOKEN|INVALID|MISMATCH/.test(message) ? 400 : /LEASE_LOST/.test(message) ? 409 : 500; return json({ ok: false, error: message }, status); }
 }
 

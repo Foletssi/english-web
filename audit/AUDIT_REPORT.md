@@ -69,10 +69,7 @@ Result: **PASS**  (71/71)
 - PASS — learner goal profile is isolated by Supabase RLS
 - PASS — student exposes goal onboarding and explicit autoplay controls
 - PASS — autoplay queue filters reviewed target content and supports fixed collections
-- PASS — cloud content and R2 contract regression — {
-  "ok": true,
-  "tests": 78
-}
+- PASS — R2 processing and cloud content contract regression — PASS R2 processing control lifecycle, lease fencing, receipts and clean-break route checks
 - PASS — runtime shared-contract regression — {
   "ok": true,
   "tests": 30,

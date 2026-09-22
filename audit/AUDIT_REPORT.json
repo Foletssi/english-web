@@ -339,9 +339,9 @@
       "detail": ""
     },
     {
-      "name": "cloud content and R2 contract regression",
+      "name": "R2 processing and cloud content contract regression",
       "ok": true,
-      "detail": "{\n  \"ok\": true,\n  \"tests\": 78\n}"
+      "detail": "PASS R2 processing control lifecycle, lease fencing, receipts and clean-break route checks"
     },
     {
       "name": "runtime shared-contract regression",

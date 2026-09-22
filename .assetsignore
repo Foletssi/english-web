@@ -1,0 +1,13 @@
+node_modules/
+tmp/
+.wrangler/
+services/
+supabase/
+audit/
+tasks/
+docs/
+scripts/
+output/
+.scratch/
+*.ps1
+*.py
