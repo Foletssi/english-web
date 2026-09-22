@@ -85,10 +85,10 @@ class WorkerTests(unittest.TestCase):
                      patch.object(worker.time, 'sleep') as sleep:
                     with self.assertRaises(worker.ApiError):
                         client.upload('https://example.test?run=run', '', '', 'a.ts', source)
-                    self.assertEqual(request.call_count, 3)
+                    self.assertEqual(request.call_count, 5)
                     self.assertTrue(all(c.args[0].method == 'GET' for c in request.call_args_list))
                     self.assertTrue(all(not c.kwargs.get('retryable') for c in request.call_args_list))
-                    self.assertEqual([c.args[0] for c in sleep.call_args_list], [1, 2])
+                    self.assertEqual([c.args[0] for c in sleep.call_args_list], [1, 2, 4, 8])
 
     def test_put_520_reconciles_before_resending(self):
         client = worker.EdgeClient('https://example.test', 'secret', 'worker', {})
@@ -643,5 +643,6 @@ class WorkerTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
 
 

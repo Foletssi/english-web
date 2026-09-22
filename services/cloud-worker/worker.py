@@ -207,7 +207,9 @@ class EdgeClient:
         # current run's object before sending bytes again, including on resume.
         expected_hash = hashlib.sha256(data).hexdigest()
         has_run = bool(urllib.parse.parse_qs(urllib.parse.urlsplit(url).query).get('run'))
-        for attempt in range(3):
+        # Reconcile/PUT is hash-checked and idempotent, so allow a longer bounded
+        # window for transient R2 auth or edge failures without duplicate bytes.
+        for attempt in range(5):
             try:
                 if has_run:
                     status = self._request_json(urllib.request.Request(url, method='GET', headers={
@@ -219,7 +221,7 @@ class EdgeClient:
                 return self._request_json(request, 300, 'OUTPUT')
             except ApiError as error:
                 recoverable = recoverable_output_error(error)
-                if not recoverable or attempt == 2:
+                if not recoverable or attempt == 4:
                     raise
                 time.sleep(2 ** attempt)
 
@@ -241,7 +243,7 @@ class EdgeClient:
         if sum(item['size'] for item in pending.values()) > 2 * 1024 ** 2:
             raise ApiError('OUTPUT_BATCH_LIMIT')
         accepted = {}
-        for attempt in range(3):
+        for attempt in range(5):
             request = urllib.request.Request(base_url,
                 data=json.dumps({'items': list(pending.values())}).encode('utf-8'),
                 method='POST', headers={'Content-Type': 'application/json',
@@ -272,7 +274,7 @@ class EdgeClient:
                 failure = next((error for error in failures if not recoverable_output_error(error)), failures[0])
                 raise failure
             except ApiError as error:
-                if attempt == 2 or not recoverable_output_error(error):
+                if attempt == 4 or not recoverable_output_error(error):
                     raise
                 time.sleep(2 ** attempt)
 
@@ -1136,4 +1138,7 @@ def main():
 
 if __name__ == '__main__':
     raise SystemExit(main())
+
+
+
 
