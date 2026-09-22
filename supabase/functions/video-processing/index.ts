@@ -87,7 +87,7 @@ async function handleWorker(action: string, body: any) {
     });
     const token = randomToken();
     const job = await rpc(action === 'worker-claim-local-v1' ? 'processing_claim_local_input_v1' : 'processing_claim_local_job_v5', {
-      p_worker_id: workerId, p_token_hash: await sha256(token), p_lease_seconds: 240
+      p_worker_id: workerId, p_token_hash: await sha256(token), p_lease_seconds: 600
     });
     if (!job) return { job: null };
     const base = required('PUBLIC_SOURCE_BASE_URL').replace(/\/$/, '');
@@ -107,7 +107,7 @@ async function handleWorker(action: string, body: any) {
   if (action === 'worker-job-heartbeat-v2') {
     return { job: await rpc('processing_heartbeat_job_v2', {
       p_job_id: jobId, p_run_id: runId, p_token: token, p_worker_id: workerId,
-      p_capabilities: capabilities, p_lease_seconds: 240
+      p_capabilities: capabilities, p_lease_seconds: 600
     }) };
   }
   if (action === 'worker-telemetry-v2') {
@@ -173,7 +173,7 @@ async function handleWorker(action: string, body: any) {
   }
   if (action === 'worker-job-heartbeat') {
     return { job: await rpc('processing_heartbeat_job', {
-      p_job_id: jobId, p_token: token, p_worker_id: workerId, p_capabilities: capabilities, p_lease_seconds: 240
+      p_job_id: jobId, p_token: token, p_worker_id: workerId, p_capabilities: capabilities, p_lease_seconds: 600
     }) };
   }
   if (action === 'worker-progress') {

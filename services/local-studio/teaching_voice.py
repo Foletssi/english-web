@@ -125,12 +125,24 @@ def validate_audio(path):
             'contentHash': file_hash(path), 'contentType': 'audio/mpeg'}
 
 
+def _resolve_synthesis_input(engine, item):
+    text, is_phonemes = pronunciation_input(item)
+    # A teaching record may contain valid IPA that this particular Kokoro
+    # tokenizer cannot represent (for example the syllabic nasal in
+    # ``mm-hmm``). The pronunciation hint remains part of the audited teaching
+    # data, but it must not strand the whole video at VOICE_GENERATION_INCOMPLETE.
+    # Fall back to the original token text for synthesis; this is deterministic,
+    # local-only, and does not spend another AI request or alter the teaching
+    # contract.
+    if is_phonemes and engine.tokenizer.known(text) != text:
+        return item['text'], False
+    return text, is_phonemes
+
+
 def _synthesize(engine, item, path, voice, language):
     import numpy as np
     import soundfile as sf
-    text, is_phonemes = pronunciation_input(item)
-    if is_phonemes and engine.tokenizer.known(text) != text:
-        raise StudioError('VOICE_PHONEMES_UNSUPPORTED', '发音提示包含模型不支持的音标。', True)
+    text, is_phonemes = _resolve_synthesis_input(engine, item)
     samples, sample_rate = engine.create(text, voice=voice, speed=1.0,
         lang=language, is_phonemes=is_phonemes)
     samples = np.asarray(samples)

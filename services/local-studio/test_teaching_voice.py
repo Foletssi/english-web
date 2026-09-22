@@ -8,7 +8,8 @@ from unittest.mock import patch
 
 from contracts import StudioError
 from teaching_voice import (collect_voice_items, generate_voice_manifest, pronunciation_input,
-                            main, _hash, file_hash, LEGACY_VOICE_VERSION, PACKAGE_VERSION)
+                            main, _hash, file_hash, LEGACY_VOICE_VERSION, PACKAGE_VERSION,
+                            _resolve_synthesis_input)
 from voice_runtime import voice_assets
 
 
@@ -165,6 +166,18 @@ class VoiceTests(unittest.TestCase):
         self.assertEqual(pronunciation_input(past), ('ɹɛd', True))
         with self.assertRaises(StudioError):
             pronunciation_input({**present, 'pronunciationHint': ''})
+
+    def test_unsupported_ipa_falls_back_to_original_text(self):
+        item = collect_voice_items('1', '2', [row(text='mm-hmm', hint='/m̩ˈhʌm/', meaning='嗯')])[0]
+
+        class Tokenizer:
+            def known(self, value):
+                return '' if value == 'm̩ˈhʌm' else value
+
+        class Engine:
+            tokenizer = Tokenizer()
+
+        self.assertEqual(_resolve_synthesis_input(Engine(), item), ('mm-hmm', False))
 
     def test_american_flap_diacritic_is_normalized_for_kokoro(self):
         cases = {
