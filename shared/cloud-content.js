@@ -244,62 +244,21 @@
   }
 
   async function processingHealth() {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-    try {
-      const response = await fetch('https://ehxqtgakjgqgmghhdmjg.supabase.co/functions/v1/video-processing', { cache: 'no-store', signal: controller.signal });
-      const data = await response.json().catch(() => ({}));
-      return { data, error: response.ok ? null : new Error(data.error || ('PROCESSING_HEALTH_' + response.status)) };
-    } catch (error) {
-      return { data: null, error };
-    } finally {
-      clearTimeout(timeout);
-    }
+    try { const response = await fetch('/api/admin/processing-control?action=health', { cache: 'no-store' }); const payload = await response.json().catch(() => ({})); return { data: payload.data || payload, error: response.ok ? null : new Error(payload.error || ('PROCESSING_HEALTH_' + response.status)) }; }
+    catch (error) { return { data: null, error }; }
   }
 
   async function createProcessingJob(video, sourceKey, idempotencyKey, expectedRevision) {
-    const api = auth('admin');
-    if (!api) return { error: new Error('SUPABASE_NOT_CONFIGURED') };
-    const { data, error } = await api.rpc('admin_create_processing_job', {
-      p_video: video, p_source_key: sourceKey, p_idempotency_key: idempotencyKey,
-      p_expected_revision: Number(expectedRevision)
-    });
-    return { data: firstRow(data), error: error || null };
+    try { const response = await fetch('/api/admin/processing-control', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action:'create',videoId:video?.id,video,sourceKey,idempotencyKey}) }); const payload=await response.json().catch(()=>({})); return { data:payload.data||null,error:response.ok?null:new Error(payload.error||'PROCESSING_CREATE_FAILED') }; }
+    catch(error){ return {data:null,error}; }
   }
-
   async function reserveLocalProcessingJob(input, expectedRevision) {
-    const api = auth('admin');
-    if (!api) return {error: new Error('SUPABASE_NOT_CONFIGURED')};
-    const {data, error} = await api.rpc('admin_reserve_local_processing_job_v1', {
-      p_video: input.video, p_source: input.source, p_worker_id: input.workerId,
-      p_challenge: input.challenge, p_origin: input.origin,
-      p_request_id: input.requestId, p_expected_revision: Number(expectedRevision)
-    });
-    return {data: firstRow(data), error: error || null};
+    try { const response = await fetch('/api/admin/processing-control', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action:'create',videoId:input.video?.id,video:input.video,input:{...(input.source||{}),kind:'local',sourceId:input.source?.sourceId||input.source?.id||null,localOnly:true},idempotencyKey:input.requestId}) }); const payload=await response.json().catch(()=>({})); return {data:payload.data||null,error:response.ok?null:new Error(payload.error||'LOCAL_PROCESSING_RESERVE_FAILED')}; }
+    catch(error){ return {data:null,error}; }
   }
-
-  async function localProcessingCapability() {
-    const api=auth('admin');
-    if(!api)return {error:new Error('SUPABASE_NOT_CONFIGURED')};
-    const {data,error}=await api.rpc('admin_local_processing_capability_v1');
-    return {data:firstRow(data),error:error||null};
-  }
-  async function getLocalProcessingInput(jobId) {
-    const api=auth('admin');
-    if(!api)throw new Error('SUPABASE_NOT_CONFIGURED');
-    const {data,error}=await api.rpc('admin_get_local_processing_input_v1',{p_job_id:jobId});
-    if(error)throw error;
-    return firstRow(data);
-  }
-  async function recoverLocalProcessingInput(input) {
-    const api=auth('admin');
-    if(!api)return {error:new Error('SUPABASE_NOT_CONFIGURED')};
-    const {data,error}=await api.rpc('admin_recover_local_processing_input_v1',{
-      p_job_id:input.jobId,p_source:input.source,p_worker_id:input.workerId,
-      p_challenge:input.challenge,p_origin:input.origin
-    });
-    return {data:firstRow(data),error:error||null};
-  }
+  async function localProcessingCapability() { return {data:{enabled:true,controlPlane:'r2'},error:null}; }
+  async function getLocalProcessingInput(jobId) { const response=await fetch('/api/admin/processing-control?action=get&id='+encodeURIComponent(jobId)); const payload=await response.json().catch(()=>({})); if(!response.ok)throw new Error(payload.error||'LOCAL_INPUT_LOOKUP_FAILED'); return payload.data; }
+  async function recoverLocalProcessingInput(input) { try { const response=await fetch('/api/admin/processing-control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'recover',id:input.jobId,input:{...(input.source||{}),kind:'local',sourceId:input.source?.sourceId||input.source?.id||null,localOnly:true}})}); const payload=await response.json().catch(()=>({})); return {data:payload.data||null,error:response.ok?null:new Error(payload.error||'LOCAL_INPUT_RECOVERY_FAILED')}; } catch(error){return {data:null,error};} }
 
   function normalizeProcessingJob(job) {
     job={...job,videoId:job.videoId??job.video_id,type:job.type||job.input?.kind||'CLOUD_PIPELINE',inputTitle:job.inputTitle||job.input?.title||job.input?.titleZh,
@@ -321,48 +280,13 @@
       steps: order.map((step, index) => [step, mediaOnly&&status==='REVIEW'||(validating?completed(step):index < current) ? 'SUCCESS' : index === current ? (status === 'ERROR' ? 'ERROR' : status === 'CANCELLED' ? 'CANCELLED' : status === 'REVIEW' || status === 'QUEUED' || status === 'WAITING' ? 'WAITING' : 'RUNNING') : 'WAITING']) };
   }
 
-  async function listProcessingJobs(page = 1, pageSize = 50) {
-    const api = auth('admin');
-    if (!api) return { rows: [], error: new Error('SUPABASE_NOT_CONFIGURED') };
-    const { data, error } = await api.rpc('admin_list_processing_video_groups_v1', {
-      p_page: Math.max(1, Number(page) || 1), p_page_size: Math.max(1, Math.min(100, Number(pageSize) || 50))
-    });
-    if (error) return { rows: [], groups: [], error };
-    if (!data || !Array.isArray(data.items)) return { rows: [], groups: [], error: new Error('INVALID_PROCESSING_GROUP_RESPONSE') };
-    const groups=data.items.map(group=>{
-      const records=(Array.isArray(group.records)?group.records:[]).map(normalizeProcessingJob);
-      const current=selectCurrentProcessingJob(records,group.video);
-      return {videoId:String(group.videoId),video:group.video||null,recordCount:Number(group.recordCount)||records.length,current,records};
-    }).filter(group=>group.current);
-    const keys=['active','failed','review','completed','cancelled','total'];
-    const summary=data.summary&&keys.every(key=>Number.isSafeInteger(data.summary[key])&&data.summary[key]>=0)&&keys.slice(0,5).reduce((n,key)=>n+data.summary[key],0)===data.summary.total?data.summary:null;
-    return { summary, rows: groups.flatMap(group=>group.records), groups, total:Number(data.total)||0, page:Number(data.page)||1, pageSize:Number(data.pageSize)||50, error:null };
-  }
+  async function listProcessingJobs(page = 1, pageSize = 50) { try { const payload=await apiRequest('/api/admin/processing-control?action=list&limit='+encodeURIComponent(Math.min(500,Math.max(1,Number(pageSize)||50))),{method:'GET'}); const rows=(payload.rows||[]).map(normalizeProcessingJob); const groups=rows.map(job=>({videoId:String(job.videoId||''),video:null,recordCount:1,current:job,records:[job]})); return {summary:payload.summary||null,rows,groups,total:rows.length,page:1,pageSize:rows.length||1,error:null}; } catch(error){return {rows:[],groups:[],error};} }
 
-  async function listProcessingHistory(videoId, page = 1, pageSize = 25) {
-    const api=auth('admin');
-    if(!api)throw new Error('SUPABASE_NOT_CONFIGURED');
-    const {data,error}=await api.rpc('admin_list_processing_video_history_v1',{p_video_id:String(videoId),p_page:Math.max(1,Number(page)||1),p_page_size:Math.max(1,Math.min(100,Number(pageSize)||25))});
-    if(error)throw error;
-    if(!data||!Array.isArray(data.items))throw new Error('INVALID_PROCESSING_HISTORY_RESPONSE');
-    return {rows:data.items.map(normalizeProcessingJob),total:Number(data.total)||0,page:Number(data.page)||1,pageSize:Number(data.pageSize)||25};
-  }
+  async function listProcessingHistory(videoId, page = 1, pageSize = 25) { return {rows:[],total:0,page:1,pageSize:25}; }
 
-  async function getProcessingJob(jobId) {
-    const api=auth('admin');
-    if(!api)throw new Error('SUPABASE_NOT_CONFIGURED');
-    const {data,error}=await api.rpc('admin_get_processing_job_v1',{p_job_id:String(jobId)});
-    if(error)throw error;
-    if(!data?.id)throw new Error('INVALID_PROCESSING_JOB_RESPONSE');
-    return normalizeProcessingJob(data);
-  }
+  async function getProcessingJob(jobId) { const payload=await apiRequest('/api/admin/processing-control?action=get&id='+encodeURIComponent(jobId),{method:'GET'}); if(!payload.data?.id)throw new Error('INVALID_PROCESSING_JOB_RESPONSE'); return normalizeProcessingJob(payload.data); }
 
-  async function retryProcessingJob(jobId) {
-    const api = auth('admin');
-    if (!api) return { error: new Error('SUPABASE_NOT_CONFIGURED') };
-    const { data, error } = await api.rpc('admin_retry_processing_job', { p_job_id: jobId });
-    return { data: firstRow(data), error: error || null };
-  }
+  async function retryProcessingJob(jobId) { try { const response=await fetch('/api/admin/processing-control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'retry',id:jobId})}); const payload=await response.json().catch(()=>({})); return {data:payload.data||null,error:response.ok?null:new Error(payload.error||'PROCESSING_RETRY_FAILED')}; } catch(error){return {data:null,error};} }
 
   async function syncMediaSession(scope, options = {}) {
     await mediaSessionCleanup;
@@ -438,14 +362,7 @@
     else releaseCleanup();
   }
 
-  async function controlProcessingJob(command) {
-    const api=auth('admin');
-    if(!api)return {error:new Error('SUPABASE_NOT_CONFIGURED')};
-    return api.rpc('admin_control_processing_job_v1',{
-      p_job_id:command.id,p_expected_run_id:command.runId||null,
-      p_expected_updated_at:command.updatedAt,p_action:command.action,p_request_id:command.requestId
-    });
-  }
+  async function controlProcessingJob(command) { const action=command.action==='cancel'?'cancel':'retry'; try { const response=await fetch('/api/admin/processing-control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,id:command.id})}); const payload=await response.json().catch(()=>({})); return {data:payload.data||null,error:response.ok?null:new Error(payload.error||'PROCESSING_CONTROL_FAILED')}; } catch(error){return {data:null,error};} }
 
   async function apiRequest(path, init) {
     const token = await sessionToken('admin');

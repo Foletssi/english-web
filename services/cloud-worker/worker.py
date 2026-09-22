@@ -43,7 +43,7 @@ from final_output import restore_final_output, save_final_output  # noqa: E402
 
 
 VERSION = '2.6.0'
-DEFAULT_ENDPOINT = 'https://ehxqtgakjgqgmghhdmjg.supabase.co/functions/v1/video-processing'
+DEFAULT_ENDPOINT = 'https://english-web-lce.pages.dev/api/processing/control'
 STAGE_MAP = {'probe': 'PROBE', 'transcode': 'TRANSCODE', 'asr': 'ASR', 'enrich': 'ENRICH'}
 
 
@@ -1139,6 +1139,7 @@ def main():
 
 if __name__ == '__main__':
     raise SystemExit(main())
+
 
 
 
