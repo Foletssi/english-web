@@ -19,7 +19,7 @@ async function readObject(bucket, key) {
 }
 async function writeObject(bucket, key, value, etag = null) {
   const options = { httpMetadata: { contentType: 'application/json; charset=utf-8', cacheControl: 'no-store' } };
-  if (etag) options.onlyIf = { etagMatches: [etag] };
+  if (etag) options.onlyIf = { etagMatches: etag };
   const written = await bucket.put(key, JSON.stringify(value), options);
   if (etag && !written) throw new Error('CONTROL_CONFLICT');
   return written;
