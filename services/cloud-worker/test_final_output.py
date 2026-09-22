@@ -22,9 +22,9 @@ class FinalOutputTests(unittest.TestCase):
         self.asset = self.output / 'master.m3u8'
         self.asset.write_bytes(b'media')
         self.job = {'id': 'job', 'video_id': '123', 'source_key': 'source.mp4', 'input': {}}
-        rows = [{'id': 's1', 'english': 'Go', 'textRevision': 1, 'expressions': [],
-                 'wordLookup': {'sourceTextRevision': 1, 'sourceEnglish': 'Go', 'tokens': [
-                     {'tokenId': 't0', 'surface': 'Go', 'coreMeaningZh': 'go meaning', 'pronunciationHint': '/go/'}]}}]
+        rows = [{'id': 's1', 'english': 'Go', 'chinese': '去', 'textRevision': 1, 'expressions': [],
+                 'wordLookup': {'schemaVersion': 1, 'sourceTextRevision': 1, 'sourceEnglish': 'Go', 'tokens': [
+                     {'tokenId': 't0', 'surface': 'Go', 'start': 0, 'end': 2, 'coreMeaningZh': 'go meaning', 'pronunciationHint': '/go/'}]}}]
         items = collect_voice_items('123', 'old-run', rows)
         items[0].update(status='ready', storagePath='voice/test.mp3', ownerJobId='old-owner', url='old-url')
         self.result = {'video': {'status': 'REVIEW', 'voiceManifest': {'videoId': '123',
@@ -137,6 +137,7 @@ class FinalOutputTests(unittest.TestCase):
              patch.object(worker, 'heartbeat_loop'), \
              patch.object(worker, 'resolve_input_source', return_value=(self.source, None)), \
              patch.object(worker, 'selected_assets', return_value=[asset]), \
+             patch.object(worker, 'validate_teaching'), \
              patch.object(worker, 'upload_assets', return_value=self.manifest) as upload, \
              patch.object(worker, 'process_job') as pipeline, \
              patch.object(worker, 'prepare_voice') as voice, \
@@ -145,7 +146,7 @@ class FinalOutputTests(unittest.TestCase):
             worker.process_lease(client, lease)
         pipeline.assert_not_called()
         voice.assert_not_called()
-        completions = [call for call in client.call.call_args_list if call.args[0]=='worker-complete-v2']
+        completions = [call for call in client.call.call_args_list if call.args[0]=='worker-complete-v3']
         samples = [call.kwargs for call in client.call.call_args_list if call.args[0]=='worker-telemetry-v2']
         self.assertTrue(samples)
         self.assertTrue(all(sample['progress'] >= 97 for sample in samples))
@@ -212,7 +213,7 @@ class FinalOutputTests(unittest.TestCase):
         failure.assert_not_called()
         process.assert_called_once()
         self.assertTrue((job_root / 'final-output.json').is_file())
-        completions = [c for c in client.call.call_args_list if c.args[0] == 'worker-complete-v2']
+        completions = [c for c in client.call.call_args_list if c.args[0] == 'worker-complete-v3']
         self.assertEqual(len(completions), 1)
         self.assertEqual(completions[0].kwargs['result']['sentences'], self.result['sentences'])
         samples = [c.kwargs for c in client.call.call_args_list if c.args[0] == 'worker-telemetry-v2']

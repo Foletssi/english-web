@@ -42,7 +42,7 @@ from ai_settings import SettingsStore, start_ai_settings  # noqa: E402
 from final_output import restore_final_output, save_final_output  # noqa: E402
 
 
-VERSION = '2.5.12'
+VERSION = '2.6.0'
 DEFAULT_ENDPOINT = 'https://ehxqtgakjgqgmghhdmjg.supabase.co/functions/v1/video-processing'
 STAGE_MAP = {'probe': 'PROBE', 'transcode': 'TRANSCODE', 'asr': 'ASR', 'enrich': 'ENRICH'}
 
@@ -185,10 +185,11 @@ class EdgeClient:
         request = urllib.request.Request(self.endpoint, data=json.dumps(payload).encode('utf-8'), method='POST', headers={
             'Content-Type': 'application/json', 'x-worker-secret': self.secret,
             'User-Agent': f'EastudyCloudWorker/{VERSION}'})
-        timeout = 15 if 'heartbeat' in action else (75 if action == 'worker-complete-v2' else 45)
+        timeout = 15 if 'heartbeat' in action else (210 if action == 'worker-complete-v3' else 45)
         return self._request_json(request, timeout, retryable=action in {
-            'worker-telemetry-v2', 'worker-output-receipt-v2', 'worker-output-receipts-v3', 'worker-complete-v2',
-            'worker-validate-teaching-v2', 'worker-fail-v2'})
+            'worker-telemetry-v2', 'worker-output-receipt-v2', 'worker-output-receipts-v3',
+            'worker-validate-teaching-v2', 'worker-finalization-status-v3',
+            'worker-defer-v3', 'worker-fail-v3'})
 
     def upload(self, base_url, token, job_id, path, source):
         url = base_url + '&path=' + urllib.parse.quote(path, safe='/')
@@ -368,13 +369,90 @@ def _report_progress(client, lease, stage, progress, message, metrics=None):
 
 def report_failure(client, lease, error, retryable=True):
     current_run = run_id(lease)
-    action = 'worker-fail-v2' if current_run else 'worker-fail'
-    values = {'jobId': lease['job']['id'], 'token': lease['token'], 'error': error,
-              'retryable': retryable}
-    if current_run:
-        values['runId'] = current_run
-    return client.call(action, **values)
+    if not current_run:
+        raise ApiError('TERMINAL_PROTOCOL_REQUIRED')
+    return client.call('worker-fail-v3', jobId=lease['job']['id'], token=lease['token'],
+                       runId=current_run, error=error, retryable=retryable)
 
+
+def finalization_status(client, lease):
+    current_run = run_id(lease)
+    if not current_run:
+        raise ApiError('FINALIZATION_PROTOCOL_REQUIRED')
+    response = client.call('worker-finalization-status-v3', jobId=lease['job']['id'],
+                           token=lease['token'], runId=current_run)
+    value = response.get('finalization')
+    if not isinstance(value, dict) or value.get('state') not in {
+            'COMMITTED', 'PENDING', 'DEFERRED', 'STALE'}:
+        raise ApiError('FINALIZATION_STATUS_INVALID')
+    return value
+
+
+def finalize_result(client, lease, result, manifest, cancelled=None):
+    current_run = run_id(lease)
+    if not current_run:
+        raise ApiError('FINALIZATION_PROTOCOL_REQUIRED')
+    failure = None
+    with resource_slot('finalize', cancelled):
+        for attempt in range(2):
+            try:
+                client.call('worker-complete-v3', jobId=lease['job']['id'], token=lease['token'],
+                            runId=current_run, result=result, manifest=manifest)
+                return True
+            except ApiError as error:
+                if not transient_request_error(error):
+                    raise
+                failure = error
+            try:
+                state = finalization_status(client, lease)
+            except ApiError as status_error:
+                if not transient_request_error(status_error):
+                    raise
+                state = None
+            if state and state['state'] == 'COMMITTED':
+                return True
+            if state and state['state'] == 'DEFERRED':
+                return False
+            if state and state['state'] == 'STALE':
+                raise ApiError('JOB_LEASE_LOST_OR_CANCELLED')
+            if attempt == 0:
+                time.sleep(5)
+
+        try:
+            state = finalization_status(client, lease)
+        except ApiError as status_error:
+            if not transient_request_error(status_error):
+                raise
+            state = None
+        if state and state['state'] == 'COMMITTED':
+            return True
+        if state and state['state'] == 'DEFERRED':
+            return False
+        if state and state['state'] == 'STALE':
+            raise ApiError('JOB_LEASE_LOST_OR_CANCELLED')
+
+        code = getattr(failure, 'code', 'EDGE_UNAVAILABLE')
+        allowed = {'DB_STATEMENT_TIMEOUT', 'DB_LOCK_TIMEOUT', 'DB_SERIALIZATION_RETRY',
+                   'DB_DEADLOCK_RETRY', 'EDGE_UNAVAILABLE', 'EDGE_INVALID_RESPONSE',
+                   'REQUEST_FAILED'}
+        defer_error = {'code': code if code in allowed else 'EDGE_UNAVAILABLE',
+                       'message': str(failure or 'finalization unavailable')[:500]}
+        try:
+            response = client.call('worker-defer-v3', jobId=lease['job']['id'],
+                                   token=lease['token'], runId=current_run, error=defer_error)
+            value = response.get('finalization')
+            if not isinstance(value, dict) or value.get('state') not in {'COMMITTED', 'DEFERRED'}:
+                raise ApiError('FINALIZATION_DEFER_INVALID')
+            return value['state'] == 'COMMITTED'
+        except ApiError as defer_failure:
+            if not lease_cancelled(defer_failure):
+                raise
+            state = finalization_status(client, lease)
+            if state['state'] == 'COMMITTED':
+                return True
+            if state['state'] == 'DEFERRED':
+                return False
+            raise
 
 def content_type(path):
     if path.endswith('.m3u8'):
@@ -886,8 +964,9 @@ def process_lease(client, lease, local_inputs=None, ai_settings=None):
             if cancelled.is_set():
                 raise ApiError('JOB_LEASE_LOST_OR_CANCELLED')
             final = rewrite_result(final, job_id, lease['job']['source_key'])
-            client.call('worker-complete-v2', jobId=job_id, token=lease['token'], runId=current_run,
-                        result=final, manifest=manifest)
+            if not finalize_result(client, lease, final, manifest, cancelled):
+                print(f'[deferred-finalization] {job_id}', flush=True)
+                return
             print(f'[complete-restored] {job_id}', flush=True)
             return
         if lease.get('_resume'):
@@ -935,11 +1014,9 @@ def process_lease(client, lease, local_inputs=None, ai_settings=None):
         if cancelled.is_set():
             raise ApiError('JOB_LEASE_LOST_OR_CANCELLED')
         final = rewrite_result(result_job['result'], job_id, lease['job']['source_key'])
-        if run_id(lease):
-            client.call('worker-complete-v2', jobId=job_id, token=lease['token'], runId=run_id(lease),
-                        result=final, manifest=manifest)
-        else:
-            client.call('worker-complete', jobId=job_id, token=lease['token'], result=final)
+        if not finalize_result(client, lease, final, manifest, cancelled):
+            print(f'[deferred-finalization] {job_id}', flush=True)
+            return
         print(f'[complete] {job_id}', flush=True)
     except Exception as error:
         message = f'[error] {job_id}: {error}'

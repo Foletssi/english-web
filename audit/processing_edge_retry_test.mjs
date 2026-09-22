@@ -20,7 +20,7 @@ for (const [code, expected] of Object.entries({
   reply = { code, message: 'TEACHING_DETAILS_INVALID' };
   const response = await handler(new Request('https://fixture', {
     method: 'POST', headers: { 'content-type': 'application/json', 'x-worker-secret': 'fixture-secret' },
-    body: JSON.stringify({ action: 'worker-complete-v2', workerId: 'fixture-worker', jobId: '00000000-0000-4000-8000-000000000001', runId: '00000000-0000-4000-8000-000000000002', token: 'x'.repeat(64), result: {}, manifest: [] })
+    body: JSON.stringify({ action: 'worker-complete-v3', workerId: 'fixture-worker', jobId: '00000000-0000-4000-8000-000000000001', runId: '00000000-0000-4000-8000-000000000002', token: 'x'.repeat(64), result: {}, manifest: [] })
   }));
   assert.equal((await response.json()).error, expected);
 }

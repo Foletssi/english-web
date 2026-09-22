@@ -15,57 +15,64 @@ SPEC.loader.exec_module(worker)
 
 
 class WorkerTests(unittest.TestCase):
-    def test_database_transaction_failures_retry_same_payload(self):
-        for code in ('DB_STATEMENT_TIMEOUT', 'DB_LOCK_TIMEOUT', 'DB_SERIALIZATION_RETRY', 'DB_DEADLOCK_RETRY'):
-            for action in ('worker-complete-v2', 'worker-validate-teaching-v2'):
-                with self.subTest(code=code, action=action):
-                    client = worker.EdgeClient('https://example.test', 'secret', 'worker', {})
-                    error = worker.urllib.error.HTTPError(client.endpoint, 500, 'failed', {},
-                        io.BytesIO(json.dumps({'error': 'SUPABASE_503:' + code}).encode()))
-                    self.addCleanup(error.close)
-                    response = MagicMock()
-                    response.__enter__.return_value.read.return_value = b'{"ok":true}'
-                    with patch.object(worker.urllib.request, 'urlopen', side_effect=[error, response]) as request, patch.object(worker.time, 'sleep'):
-                        self.assertTrue(client.call(action, result={'unchanged': True})['ok'])
-                    self.assertEqual(request.call_count, 2)
-                    self.assertEqual(request.call_args_list[0].args[0].data, request.call_args_list[1].args[0].data)
-                    self.assertEqual(request.call_args.kwargs['timeout'], 75 if action == 'worker-complete-v2' else 45)
-
-    def test_lost_commit_response_replays_identical_request(self):
+    def test_complete_v3_uses_extended_timeout_without_blind_retry(self):
         client = worker.EdgeClient('https://example.test', 'secret', 'worker', {})
-        for body in (b'', b'{"ok":', b'null', b'[]'):
-            with self.subTest(body=body):
-                uncertain, receipt = MagicMock(), MagicMock()
-                uncertain.__enter__.return_value.read.return_value = body
-                receipt.__enter__.return_value.read.return_value = b'{"ok":true,"result":{"status":"REVIEW","revision":9}}'
-                with patch.object(worker.urllib.request, 'urlopen', side_effect=[uncertain, receipt]) as request, patch.object(worker.time, 'sleep'):
-                    result = client.call('worker-complete-v2', runId='run', result={'sentences': ['unchanged']})
-                self.assertEqual(result['result']['revision'], 9)
-                self.assertEqual(request.call_count, 2)
-                self.assertEqual(request.call_args_list[0].args[0].data, request.call_args_list[1].args[0].data)
-        malformed = MagicMock()
-        malformed.__enter__.return_value.read.return_value = b''
-        for action, attempts in [('worker-complete-v2', 3), ('worker-claim', 1)]:
-            with self.subTest(action=action), patch.object(worker.urllib.request, 'urlopen', return_value=malformed) as request, patch.object(worker.time, 'sleep'):
-                with self.assertRaises(worker.ApiError):
-                    client.call(action)
-                self.assertEqual(request.call_count, attempts)
+        error = worker.urllib.error.HTTPError(client.endpoint, 500, 'failed', {},
+            io.BytesIO(json.dumps({'error': 'SUPABASE_503:DB_STATEMENT_TIMEOUT'}).encode()))
+        self.addCleanup(error.close)
+        with patch.object(worker.urllib.request, 'urlopen', side_effect=error) as request:
+            with self.assertRaises(worker.ApiError):
+                client.call('worker-complete-v3', result={'unchanged': True})
+        self.assertEqual(request.call_count, 1)
+        self.assertEqual(request.call_args.kwargs['timeout'], 210)
+
+    def test_finalization_reconciles_lost_response_before_retry(self):
+        client = MagicMock()
+        client.call.side_effect = [worker.ApiError('EDGE_INVALID_RESPONSE'),
+                                   {'finalization': {'state': 'COMMITTED'}}]
+        lease = {'job': {'id': 'job', 'run_id': 'run'}, 'token': 'x' * 32}
+        self.assertTrue(worker.finalize_result(client, lease, {'sentences': []}, []))
+        self.assertEqual([call.args[0] for call in client.call.call_args_list],
+                         ['worker-complete-v3', 'worker-finalization-status-v3'])
+
+    def test_finalization_retries_pending_commit_once(self):
+        client = MagicMock()
+        client.call.side_effect = [worker.ApiError('DB_STATEMENT_TIMEOUT'),
+                                   {'finalization': {'state': 'PENDING'}},
+                                   {'result': {'status': 'REVIEW'}}]
+        lease = {'job': {'id': 'job', 'run_id': 'run'}, 'token': 'x' * 32}
+        with patch.object(worker.time, 'sleep') as sleep:
+            self.assertTrue(worker.finalize_result(client, lease, {'sentences': []}, []))
+        self.assertEqual([call.args[0] for call in client.call.call_args_list],
+                         ['worker-complete-v3', 'worker-finalization-status-v3', 'worker-complete-v3'])
+        sleep.assert_called_once_with(5)
+
+    def test_finalization_defers_same_job_after_bounded_failures(self):
+        client = MagicMock()
+        client.call.side_effect = [
+            worker.ApiError('DB_STATEMENT_TIMEOUT'), {'finalization': {'state': 'PENDING'}},
+            worker.ApiError('DB_STATEMENT_TIMEOUT'), {'finalization': {'state': 'PENDING'}},
+            {'finalization': {'state': 'PENDING'}}, {'finalization': {'state': 'DEFERRED', 'job': {}}}]
+        lease = {'job': {'id': 'job', 'run_id': 'run'}, 'token': 'x' * 32}
+        with patch.object(worker.time, 'sleep'):
+            self.assertFalse(worker.finalize_result(client, lease, {'sentences': []}, []))
+        self.assertEqual([call.args[0] for call in client.call.call_args_list].count('worker-complete-v3'), 2)
+        self.assertEqual(client.call.call_args_list[-1].args[0], 'worker-defer-v3')
 
     def test_gateway_errors_retry_only_idempotent_actions(self):
-        for action in ('worker-complete-v2', 'worker-output-receipt-v2', 'worker-output-receipts-v3'):
-            for body in (b'error code: 520', b'[]', b'null', b'"unavailable"'):
-                with self.subTest(action=action, body=body):
-                    client = worker.EdgeClient('https://example.test', 'secret', 'worker', {})
-                    error = worker.urllib.error.HTTPError(client.endpoint, 520, 'failed', {}, io.BytesIO(body))
-                    self.addCleanup(error.close)
-                    response = MagicMock()
-                    response.__enter__.return_value.read.return_value = b'{"ok":true}'
-                    with patch.object(worker.urllib.request, 'urlopen', side_effect=[error, response]) as request, \
-                         patch.object(worker.time, 'sleep'):
-                        self.assertTrue(client.call(action)['ok'])
-                    self.assertEqual(request.call_count, 2)
-                    self.assertEqual(request.call_args_list[0].args[0].data, request.call_args_list[1].args[0].data)
-
+        for action in ('worker-output-receipt-v2', 'worker-output-receipts-v3',
+                       'worker-finalization-status-v3', 'worker-defer-v3', 'worker-fail-v3'):
+            with self.subTest(action=action):
+                client = worker.EdgeClient('https://example.test', 'secret', 'worker', {})
+                error = worker.urllib.error.HTTPError(client.endpoint, 520, 'failed', {}, io.BytesIO(b'error code: 520'))
+                self.addCleanup(error.close)
+                response = MagicMock()
+                response.__enter__.return_value.read.return_value = b'{"ok":true}'
+                with patch.object(worker.urllib.request, 'urlopen', side_effect=[error, response]) as request, \
+                     patch.object(worker.time, 'sleep'):
+                    self.assertTrue(client.call(action)['ok'])
+                self.assertEqual(request.call_count, 2)
+                self.assertEqual(request.call_args_list[0].args[0].data, request.call_args_list[1].args[0].data)
     def test_reconciliation_failure_uses_one_bounded_retry_loop(self):
         client = worker.EdgeClient('https://example.test', 'secret', 'worker', {})
         with tempfile.TemporaryDirectory() as folder:
@@ -108,16 +115,6 @@ class WorkerTests(unittest.TestCase):
             self.assertTrue(all(call.args[0].get_header('User-agent') == f'EastudyCloudWorker/{worker.VERSION}'
                                 for call in request.call_args_list))
 
-    def test_partial_commit_response_retries_without_reprocessing(self):
-        client = worker.EdgeClient('https://example.test', 'secret', 'worker', {})
-        response = MagicMock()
-        response.__enter__.return_value.read.return_value = b'{"ok":true}'
-        with patch.object(worker.urllib.request, 'urlopen', side_effect=[
-                worker.http.client.IncompleteRead(b'partial'), response]) as request, patch.object(worker.time, 'sleep'):
-            self.assertTrue(client.call('worker-complete-v2', result={'video': {}})['ok'])
-        self.assertEqual(request.call_count, 2)
-        self.assertEqual(request.call_args_list[0].args[0].data, request.call_args_list[1].args[0].data)
-
     def test_output_reconcile_conflict_does_not_overwrite(self):
         client = worker.EdgeClient('https://example.test', 'secret', 'worker', {})
         with tempfile.TemporaryDirectory() as directory:
@@ -127,14 +124,6 @@ class WorkerTests(unittest.TestCase):
                 with self.assertRaisesRegex(worker.ApiError, 'OUTPUT_RECEIPT_CONFLICT'):
                     client.upload('https://example.test?run=run', '', '', 'segment.ts', source)
             self.assertEqual(request.call_count, 1)
-
-    def test_commit_retries_identical_payload_after_lost_response(self):
-        client = worker.EdgeClient('https://example.test', 'secret', 'worker', {})
-        response = MagicMock()
-        response.__enter__.return_value.read.return_value = b'{"ok":true}'
-        with patch.object(worker.urllib.request, 'urlopen', side_effect=[TimeoutError(), response]) as request, patch.object(worker.time, 'sleep'):
-            self.assertTrue(client.call('worker-complete-v2', result={'video': {}}, manifest=[])['ok'])
-        self.assertEqual(request.call_args_list[0].args[0].data, request.call_args_list[1].args[0].data)
 
     def test_voice_progress_exposes_counts_without_changing_item_manifest(self):
         client = MagicMock()
@@ -267,7 +256,7 @@ class WorkerTests(unittest.TestCase):
         response.__enter__.return_value.read.return_value = b'{"ok":true}'
         with patch.object(worker.urllib.request, 'urlopen', side_effect=[error, response]) as request, \
              patch.object(worker.time, 'sleep'):
-            self.assertTrue(client.call('worker-fail-v2', jobId='job', runId='run',
+            self.assertTrue(client.call('worker-fail-v3', jobId='job', runId='run',
                 error={'code': 'OUTPUT_AUTH_UNAVAILABLE'})['ok'])
         self.assertEqual(request.call_count, 2)
         self.assertEqual(request.call_args_list[0].args[0].data, request.call_args_list[1].args[0].data)
@@ -310,7 +299,7 @@ class WorkerTests(unittest.TestCase):
             pipeline.assert_not_called()
 
     def test_worker_reports_v5_protocol_version(self):
-        self.assertEqual(worker.VERSION, '2.5.12')
+        self.assertEqual(worker.VERSION, '2.6.0')
         source = MODULE.read_text(encoding='utf-8')
         self.assertIn("'learningRepairV5': True", source)
         self.assertIn("'teachingSchemaVersion': 3", source)
@@ -572,7 +561,7 @@ class WorkerTests(unittest.TestCase):
                 patch.object(worker, 'rewrite_result', side_effect=lambda result, *args: result):
             worker.process_lease(client, lease, ai_settings=settings)
         settings.snapshot.assert_called_once_with()
-        completed = [c for c in client.call.call_args_list if c.args[0] == 'worker-complete-v2']
+        completed = [c for c in client.call.call_args_list if c.args[0] == 'worker-complete-v3']
         self.assertEqual(len(completed), 1)
         self.assertTrue(completed[0].kwargs['result']['evidence']['aiUsage']['complete'])
 

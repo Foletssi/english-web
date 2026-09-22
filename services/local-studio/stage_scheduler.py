@@ -64,6 +64,7 @@ _resource_limits = {
     'ai': FairResourceGate(_configured_limit('EASTUDY_GLOBAL_AI_CONCURRENCY', 3, 4)),
     'network': FairResourceGate(_configured_limit('EASTUDY_GLOBAL_NETWORK_CONCURRENCY', 4, 8)),
     'voice_batch': FairResourceGate(_configured_limit('EASTUDY_GLOBAL_VOICE_BATCH_CONCURRENCY', 2, 2)),
+    'finalize': FairResourceGate(1),
 }
 _resource_held = threading.local()
 

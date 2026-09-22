@@ -14,6 +14,8 @@ const processingSql = read('../supabase/migrations/20260908224149_cloud_video_pr
 const processingSource = read('../functions/api/processing/source.js');
 const localWorkerSql = read('../supabase/migrations/20260909000631_local_cloud_worker.sql');
 const recoverySql = read('../supabase/migrations/20260909131802_processing_recovery_v2.sql');
+const finalizationSql = read('../supabase/migrations/20260922030000_processing_finalization_v3.sql');
+const voiceProjectionSql = read('../supabase/migrations/20260922043000_processing_voice_projection_v2.sql');
 const integritySql = read('../supabase/migrations/20260909150000_content_integrity_and_job_views.sql');
 const jobTitleSql = read('../supabase/migrations/20260909151000_processing_job_trash_titles.sql');
 const requeueSql = read('../supabase/migrations/20260909221000_requeue_repaired_video_job.sql');
@@ -65,9 +67,22 @@ assert.ok(localWorkerSql.includes('for update skip locked'), 'desktop workers mu
 assert.ok(localWorkerSql.includes('cancel_requested_at is null'), 'worker leases and tokens must reject logically deleted jobs');
 assert.ok(!localWorkerSql.includes('delete from') && !localWorkerSql.includes('VIDEO_BUCKET'), 'local migration must not delete R2 data');
 for (const rpc of ['processing_heartbeat_job_v2', 'processing_report_job_v2', 'processing_record_output_v2',
-  'processing_fail_job_v2', 'processing_commit_leased_result_v2', 'resolve_processing_output_v2']) {
+  'resolve_processing_output_v2']) {
   assert.ok(recoverySql.includes(`public.${rpc}`), `recovery migration must define ${rpc}`);
 }
+for (const rpc of ['processing_commit_leased_result_v3', 'processing_finalization_status_v3',
+  'processing_defer_job_v3', 'processing_fail_job_v3']) {
+  assert.ok(finalizationSql.includes(`public.${rpc}`), `finalization migration must define ${rpc}`);
+}
+assert.ok(finalizationSql.includes('drop function public.processing_commit_leased_result_v2') &&
+  finalizationSql.includes('drop function public.processing_fail_job_v2'), 'v3 migration must remove v2 terminal RPCs');
+assert.ok(voiceProjectionSql.includes('private.teaching_voice_batches') && voiceProjectionSql.includes('private.teaching_voice_manifest_v2'), 'voice items must live in a targeted projection');
+assert.ok(voiceProjectionSql.includes('private.processing_compact_snapshot_v1') && voiceProjectionSql.includes('CONTENT_SNAPSHOT_CAPACITY_INSUFFICIENT'), 'teaching preflight must measure compact snapshot capacity');
+assert.ok(voiceProjectionSql.includes('private.processing_voice_registration_matches_v2'), 'playback authorization must use registered voice assets');
+assert.ok(voiceProjectionSql.includes('public.admin_get_processing_video_content_v1'), 'admin targeted content read must rebuild voice data');
+assert.ok(!voiceProjectionSql.includes('VIDEO_BUCKET'), 'voice projection migration must never delete R2 objects');
+assert.ok(!finalizationSql.toLowerCase().includes('delete from') && !finalizationSql.includes('VIDEO_BUCKET'),
+  'finalization recovery must retain jobs, receipts and R2 objects');
 assert.ok(recoverySql.includes('private.processing_job_events'), 'failure history must survive retries');
 assert.ok(recoverySql.includes("'LEASE_LOST'"), 'expired runs must retain lease-loss evidence');
 assert.ok(recoverySql.includes('last_progress_at=case when v_made_progress'),
@@ -91,13 +106,16 @@ assert.ok(processingOutput.includes("crypto.subtle.digest('SHA-256'"), 'R2 outpu
 assert.ok(processingMedia.includes("openPlaybackTicket(cookieValue(request,'eastudy_playback')"), 'processed media must require an opaque job-scoped playback ticket');
 assert.ok(!processingMedia.includes('authenticate(request, env)'), 'HLS requests must not repeat full Supabase authentication per segment');
 assert.ok(processingMedia.includes("request.headers.get('Range')"), 'processed media must support byte ranges');
-for (const action of ['worker-heartbeat', 'worker-claim', 'worker-job-heartbeat', 'worker-progress', 'worker-fail', 'worker-complete']) {
+for (const action of ['worker-heartbeat', 'worker-claim', 'worker-job-heartbeat-v2', 'worker-telemetry-v2',
+  'worker-output-receipt-v2', 'worker-output-receipts-v3', 'worker-finalization-status-v3',
+  'worker-defer-v3', 'worker-fail-v3', 'worker-complete-v3']) {
   assert.ok(edgeWorker.includes(`'${action}'`), `Edge worker must expose ${action}`);
 }
-for (const action of ['worker-job-heartbeat-v2', 'worker-telemetry-v2', 'worker-output-receipt-v2', 'worker-output-receipts-v3',
-  'worker-fail-v2', 'worker-complete-v2']) {
-  assert.ok(edgeWorker.includes(`'${action}'`), `Edge worker must expose ${action}`);
+for (const retired of ['worker-fail-v2', 'worker-complete-v2']) {
+  assert.ok(!edgeWorker.includes(`action === '${retired}'`), `Edge worker must retire ${retired}`);
 }
+assert.ok(!edgeWorker.includes("action === 'worker-fail'") && !edgeWorker.includes("action === 'worker-complete'"),
+  'Edge worker must retire legacy terminal actions');
 assert.ok(edgeWorker.includes("env('WORKER_SECRET')"), 'desktop worker actions must require a server-side secret');
 for (const method of ['processingHealth', 'createProcessingJob', 'listProcessingJobs', 'retryProcessingJob']) {
   assert.ok(client.includes(method), `cloud client must expose ${method}`);
@@ -123,4 +141,4 @@ assert.ok(!learningReextractSql.toLowerCase().includes('delete from') && !learni
 assert.ok(edgeWorker.includes("'worker-complete-learning-v5'"), 'Edge worker must expose v5 text-only learning repair completion');
 for (const method of ['setVideoPublication', 'createLearningRepair']) assert.ok(client.includes(method), `cloud client must expose ${method}`);
 
-console.log(JSON.stringify({ ok: true, tests: 78 }, null, 2));
+console.log(JSON.stringify({ ok: true, tests: 91 }, null, 2));

@@ -35,19 +35,22 @@ begin
     select jid,rid,m->>'path',(m->>'size')::bigint,m->>'sha256','rollback-only',now() from jsonb_array_elements(manifest) m;
   perform set_config('request.jwt.claim.role','service_role',true);
   started:=clock_timestamp();
-  saved:=public.processing_commit_leased_result_v2(jid,rid,token,worker,result,manifest);
+  saved:=public.processing_commit_leased_result_v3(jid,rid,token,worker,result,manifest);
   elapsed:=extract(epoch from clock_timestamp()-started);
   if saved->>'status' is distinct from 'REVIEW'
-    or jsonb_array_length(saved#>array['snapshot','sentences',vid])<>jsonb_array_length(result->'sentences')
+    or (select jsonb_array_length(c.draft->'sentences'->vid) from private.content_snapshots c where c.environment='production')<>jsonb_array_length(result->'sentences')
     or not exists(select 1 from public.processing_jobs where id=jid and status='REVIEW' and output_run_id=rid and worker_token_hash is null)
     or (select count(*) from private.processing_commit_receipts where job_id=jid and run_id=rid)<>1
     or (select count(*) from private.teaching_voice_assets where owner_job_id=jid and run_id=rid)<>jsonb_array_length(items)
     then raise exception 'FULL_COMMIT_FAILED'; end if;
-  if not exists(select 1 from jsonb_array_elements(saved#>'{snapshot,videos}') v where v->>'id'=vid
-    and jsonb_array_length(v->'coverImages')=3 and v#>>'{voiceManifest,status}'='complete')
+  if not exists(select 1 from private.content_snapshots c
+      cross join lateral jsonb_array_elements(c.draft->'videos') v where c.environment='production' and v->>'id'=vid
+        and jsonb_array_length(v->'coverImages')=3 and v#>>'{voiceManifest,status}'='complete'
+        and not (v#>'{voiceManifest}' ? 'items'))
+    or (select count(*) from private.teaching_voice_batches where owner_job_id=jid and run_id=rid)<>1
     then raise exception 'FULL_COMMIT_MEDIA_MISSING'; end if;
   before_revision:=(saved->>'revision')::bigint;
-  replay:=public.processing_commit_leased_result_v2(jid,rid,token,worker,result,manifest);
+  replay:=public.processing_commit_leased_result_v3(jid,rid,token,worker,result,manifest);
   if replay is distinct from saved or (select revision from private.content_snapshots where environment='production')<>before_revision
     then raise exception 'FULL_COMMIT_REPLAY_MUTATED_CONTENT'; end if;
   raise notice 'Full commit passed: % sentences, % voice positions, % files, % seconds; rollback follows.',

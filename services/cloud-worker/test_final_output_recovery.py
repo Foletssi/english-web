@@ -18,13 +18,14 @@ class FinalOutputRecoveryTests(unittest.TestCase):
             'video_id': '123', 'run_id': '00000000-0000-0000-0000-000000000002',
             'source_key': 'source.mp4'}, 'downloadUrl': 'https://example.test/source', 'token': 'fixture'}
         self.client = MagicMock()
-        self.rows = [{'id': 's1', 'english': 'Go', 'textRevision': 1, 'expressions': [],
-            'wordLookup': {'sourceTextRevision': 1, 'sourceEnglish': 'Go', 'tokens': [
-                {'tokenId': 't0', 'surface': 'Go', 'coreMeaningZh': 'go meaning', 'pronunciationHint': '/go/'}]}}]
+        self.rows = [{'id': 's1', 'english': 'Go', 'chinese': '去', 'textRevision': 1, 'expressions': [],
+            'wordLookup': {'schemaVersion': 1, 'sourceTextRevision': 1, 'sourceEnglish': 'Go', 'tokens': [
+                {'tokenId': 't0', 'surface': 'Go', 'start': 0, 'end': 2, 'coreMeaningZh': 'go meaning', 'pronunciationHint': '/go/'}]}}]
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)
         for name, kwargs in (
             ('worker_root', {'return_value': self.root}), ('heartbeat_loop', {}),
+            ('validate_teaching', {}),
             ('download', {'side_effect': lambda url, path, *args: path.write_bytes(b'source')}),
             ('selected_assets', {'side_effect': lambda output, result: [output / 'master.m3u8']}),
             ('rewrite_result', {'side_effect': lambda result, *args: result}),
@@ -52,7 +53,7 @@ class FinalOutputRecoveryTests(unittest.TestCase):
 
     def fail_first_commit(self):
         def call(action, **kwargs):
-            if action == 'worker-complete-v2':
+            if action == 'worker-complete-v3':
                 raise worker.ApiError('SUPABASE_400:VOICE_SOURCE_STALE')
             return {'ok': True}
         self.client.call.side_effect = call
@@ -74,7 +75,7 @@ class FinalOutputRecoveryTests(unittest.TestCase):
         self.voice.assert_not_called()
         self.upload.assert_called_once()
         self.assertEqual(self.upload.call_args.args[1]['job']['run_id'], self.retry['job']['run_id'])
-        calls = [c for c in self.client.call.call_args_list if c.args[0] == 'worker-complete-v2']
+        calls = [c for c in self.client.call.call_args_list if c.args[0] == 'worker-complete-v3']
         self.assertEqual(len(calls), 1)
         result = calls[0].kwargs['result']
         self.assertEqual(calls[0].kwargs['runId'], self.retry['job']['run_id'])

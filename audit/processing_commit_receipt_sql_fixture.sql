@@ -30,7 +30,7 @@ begin
   -- manifest must retain its exact error and roll back without a receipt.
   v_failed:=false;
   begin
-    perform public.processing_commit_leased_result_v2(v_job,v_run,v_token,v_worker,v_result,v_manifest);
+    perform public.processing_commit_leased_result_v3(v_job,v_run,v_token,v_worker,v_result,v_manifest);
   exception when others then
     if sqlerrm<>'OUTPUT_MANIFEST_INCOMPLETE' then raise; end if;
     v_failed:=true;
@@ -43,7 +43,7 @@ begin
     then raise exception 'FAILED_COMMIT_LEFT_SIDE_EFFECTS'; end if;
   v_failed:=false;
   begin
-    perform public.processing_commit_leased_result_v2(v_job,v_run,repeat('wrong-token-',4),v_worker,v_result,v_manifest);
+    perform public.processing_commit_leased_result_v3(v_job,v_run,repeat('wrong-token-',4),v_worker,v_result,v_manifest);
   exception when others then
     if sqlerrm<>'JOB_LEASE_LOST_OR_CANCELLED' then raise; end if;
     v_failed:=true;
@@ -58,8 +58,8 @@ begin
     encode(extensions.digest(jsonb_build_array(v_result,v_manifest)::text,'sha256'),'hex'),v_saved);
   update public.processing_jobs set status='REVIEW',worker_token_hash=null,worker_token_expires_at=null,
     lease_until=null,output_run_id=v_run where id=v_job;
-  if public.processing_commit_leased_result_v2(v_job,v_run,v_token,v_worker,v_result,v_manifest) is distinct from v_saved
-    or public.processing_commit_leased_result_v2(v_job,v_run,v_token,v_worker,v_result,v_manifest) is distinct from v_saved
+  if public.processing_commit_leased_result_v3(v_job,v_run,v_token,v_worker,v_result,v_manifest) is distinct from v_saved
+    or public.processing_commit_leased_result_v3(v_job,v_run,v_token,v_worker,v_result,v_manifest) is distinct from v_saved
     then raise exception 'COMMIT_REPLAY_FAILED'; end if;
 
   for v_case in select value from jsonb_array_elements(jsonb_build_array(
@@ -71,7 +71,7 @@ begin
   loop
     v_failed:=false;
     begin
-      perform public.processing_commit_leased_result_v2(v_job,v_run,v_case->>'token',v_case->>'worker',v_case->'result',v_case->'manifest');
+      perform public.processing_commit_leased_result_v3(v_job,v_run,v_case->>'token',v_case->>'worker',v_case->'result',v_case->'manifest');
     exception when others then
       if sqlerrm<>'COMMIT_RECEIPT_CONFLICT' then raise; end if;
       v_failed:=true;
@@ -86,17 +86,17 @@ begin
     perform set_config('request.jwt.claim.role',v_role,true);
     v_failed:=false;
     begin
-      perform public.processing_commit_leased_result_v2(v_job,v_run,v_token,v_worker,v_result,v_manifest);
+      perform public.processing_commit_leased_result_v3(v_job,v_run,v_token,v_worker,v_result,v_manifest);
     exception when others then
       if sqlerrm<>'SERVICE_ROLE_REQUIRED' then raise; end if;
       v_failed:=true;
     end;
     if not v_failed then raise exception 'COMMIT_REPLAY_ROLE_GATE_FAILED'; end if;
   end loop;
-  if has_function_privilege('anon','public.processing_commit_leased_result_v2(uuid,uuid,text,text,jsonb,jsonb)','EXECUTE')
-    or has_function_privilege('authenticated','public.processing_commit_leased_result_v2(uuid,uuid,text,text,jsonb,jsonb)','EXECUTE')
-    or not has_function_privilege('service_role','public.processing_commit_leased_result_v2(uuid,uuid,text,text,jsonb,jsonb)','EXECUTE')
-    or has_function_privilege('service_role','private.processing_commit_leased_result_pre_receipt_v2(uuid,uuid,text,text,jsonb,jsonb)','EXECUTE')
+  if has_function_privilege('anon','public.processing_commit_leased_result_v3(uuid,uuid,text,text,jsonb,jsonb)','EXECUTE')
+    or has_function_privilege('authenticated','public.processing_commit_leased_result_v3(uuid,uuid,text,text,jsonb,jsonb)','EXECUTE')
+    or not has_function_privilege('service_role','public.processing_commit_leased_result_v3(uuid,uuid,text,text,jsonb,jsonb)','EXECUTE')
+    or has_function_privilege('service_role','private.processing_commit_leased_result_core(uuid,uuid,text,text,jsonb,jsonb)','EXECUTE')
     or has_table_privilege('anon','private.processing_commit_receipts','SELECT')
     or has_table_privilege('authenticated','private.processing_commit_receipts','INSERT')
     then raise exception 'COMMIT_RECEIPT_PERMISSION_LEAK'; end if;

@@ -136,14 +136,25 @@ async function handleWorker(action: string, body: any) {
       p_receipts: Array.isArray(body.receipts) ? body.receipts : []
     }) };
   }
-  if (action === 'worker-fail-v2') {
-    return { job: await rpc('processing_fail_job_v2', {
+  if (action === 'worker-finalization-status-v3') {
+    return { finalization: await rpc('processing_finalization_status_v3', {
+      p_job_id: jobId, p_run_id: runId, p_token: token, p_worker_id: workerId
+    }) };
+  }
+  if (action === 'worker-defer-v3') {
+    return { finalization: await rpc('processing_defer_job_v3', {
+      p_job_id: jobId, p_run_id: runId, p_token: token, p_worker_id: workerId,
+      p_error: body.error || {}
+    }) };
+  }
+  if (action === 'worker-fail-v3') {
+    return { job: await rpc('processing_fail_job_v3', {
       p_job_id: jobId, p_run_id: runId, p_token: token, p_worker_id: workerId,
       p_error: body.error || {}, p_retryable: body.retryable !== false
     }) };
   }
-  if (action === 'worker-complete-v2') {
-    return { result: await rpc('processing_commit_leased_result_v2', {
+  if (action === 'worker-complete-v3') {
+    return { result: await rpc('processing_commit_leased_result_v3', {
       p_job_id: jobId, p_run_id: runId, p_token: token, p_worker_id: workerId,
       p_result: body.result, p_manifest: Array.isArray(body.manifest) ? body.manifest : []
     }) };
@@ -169,16 +180,6 @@ async function handleWorker(action: string, body: any) {
     return { job: await rpc('processing_progress_job', {
       p_job_id: jobId, p_token: token, p_stage: body.stage,
       p_progress: Number(body.progress), p_message: String(body.message || '').slice(0, 300)
-    }) };
-  }
-  if (action === 'worker-fail') {
-    return { job: await rpc('processing_fail_job', {
-      p_job_id: jobId, p_token: token, p_error: body.error || {}, p_retryable: body.retryable !== false
-    }) };
-  }
-  if (action === 'worker-complete') {
-    return { result: await rpc('processing_commit_leased_result', {
-      p_job_id: jobId, p_token: token, p_result: body.result
     }) };
   }
   throw new Error('ACTION_INVALID');
