@@ -35,6 +35,17 @@ assert.equal(auditResponse.status,200);
 const auditResult=await auditResponse.json();
 assert.deepEqual(auditResult.assets.map(item=>item.found),[false,true,false]);
 assert.equal(auditResult.runId,done.run_id);
+const legacyKey='videos/11111111-1111-4111-8111-111111111111/processed/'+jobId+'/runs/'+done.run_id+'/cover.webp';
+await bucket.put(legacyKey,'legacy-cover');
+const sourceJob=await readJob(bucket,jobId);
+sourceJob.source_key='videos/11111111-1111-4111-8111-111111111111/source.mp4';
+await bucket.put('__eastudy/control/v1/jobs/'+jobId+'.json',JSON.stringify(sourceJob));
+const legacyRequest=new Request('https://fixture.test/api/processing/control',{
+  method:'POST',headers:{'x-worker-secret':'test-secret','Content-Type':'application/json'},
+  body:JSON.stringify({action:'processing-audit-media',jobId})});
+const legacyAudit=await (await onRequestPost({request:legacyRequest,env:{VIDEO_BUCKET:bucket,WORKER_SECRET:'test-secret'}})).json();
+assert.equal(legacyAudit.assets[2].location,'legacy-processed');
+assert.equal(legacyAudit.assets[2].found,true);
 assert.ok(!JSON.stringify(auditResult).includes('test-secret'));assert.throws(()=>controlAssetKey(jobId,done.run_id,'../bad'), error => error.message === 'OUTPUT_PATH_INVALID');
 for (const file of ['../functions/api/processing/source.js','../functions/api/processing/output.js','../functions/api/processing/control.js']) { const text=await (await import('node:fs/promises')).readFile(new URL(file,import.meta.url),'utf8'); assert.equal(text.includes('supabase.co/rest/v1/rpc'),false,`${file} still depends on processing Supabase RPC`); }
 console.log('PASS R2 processing control lifecycle, lease fencing, receipts and clean-break route checks');

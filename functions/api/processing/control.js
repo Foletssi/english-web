@@ -28,10 +28,17 @@ async function handleAction(request, env, body) {
     if (!job) throw new Error('JOB_NOT_FOUND');
     const run = job.output_run_id || job.run_id;
     if (!run || !/^[0-9a-f-]{36}$/i.test(run)) return { jobId: id, runId: run || null, assets: [] };
+    const source = String(job.source_key || '').match(/^videos\/([0-9a-f-]{36})\//i);
+    const legacy = source ? `videos/${source[1]}/processed/${id}/runs/${run}/` : null;
     const assets = [];
     for (const path of ['master.m3u8', '540p/index.m3u8', 'cover.webp']) {
-      const object = await env.VIDEO_BUCKET.head(controlAssetKey(id, run, path));
-      assets.push({ path, found: Boolean(object), size: object?.size || 0,
+      let object = await env.VIDEO_BUCKET.head(controlAssetKey(id, run, path));
+      let location = object ? 'r2-control' : null;
+      if (!object && legacy) {
+        object = await env.VIDEO_BUCKET.head(legacy + path);
+        if (object) location = 'legacy-processed';
+      }
+      assets.push({ path, found: Boolean(object), location, size: object?.size || 0,
         sha256: object?.customMetadata?.sha256 || null });
     }
     return { jobId: id, runId: run, assets };
