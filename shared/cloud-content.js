@@ -251,22 +251,21 @@
   }
 
   async function processingHealth() {
-    try { const response = await fetch('/api/admin/processing-control?action=health', { cache: 'no-store' }); const payload = await response.json().catch(() => ({})); return { data: payload.data || payload, error: response.ok ? null : new Error(payload.error || ('PROCESSING_HEALTH_' + response.status)) }; }
-    catch (error) { return { data: null, error }; }
+    try { const payload = await apiRequest('/api/admin/processing-control?action=health', {method:'GET',cache:'no-store'}); return {data:payload.data || payload,error:null}; }
+    catch(error){return {data:null,error};}
   }
 
   async function createProcessingJob(video, sourceKey, idempotencyKey, expectedRevision) {
-    try { const response = await fetch('/api/admin/processing-control', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action:'create',videoId:video?.id,video,sourceKey,idempotencyKey}) }); const payload=await response.json().catch(()=>({})); return { data:payload.data||null,error:response.ok?null:new Error(payload.error||'PROCESSING_CREATE_FAILED') }; }
-    catch(error){ return {data:null,error}; }
+    try { const payload=await apiRequest('/api/admin/processing-control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'create',videoId:video?.id,video,sourceKey,idempotencyKey})}); return {data:payload.data||null,error:null}; }
+    catch(error){return {data:null,error};}
   }
   async function reserveLocalProcessingJob(input, expectedRevision) {
-    try { const response = await fetch('/api/admin/processing-control', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action:'create',videoId:input.video?.id,video:input.video,input:{...(input.source||{}),kind:'local',sourceId:input.source?.sourceId||input.source?.id||null,localOnly:true},idempotencyKey:input.requestId}) }); const payload=await response.json().catch(()=>({})); return {data:payload.data||null,error:response.ok?null:new Error(payload.error||'LOCAL_PROCESSING_RESERVE_FAILED')}; }
-    catch(error){ return {data:null,error}; }
+    try { const payload=await apiRequest('/api/admin/processing-control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'create',videoId:input.video?.id,video:input.video,input:{...(input.source||{}),kind:'local',sourceId:input.source?.sourceId||input.source?.id||null,localOnly:true},idempotencyKey:input.requestId})}); return {data:payload.data||null,error:null}; }
+    catch(error){return {data:null,error};}
   }
   async function localProcessingCapability() { return {data:{enabled:true,controlPlane:'r2'},error:null}; }
-  async function getLocalProcessingInput(jobId) { const response=await fetch('/api/admin/processing-control?action=get&id='+encodeURIComponent(jobId)); const payload=await response.json().catch(()=>({})); if(!response.ok)throw new Error(payload.error||'LOCAL_INPUT_LOOKUP_FAILED'); return payload.data; }
-  async function recoverLocalProcessingInput(input) { try { const response=await fetch('/api/admin/processing-control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'recover',id:input.jobId,input:{...(input.source||{}),kind:'local',sourceId:input.source?.sourceId||input.source?.id||null,localOnly:true}})}); const payload=await response.json().catch(()=>({})); return {data:payload.data||null,error:response.ok?null:new Error(payload.error||'LOCAL_INPUT_RECOVERY_FAILED')}; } catch(error){return {data:null,error};} }
-
+  async function getLocalProcessingInput(jobId) { const payload=await apiRequest('/api/admin/processing-control?action=get&id='+encodeURIComponent(jobId),{method:'GET'}); return payload.data; }
+  async function recoverLocalProcessingInput(input) { try { const payload=await apiRequest('/api/admin/processing-control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'recover',id:input.jobId,input:{...(input.source||{}),kind:'local',sourceId:input.source?.sourceId||input.source?.id||null,localOnly:true}})}); return {data:payload.data||null,error:null}; } catch(error){return {data:null,error};} }
   function normalizeProcessingJob(job) {
     job={...job,videoId:job.videoId??job.video_id,type:job.type||job.input?.kind||'CLOUD_PIPELINE',inputTitle:job.inputTitle||job.input?.title||job.input?.titleZh,
       createdAt:job.createdAt||job.created_at,updatedAt:job.updatedAt||job.updated_at,completedAt:job.completedAt||job.completed_at,
@@ -287,13 +286,13 @@
       steps: order.map((step, index) => [step, mediaOnly&&status==='REVIEW'||(validating?completed(step):index < current) ? 'SUCCESS' : index === current ? (status === 'ERROR' ? 'ERROR' : status === 'CANCELLED' ? 'CANCELLED' : status === 'REVIEW' || status === 'QUEUED' || status === 'WAITING' ? 'WAITING' : 'RUNNING') : 'WAITING']) };
   }
 
-  async function listProcessingJobs(page = 1, pageSize = 50) { try { const payload=await apiRequest('/api/admin/processing-control?action=list&limit='+encodeURIComponent(Math.min(500,Math.max(1,Number(pageSize)||50))),{method:'GET'}); const rows=(payload.rows||[]).map(normalizeProcessingJob); const groups=rows.map(job=>({videoId:String(job.videoId||''),video:null,recordCount:1,current:job,records:[job]})); return {summary:payload.summary||null,rows,groups,total:rows.length,page:1,pageSize:rows.length||1,error:null}; } catch(error){return {rows:[],groups:[],error};} }
+  async function listProcessingJobs(page = 1, pageSize = 50) { try { const payload=await apiRequest('/api/admin/processing-control?action=list&limit=500',{method:'GET'}); const rows=(payload.rows||[]).map(normalizeProcessingJob); const currentPage=Math.max(1,Number(page)||1),size=Math.max(1,Number(pageSize)||50); const groups=rows.slice((currentPage-1)*size,currentPage*size).map(job=>({videoId:String(job.videoId||''),video:null,recordCount:1,current:job,records:[job]})); return {summary:payload.summary||null,rows,groups,total:Number(payload.total)||rows.length,page:currentPage,pageSize:size,error:null}; } catch(error){return {rows:[],groups:[],error};} }
 
   async function listProcessingHistory(videoId, page = 1, pageSize = 25) { return {rows:[],total:0,page:1,pageSize:25}; }
 
   async function getProcessingJob(jobId) { const payload=await apiRequest('/api/admin/processing-control?action=get&id='+encodeURIComponent(jobId),{method:'GET'}); if(!payload.data?.id)throw new Error('INVALID_PROCESSING_JOB_RESPONSE'); return normalizeProcessingJob(payload.data); }
 
-  async function retryProcessingJob(jobId) { try { const response=await fetch('/api/admin/processing-control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'retry',id:jobId})}); const payload=await response.json().catch(()=>({})); return {data:payload.data||null,error:response.ok?null:new Error(payload.error||'PROCESSING_RETRY_FAILED')}; } catch(error){return {data:null,error};} }
+  async function retryProcessingJob(jobId) { try { const payload=await apiRequest('/api/admin/processing-control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'retry',id:jobId})}); return {data:payload.data||null,error:null}; } catch(error){return {data:null,error};} }
 
   async function syncMediaSession(scope, options = {}) {
     await mediaSessionCleanup;
@@ -369,7 +368,7 @@
     else releaseCleanup();
   }
 
-  async function controlProcessingJob(command) { const action=command.action==='cancel'?'cancel':'retry'; try { const response=await fetch('/api/admin/processing-control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,id:command.id})}); const payload=await response.json().catch(()=>({})); return {data:payload.data||null,error:response.ok?null:new Error(payload.error||'PROCESSING_CONTROL_FAILED')}; } catch(error){return {data:null,error};} }
+  async function controlProcessingJob(command) { const action=command.action==='cancel'?'cancel':'retry'; try { const payload=await apiRequest('/api/admin/processing-control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,id:command.id})}); return {data:payload.data||null,error:null}; } catch(error){return {data:null,error};} }
 
   async function apiRequest(path, init) {
     const token = await sessionToken('admin');
