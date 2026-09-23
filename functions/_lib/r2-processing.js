@@ -40,7 +40,17 @@ async function saveJob(bucket, job, expectedEtag = null) { if (!job || !UUID.tes
 async function upsertIndex(bucket, job) {
   await mutateObject(bucket, INDEX_KEY, index => {
     const jobs = Array.isArray(index.jobs) ? index.jobs.slice() : [];
-    const summary = { id: job.id, video_id: job.video_id || job.videoId || null, status: job.status, stage: job.stage, progress: Number(job.progress || 0), run_id: job.run_id || null, updated_at: job.updated_at || now() };
+    const resultVideo = job.result?.video || {};
+    const summary = { id: job.id, video_id: job.video_id || job.videoId || null, status: job.status, stage: job.stage,
+      progress: Number(job.progress || 0), run_id: job.run_id || null, output_run_id: job.output_run_id || null,
+      updated_at: job.updated_at || now(), completed_at: job.completed_at || null,
+      heartbeat_at: job.heartbeat_at || null, last_progress_at: job.last_progress_at || null,
+      lease_until: job.lease_until || null, receipt_count: Number(job.receipt_count || 0),
+      input: { kind: job.input?.kind || null, title: job.input?.title || null, titleZh: job.input?.titleZh || null },
+      error: job.error || null, message: String(job.message || job.work?.message || '').slice(0, 300),
+      resumePosition: job.work?.resumePosition || null,
+      result_sentence_count: Array.isArray(job.result?.sentences) ? job.result.sentences.length : 0,
+      media_url: resultVideo.mediaUrl || resultVideo.media_url || null };
     const position = jobs.findIndex(item => item.id === job.id);
     if (position >= 0) jobs[position] = summary; else jobs.push(summary);
     jobs.sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)));
@@ -106,5 +116,4 @@ export async function recordReceipts(bucket, { jobId, runId, token, workerId, re
   await saveJob(bucket, next, current.etag); await upsertIndex(bucket, next); return { ok: true, count: merged.size };
 }
 export async function health(bucket) { const index = await readIndex(bucket); return { ready: true, controlPlane: 'r2', version: 1, jobCount: index.jobs.length }; }
-export async function listJobs(bucket, limit = 100) { const index = await readIndex(bucket); return Promise.all(index.jobs.slice(0, Math.min(Math.max(Number(limit) || 1, 1), 500)).map(item => readJob(bucket, item.id))); }
-
+export async function listJobSummaries(bucket, limit = 100) { const index = await readIndex(bucket); return index.jobs.slice(0, Math.min(Math.max(Number(limit) || 1, 1), 500)); }

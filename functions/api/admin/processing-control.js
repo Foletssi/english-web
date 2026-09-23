@@ -1,11 +1,11 @@
 import { json, readJson, requireAdmin } from '../../_lib/auth.js';
-import { createOrImportJob, replaceJob, readJob, listJobs } from '../../_lib/r2-processing.js';
+import { createOrImportJob, replaceJob, readJob, listJobSummaries } from '../../_lib/r2-processing.js';
 async function control(env, body) { const url = `${new URL(env.PROCESSING_CONTROL_URL || 'https://english-web-lce.pages.dev/api/processing/control')}`; const response = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', 'x-worker-secret': String(env.WORKER_SECRET || '') }, body: JSON.stringify(body) }); const payload = await response.json().catch(() => ({})); if (!response.ok) throw new Error(payload.error || `CONTROL_${response.status}`); return payload; }
 function id(value) { const v=String(value||''); if(!/^[0-9a-f-]{36}$/i.test(v)) throw new Error('JOB_ID_INVALID'); return v; }function jobSummary(job) {
   const result = job?.result && typeof job.result === 'object' ? job.result : null;
   const resultVideo = result?.video && typeof result.video === 'object' ? result.video : null;
   const resultSentenceCount = Array.isArray(result?.sentences) ? result.sentences.length : Number(job?.result_sentence_count || 0);
-  const mediaUrl = String(resultVideo?.mediaUrl || resultVideo?.media_url || '').trim() || null;
+  const mediaUrl = String(resultVideo?.mediaUrl || resultVideo?.media_url || job?.media_url || '').trim() || null;
   const status = String(job?.status || '').toUpperCase();
   const resultReady = status === 'REVIEW' && resultSentenceCount > 0 && Boolean(mediaUrl);
   const input = job?.input && typeof job.input === 'object' ? job.input : {};
@@ -34,8 +34,9 @@ export async function onRequestGet({ request, env }) {
     if (action === 'health') return json({ data: await control(env, { action: 'worker-health', workerId: 'admin-proxy', capabilities: {} }) });
     if (action === 'get') return json({ data: await readJob(env.VIDEO_BUCKET, id(url.searchParams.get('id'))) });
     if (action === 'history') return json({ rows: [], total: 0, page: 1, pageSize: 25 });
-    const jobs = await listJobs(env.VIDEO_BUCKET, Number(url.searchParams.get('limit') || 500));
-    const rows = jobs.map(jobSummary);
+    const jobs = await listJobSummaries(env.VIDEO_BUCKET, Number(url.searchParams.get('limit') || 500));
+    const hydrated = await Promise.all(jobs.map(async job => job.status === 'ERROR' && !job.error ? (await readJob(env.VIDEO_BUCKET, job.id)) || job : job));
+    const rows = hydrated.map(jobSummary);
     return json({ rows, total: rows.length, page: 1, pageSize: rows.length || 1, summary: rows.reduce((s, job) => { const key = job.status === 'REVIEW' ? 'review' : job.status === 'ERROR' ? 'failed' : ['RUNNING','QUEUED','WAITING'].includes(job.status) ? 'active' : 'completed'; s[key] += 1; s.total += 1; return s; }, { active: 0, failed: 0, review: 0, completed: 0, cancelled: 0, total: 0 }) });
   } catch (error) { return json({ error: error?.message || 'PROCESSING_CONTROL_READ_FAILED' }, 502); }
 }

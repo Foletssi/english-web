@@ -7,7 +7,7 @@ assert.ok(client.includes("/api/admin/processing-control?action=list"));
 assert.ok(client.includes("/api/admin/processing-control?action=get"));
 assert.ok(control.includes('worker-health'));
 assert.ok(control.includes('worker-health'));
-assert.ok(admin.includes('listJobs(env.VIDEO_BUCKET'));
+assert.ok(admin.includes('listJobSummaries(env.VIDEO_BUCKET'));
 assert.equal(client.includes("admin_list_processing_video_groups_v1"),false);
 assert.equal(client.includes("supabase.co/functions/v1/video-processing"),false);
 console.log('R2 processing queue and admin proxy contract passed.');

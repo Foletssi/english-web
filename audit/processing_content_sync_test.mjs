@@ -29,7 +29,7 @@ for(const path of ['/videos','/subtitles','/pipeline','/videos/2']){
 window.location.hash='#/subtitles/2';assert.equal(window.__test.cloudPollVisible(),false,'do not redraw unsaved subtitle editor');
 
 const admin=readFileSync('admin/assets/admin.js','utf8');
-const start=admin.indexOf('async function refreshProcessingContent('),end=admin.indexOf('\nasync function refreshCloudJobs(',start);
+const start=admin.indexOf('async function refreshProcessingContent('),end=admin.indexOf('}async function refreshCloudJobs(',start)+1;
 let pulls=0,resolvePull,imported=[];
 const context={user:{id:'admin'}},box={Store:{localOnly:false,importSnapshot:(data,event)=>imported.push({data,event})},
  Cloud:{pullAdmin:()=>{pulls++;return new Promise(resolve=>resolvePull=resolve)}},AdminAuth:{context},

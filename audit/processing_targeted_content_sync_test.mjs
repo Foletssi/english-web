@@ -26,5 +26,6 @@ assert.equal(full,0,'terminal jobs should not reload the multi-megabyte global s
 await window.EastudyStudioV2.syncJobs();
 assert.equal(targeted.length,2,'unchanged terminal jobs are not fetched repeatedly');
 await window.EastudyStudioV2.refreshJobs();
-assert.equal(full,1,'manual refresh still has a full-snapshot recovery path');
+assert.equal(full,0,'manual refresh must recheck the R2 result instead of reloading stale content');
+assert.equal(targeted.length,4,'manual refresh rechecks both completed videos');
 console.log('PASS terminal jobs use bounded per-video content refresh with full refresh fallback');

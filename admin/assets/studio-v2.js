@@ -79,7 +79,7 @@ async function syncJobs(options={}){
    if(['REVIEW','ERROR','CANCELLED'].includes(job.status)){
     state.polling.delete(job.id);
     const signature=JSON.stringify([job.status,job.runId,job.updatedAt,job.completedAt]);
-    if(state.contentSynced.get(job.id)!==signature)finished.push([job.id,signature,job.videoId]);
+    if(job.status==='REVIEW'&&state.contentSynced.get(job.id)!==signature)finished.push([job.id,signature,job.videoId]);
    }else{state.polling.add(job.id);state.contentSynced.delete(job.id)}
   }
   const integrity=global.EastudyContentAudit;
@@ -91,20 +91,24 @@ async function syncJobs(options={}){
   if(finished.length||options.forceContent||staleTerminal){
    // Mark terminal jobs synchronized only after the content import succeeds.
    // A failed/deferred read must be retried even when no RUNNING job was observed.
-   const targets=[...new Set([...finished.map(row=>String(row[2])),...staleRows.map(job=>String(job.videoId))])];
-   let imported=false;
-   if(!options.forceContent&&targets.length&&Bridge?.refreshVideoContent){
-    const results=[];
+   const targets=[...new Set([...finished.map(row=>String(row[2])),...staleRows.map(job=>String(job.videoId)),
+    ...(options.forceContent?rows.filter(job=>job.status==='REVIEW').map(job=>String(job.videoId)):[])])];
+   const errors=[];
+   if(targets.length&&Bridge?.refreshVideoContent){
     for(const id of targets){
-     const job=staleRows.find(row=>String(row.videoId)===String(id))||rows.find(row=>String(row.videoId)===String(id)&&String(row.status).toUpperCase()==='REVIEW');
-     results.push(await Bridge.refreshVideoContent(id,job));
+     const job=staleRows.find(row=>String(row.videoId)===id)||rows.find(row=>String(row.videoId)===id&&row.status==='REVIEW');
+     try{
+      if(await Bridge.refreshVideoContent(id,job)){
+       for(const [jobId,signature,videoId] of finished)if(String(videoId)===id)state.contentSynced.set(jobId,signature);
+      }
+     }catch(error){errors.push({id,error})}
     }
-    imported=results.every(Boolean);
-   }else{
+   }else if(options.forceContent||finished.length){
     const refresh=Bridge?.refreshContent||Bridge?.reload;
-    if(refresh)imported=await refresh()!==false;
+    try{if(refresh&&await refresh()!==false)for(const [jobId,signature] of finished)state.contentSynced.set(jobId,signature)}catch(error){errors.push({id:'content',error})}
    }
-   if(imported){for(const [id,signature] of finished)state.contentSynced.set(id,signature);if(staleTerminal)global.dispatchEvent(new CustomEvent('eastudy:studio-integrity-rechecked'))}
+   if(staleTerminal)global.dispatchEvent(new CustomEvent('eastudy:studio-integrity-rechecked'));
+   if(errors.length)throw new Error('CONTENT_SYNC_FAILED: '+errors.map(({id,error})=>`${id}: ${error?.message||error}`).join('; '));
   }
   return rows;
  }
@@ -140,7 +144,7 @@ function reportRecovery(key,message){state.recovery.set(String(key),message);glo
 async function refreshJobs(){
  if(state.refreshing)return;state.refreshing=true;reportRecovery('refresh','正在刷新任务状态…');
  try{await syncJobs({forceContent:true});reportRecovery('refresh','已读取最新状态。刷新不会重启任务，请查看当前步骤与最近进展。')}
- catch{reportRecovery('refresh','暂时无法读取任务状态，请检查网络后再次刷新。已提交的后台任务不会因此取消。')}
+ catch(error){reportRecovery('refresh','任务或内容同步失败：'+String(error?.message||error).slice(0,260)+'。稍后可再次刷新。')}
  finally{state.refreshing=false}
 }
 async function retry(jobId,videoId){
