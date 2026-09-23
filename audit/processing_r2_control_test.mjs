@@ -16,7 +16,15 @@ assert.equal((bucket.getCalls||0)-beforeList,1,'list reads only the compact inde
 assert.equal(summaries[0].output_run_id,done.run_id);
 assert.equal(summaries[0].receipt_count,1);
 assert.equal(summaries[0].result,undefined,'list must not return full teaching content');
-assert.equal((await readJob(bucket,jobId)).id,jobId,'detail remains available by job ID');assert.equal(done.status,'REVIEW'); assert.equal(done.output_run_id,done.run_id); assert.equal(done.receipt_count,1); assert.match(controlAssetKey(jobId,done.run_id,'voice/a.mp3'),new RegExp(jobId));
+const legacyIndexKey='__eastudy/control/v1/index.json';
+const old=JSON.parse(bucket.store.get(legacyIndexKey).body);
+old.jobs[0]={id:jobId,status:'REVIEW',stage:'REVIEW',progress:100,video_id:'178995639092849',run_id:done.run_id,updated_at:done.updated_at};
+bucket.store.set(legacyIndexKey,{body:JSON.stringify(old),etag:'legacy-etag'});
+const upgraded=await listJobSummaries(bucket,500);
+assert.equal(upgraded[0].result_sentence_count,0);
+assert.equal(upgraded[0].receipt_count,1);
+assert.equal(upgraded[0].output_run_id,done.run_id);
+assert.equal(upgraded[0].result,undefined);assert.equal((await readJob(bucket,jobId)).id,jobId,'detail remains available by job ID');assert.equal(done.status,'REVIEW'); assert.equal(done.output_run_id,done.run_id); assert.equal(done.receipt_count,1); assert.match(controlAssetKey(jobId,done.run_id,'voice/a.mp3'),new RegExp(jobId));
 assert.throws(()=>controlAssetKey(jobId,done.run_id,'../bad'), error => error.message === 'OUTPUT_PATH_INVALID');
 for (const file of ['../functions/api/processing/source.js','../functions/api/processing/output.js','../functions/api/processing/control.js']) { const text=await (await import('node:fs/promises')).readFile(new URL(file,import.meta.url),'utf8'); assert.equal(text.includes('supabase.co/rest/v1/rpc'),false,`${file} still depends on processing Supabase RPC`); }
 console.log('PASS R2 processing control lifecycle, lease fencing, receipts and clean-break route checks');

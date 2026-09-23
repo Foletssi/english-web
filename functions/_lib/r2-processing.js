@@ -116,4 +116,20 @@ export async function recordReceipts(bucket, { jobId, runId, token, workerId, re
   await saveJob(bucket, next, current.etag); await upsertIndex(bucket, next); return { ok: true, count: merged.size };
 }
 export async function health(bucket) { const index = await readIndex(bucket); return { ready: true, controlPlane: 'r2', version: 1, jobCount: index.jobs.length }; }
-export async function listJobSummaries(bucket, limit = 100) { const index = await readIndex(bucket); return index.jobs.slice(0, Math.min(Math.max(Number(limit) || 1, 1), 500)); }
+export async function listJobSummaries(bucket, limit = 100) {
+  const index = await readIndex(bucket);
+  const jobs = index.jobs.slice(0, Math.min(Math.max(Number(limit) || 1, 1), 500));
+  // Older indexes contain only status/progress. Upgrade one large job per call,
+  // so listing never loads every multi-megabyte result into a single Worker.
+  const legacy = jobs.find(item => item.result_sentence_count === undefined || item.error === undefined);
+  if (legacy) {
+    const full = await readJob(bucket, legacy.id);
+    if (full) {
+      await upsertIndex(bucket, full);
+      const refreshed = await readIndex(bucket);
+      const next = refreshed.jobs.slice(0, Math.min(Math.max(Number(limit) || 1, 1), 500));
+      return next;
+    }
+  }
+  return jobs;
+}

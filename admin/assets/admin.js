@@ -319,6 +319,7 @@ async function refreshProcessingVideoContent(videoId, jobHint=null){
  await cloudSyncPromise;
  if(cloudSyncTimer||AdminAuth.context!==context||generation!==contentEditGeneration)return false;
  let job=jobHint;
+ if(processingResultIsAlreadySynchronized(id,job))return true;
  if(!job?.result){
   const idHint=job?.id||CloudState.jobs.find(row=>String(row.videoId)===id)?.id;
   if(idHint&&Cloud.pullAdminProcessingResult){
