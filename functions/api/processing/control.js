@@ -1,5 +1,5 @@
 import { json, readJson } from '../../_lib/auth.js';
-import { claimJob, updateJob, recordReceipts, health, listJobSummaries, readJob } from '../../_lib/r2-processing.js';
+import { claimJob, updateJob, recordReceipts, health, listJobSummaries, readJob, controlAssetKey } from '../../_lib/r2-processing.js';
 
 function authorized(request, env) { const secret = String(env.WORKER_SECRET || '').trim(); return Boolean(secret && request.headers.get('x-worker-secret') === secret); }
 function workerPayload(body) { const workerId = String(body.workerId || '').trim(); if (!/^[A-Za-z0-9._-]{3,80}$/.test(workerId)) throw new Error('WORKER_ID_INVALID'); return { workerId, capabilities: body.capabilities && typeof body.capabilities === 'object' ? body.capabilities : {} }; }
@@ -21,6 +21,21 @@ async function handleAction(request, env, body) {
   }
   if (action === 'processing-list') { if (!authorized(request, env)) throw new Error('UNAUTHORIZED'); return { jobs: await listJobSummaries(env.VIDEO_BUCKET, body.limit) }; }
   if (action === 'processing-get') { const id = String(body.jobId || ''); if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error('JOB_ID_INVALID'); return { job: await readJob(env.VIDEO_BUCKET, id) }; }
+  if (action === 'processing-audit-media') {
+    const id = String(body.jobId || '');
+    if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error('JOB_ID_INVALID');
+    const job = await readJob(env.VIDEO_BUCKET, id);
+    if (!job) throw new Error('JOB_NOT_FOUND');
+    const run = job.output_run_id || job.run_id;
+    if (!run || !/^[0-9a-f-]{36}$/i.test(run)) return { jobId: id, runId: run || null, assets: [] };
+    const assets = [];
+    for (const path of ['master.m3u8', '540p/index.m3u8', 'cover.webp']) {
+      const object = await env.VIDEO_BUCKET.head(controlAssetKey(id, run, path));
+      assets.push({ path, found: Boolean(object), size: object?.size || 0,
+        sha256: object?.customMetadata?.sha256 || null });
+    }
+    return { jobId: id, runId: run, assets };
+  }
   if (action === 'run') return { claimed: 0, mode: 'r2-control' };
   const { workerId } = workerPayload(body); const { jobId, runId, token } = requireIds(body);
   if (action === 'worker-job-heartbeat-v2' || action === 'worker-job-heartbeat') return { job: await updateJob(env.VIDEO_BUCKET, jobId, runId || null, token, workerId, { lease_until: new Date(Date.now() + 600000).toISOString(), heartbeat_at: new Date().toISOString() }) };
